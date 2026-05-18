@@ -308,7 +308,7 @@ export default function TalkDetailScreen() {
                         <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
                       )}
                       {block.content.trim() && block.content !== '　' && (
-                        <Text style={styles.broadcastText}>{block.content}</Text>
+                        <Text style={[styles.broadcastText, isSelf && styles.broadcastTextSelf]}>{block.content}</Text>
                       )}
                     </View>
                   ))}
@@ -429,9 +429,9 @@ export default function TalkDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F0F0' },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.header,
     paddingTop: 56,
     paddingHorizontal: 16,
     paddingBottom: 12,
@@ -481,10 +481,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   broadcastBubbleSelf: {
-    backgroundColor: '#E8F0FE',
+    backgroundColor: Colors.button,
   },
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
+  broadcastTextSelf: { color: Colors.white },
   bubbleTime: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginLeft: 2, alignSelf: 'flex-start' },
   reactionBar: {
     flexDirection: 'row',
@@ -519,8 +520,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: Colors.white,
     borderRadius: 22,
+    borderWidth: 1,
+    borderColor: Colors.border,
     paddingHorizontal: 16, paddingVertical: 10,
     fontSize: 14, color: Colors.text, maxHeight: 100,
   },
