@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard, Linking } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+
+const SNS_FIELDS = [
+  { key: 'x', label: 'X (Twitter)', placeholder: 'https://x.com/yourname', icon: 'logo-twitter' as const },
+  { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/yourname', icon: 'logo-instagram' as const },
+  { key: 'youtube', label: 'YouTube', placeholder: 'https://youtube.com/@yourname', icon: 'logo-youtube' as const },
+  { key: 'website', label: 'Webサイト', placeholder: 'https://yoursite.com', icon: 'globe-outline' as const },
+]
 
 export default function MyPageScreen() {
   const [user, setUser] = useState<any>(null)
@@ -13,6 +20,8 @@ export default function MyPageScreen() {
   const [editName, setEditName] = useState('')
   const [editBio, setEditBio] = useState('')
   const [editUsername, setEditUsername] = useState('')
+  const [editSns, setEditSns] = useState<Record<string, string>>({})
+  const [usernameError, setUsernameError] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
@@ -43,20 +52,52 @@ export default function MyPageScreen() {
     setEditName(profile?.display_name ?? '')
     setEditBio(profile?.bio ?? '')
     setEditUsername(profile?.username ?? '')
+    setEditSns(profile?.sns_links ?? {})
+    setUsernameError('')
     setEditVisible(true)
   }
 
   const handleSave = async () => {
     if (!editName.trim()) return
+    setUsernameError('')
+
+    // ユーザーID重複チェック
+    const trimmedUsername = editUsername.trim() || null
+    if (trimmedUsername && trimmedUsername !== profile?.username) {
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', trimmedUsername)
+        .neq('id', user.id)
+        .maybeSingle()
+      if (existing) {
+        setUsernameError('このユーザーIDはすでに使われています')
+        return
+      }
+    }
+
     setSaving(true)
     const { data, error } = await supabase
       .from('profiles')
-      .update({ display_name: editName.trim(), bio: editBio.trim() || null, username: editUsername.trim() || null })
+      .update({
+        display_name: editName.trim(),
+        bio: editBio.trim() || null,
+        username: trimmedUsername,
+        sns_links: editSns,
+      })
       .eq('id', user.id)
       .select().single()
     setSaving(false)
-    if (error) Alert.alert('エラー', error.message)
-    else { setProfile(data); setEditVisible(false) }
+    if (error) {
+      if (error.message.includes('profiles_username_unique')) {
+        setUsernameError('このユーザーIDはすでに使われています')
+      } else {
+        Alert.alert('エラー', error.message)
+      }
+    } else {
+      setProfile(data)
+      setEditVisible(false)
+    }
   }
 
   const handleAvatarPress = async () => {
@@ -96,20 +137,14 @@ export default function MyPageScreen() {
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(path, byteArray, {
-          contentType,
-          upsert: true,
-        })
+        .upload(path, byteArray, { contentType, upsert: true })
 
       if (uploadError) {
         Alert.alert('エラー', uploadError.message)
         return
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(path)
-
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
       const { data: updated } = await supabase
         .from('profiles')
         .update({ avatar_url: publicUrl })
@@ -123,6 +158,8 @@ export default function MyPageScreen() {
   }
 
   const displayName = profile?.display_name ?? user?.user_metadata?.display_name ?? 'ユーザー'
+  const snsLinks: Record<string, string> = profile?.sns_links ?? {}
+  const hasSns = SNS_FIELDS.some(f => snsLinks[f.key])
 
   return (
     <View style={styles.container}>
@@ -152,20 +189,26 @@ export default function MyPageScreen() {
           </TouchableOpacity>
           <Text style={styles.displayName}>{displayName}</Text>
           {profile?.username && (
-            <TouchableOpacity onPress={() => {
-              Clipboard.setString(profile.username)
-              Alert.alert('コピーしました', `@${profile.username}`)
-            }}>
-              <Text style={styles.username}>@{profile.username}</Text>
-            </TouchableOpacity>
+            <Text style={styles.username}>@{profile.username}</Text>
           )}
           {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+
+          {hasSns && (
+            <View style={styles.snsRow}>
+              {SNS_FIELDS.filter(f => snsLinks[f.key]).map(f => (
+                <TouchableOpacity key={f.key} onPress={() => Linking.openURL(snsLinks[f.key])} style={styles.snsIcon}>
+                  <Ionicons name={f.icon} size={20} color={Colors.accent} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           <TouchableOpacity
             style={styles.shareIdBtn}
             onPress={() => {
               const id = profile?.username ?? displayName
               Clipboard.setString(id)
-              Alert.alert('コピーしました', `「${id}」をクリップボードにコピーしました。\nXなどでシェアして、フォロワーに名前で検索してもらいましょう。`)
+              Alert.alert('コピーしました', `「${id}」をクリップボードにコピーしました。`)
             }}
           >
             <Ionicons name="share-social-outline" size={14} color={Colors.accent} />
@@ -196,7 +239,7 @@ export default function MyPageScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.modalBody}>
+          <ScrollView style={styles.modalBody}>
             <Text style={styles.fieldLabel}>表示名</Text>
             <TextInput
               style={styles.fieldInput}
@@ -207,14 +250,15 @@ export default function MyPageScreen() {
             />
             <Text style={styles.fieldLabel}>ユーザーID（アドレス）</Text>
             <TextInput
-              style={styles.fieldInput}
+              style={[styles.fieldInput, usernameError ? styles.fieldInputError : null]}
               value={editUsername}
-              onChangeText={v => setEditUsername(v.replace(/[^a-zA-Z0-9_]/g, ''))}
+              onChangeText={v => { setEditUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
               placeholder="例: reach_user123（英数字・_のみ）"
               placeholderTextColor={Colors.textLight}
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
             <Text style={styles.fieldLabel}>自己紹介</Text>
             <TextInput
               style={[styles.fieldInput, styles.bioInput]}
@@ -224,7 +268,27 @@ export default function MyPageScreen() {
               placeholderTextColor={Colors.textLight}
               multiline
             />
-          </View>
+            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>SNS・リンク</Text>
+            {SNS_FIELDS.map(f => (
+              <View key={f.key}>
+                <View style={styles.snsFieldRow}>
+                  <Ionicons name={f.icon} size={18} color={Colors.accent} style={styles.snsFieldIcon} />
+                  <Text style={styles.snsFieldLabel}>{f.label}</Text>
+                </View>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={editSns[f.key] ?? ''}
+                  onChangeText={v => setEditSns(prev => ({ ...prev, [f.key]: v }))}
+                  placeholder={f.placeholder}
+                  placeholderTextColor={Colors.textLight}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
+            ))}
+            <View style={{ height: 40 }} />
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -296,6 +360,8 @@ const styles = StyleSheet.create({
   displayName: { fontSize: 20, fontWeight: '700', color: Colors.text },
   bio: { fontSize: 13, color: Colors.textLight, textAlign: 'center' },
   username: { fontSize: 13, color: Colors.accent, marginTop: 2 },
+  snsRow: { flexDirection: 'row', gap: 16, marginTop: 8 },
+  snsIcon: { padding: 4 },
   shareIdBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     marginTop: 8, paddingHorizontal: 12, paddingVertical: 6,
@@ -351,8 +417,8 @@ const styles = StyleSheet.create({
   modalCancel: { fontSize: 15, color: Colors.textLight },
   modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
   modalSave: { fontSize: 15, color: Colors.accent, fontWeight: '700' },
-  modalBody: { padding: 20, gap: 8 },
-  fieldLabel: { fontSize: 13, color: Colors.textLight, fontWeight: '600', marginTop: 12 },
+  modalBody: { padding: 20 },
+  fieldLabel: { fontSize: 13, color: Colors.textLight, fontWeight: '600', marginTop: 12, marginBottom: 4 },
   fieldInput: {
     backgroundColor: Colors.white,
     borderRadius: 12,
@@ -363,5 +429,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  fieldInputError: { borderColor: '#E53E3E' },
+  errorText: { fontSize: 12, color: '#E53E3E', marginTop: 4 },
   bioInput: { minHeight: 100, textAlignVertical: 'top' },
+  snsFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 4 },
+  snsFieldIcon: {},
+  snsFieldLabel: { fontSize: 13, color: Colors.textLight, fontWeight: '600' },
 })
