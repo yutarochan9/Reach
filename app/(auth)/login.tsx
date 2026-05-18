@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { authFlags } from '../../lib/authState'
 import { Colors } from '../../constants/colors'
 
 export default function LoginScreen() {
@@ -19,21 +20,24 @@ export default function LoginScreen() {
   const handleSignIn = async () => {
     if (!email.trim() || !password) return
     setLoading(true)
+
+    // パスワード確認（中間のSIGNED_INはスキップ）
+    authFlags.skipNextSignedIn = true
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     })
     if (error) {
+      authFlags.skipNextSignedIn = false
       setLoading(false)
-      if (error.message.toLowerCase().includes('invalid login') || error.message.toLowerCase().includes('invalid credentials')) {
-        Alert.alert('サインイン失敗', 'メールアドレスまたはパスワードが正しくありません。')
-      } else {
-        Alert.alert('エラー', error.message)
-      }
+      Alert.alert('サインイン失敗', 'メールアドレスまたはパスワードが正しくありません。')
       return
     }
-    // パスワード確認後、メール認証コードを送信
+
+    // パスワード確認後はサインアウトしてOTPへ（SIGNED_OUTもスキップ）
+    authFlags.skipNextSignedOut = true
     await supabase.auth.signOut()
+
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { shouldCreateUser: false },
@@ -58,6 +62,7 @@ export default function LoginScreen() {
     if (error) {
       Alert.alert('認証エラー', '認証コードが正しくありません。もう一度確認してください。')
     }
+    // 成功時は_layout.tsxのSIGNED_INイベントがタブ画面に遷移
   }
 
   return (

@@ -6,19 +6,22 @@ import {
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import { authFlags } from '../../lib/authState'
 import { Colors } from '../../constants/colors'
 
 export default function SignupScreen() {
   const [step, setStep] = useState<'form' | 'otp'>('form')
-  const [name, setName] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [otp, setOtp] = useState('')
+  const [usernameError, setUsernameError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password) {
+    if (!displayName.trim() || !email.trim() || !password) {
       Alert.alert('入力エラー', 'すべての項目を入力してください')
       return
     }
@@ -26,18 +29,35 @@ export default function SignupScreen() {
       Alert.alert('パスワードエラー', 'パスワードは8文字以上で入力してください')
       return
     }
+    setUsernameError('')
+
+    // ユーザーアドレス重複チェック
+    const trimmedUsername = username.trim() || null
+    if (trimmedUsername) {
+      const { data: existing } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', trimmedUsername)
+        .maybeSingle()
+      if (existing) {
+        setUsernameError('このユーザーアドレスはすでに使われています')
+        return
+      }
+    }
+
     setLoading(true)
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { display_name: name.trim() } },
+      options: { data: { display_name: displayName.trim() } },
     })
     if (error) {
       setLoading(false)
       Alert.alert('エラー', error.message)
       return
     }
-    // アカウント作成後、メール認証コードを送信
+
+    // アカウント作成後にメール認証コードを送信
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { shouldCreateUser: false },
@@ -53,15 +73,32 @@ export default function SignupScreen() {
   const handleVerifyOtp = async () => {
     if (otp.length < 6) return
     setLoading(true)
+
+    // OTP確認後のSIGNED_INはここで制御して自分でナビゲートする
+    authFlags.skipNextSignedIn = true
     const { error } = await supabase.auth.verifyOtp({
       email: email.trim(),
       token: otp.trim(),
       type: 'email',
     })
-    setLoading(false)
     if (error) {
+      authFlags.skipNextSignedIn = false
+      setLoading(false)
       Alert.alert('認証エラー', '認証コードが正しくありません。もう一度確認してください。')
+      return
     }
+
+    // プロフィールにユーザー名・ユーザーアドレスを保存
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('profiles').update({
+        display_name: displayName.trim(),
+        username: username.trim() || null,
+      }).eq('id', user.id)
+    }
+
+    setLoading(false)
+    router.replace('/(tabs)/')
   }
 
   const handleResend = async () => {
@@ -104,17 +141,34 @@ export default function SignupScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>サインアップ</Text>
               <Text style={styles.cardSub}>アカウントを作成してはじめましょう</Text>
+
               <View style={styles.inputWrap}>
                 <Ionicons name="person-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="表示名（ニックネーム）"
+                  placeholder="ユーザー名（表示名）"
                   placeholderTextColor={Colors.textLight}
-                  value={name}
-                  onChangeText={setName}
+                  value={displayName}
+                  onChangeText={setDisplayName}
                   maxLength={30}
                 />
               </View>
+
+              <View style={[styles.inputWrap, usernameError ? styles.inputWrapError : null]}>
+                <Text style={styles.atSign}>@</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="ユーザーアドレス（英数字・_のみ）"
+                  placeholderTextColor={Colors.textLight}
+                  value={username}
+                  onChangeText={v => { setUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={30}
+                />
+              </View>
+              {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
+
               <View style={styles.inputWrap}>
                 <Ionicons name="mail-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
                 <TextInput
@@ -128,6 +182,7 @@ export default function SignupScreen() {
                   autoCorrect={false}
                 />
               </View>
+
               <View style={styles.inputWrap}>
                 <Ionicons name="lock-closed-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
                 <TextInput
@@ -144,10 +199,11 @@ export default function SignupScreen() {
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={Colors.textLight} />
                 </TouchableOpacity>
               </View>
+
               <TouchableOpacity
-                style={[styles.button, (!name.trim() || !email.trim() || !password || loading) && styles.buttonDisabled]}
+                style={[styles.button, (!displayName.trim() || !email.trim() || !password || loading) && styles.buttonDisabled]}
                 onPress={handleRegister}
-                disabled={!name.trim() || !email.trim() || !password || loading}
+                disabled={!displayName.trim() || !email.trim() || !password || loading}
               >
                 <Text style={styles.buttonText}>{loading ? '処理中...' : '認証コードを送る'}</Text>
               </TouchableOpacity>
@@ -233,7 +289,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingHorizontal: 14,
   },
+  inputWrapError: { borderColor: '#E53E3E' },
   inputIcon: { marginRight: 8 },
+  atSign: { fontSize: 16, color: Colors.textLight, marginRight: 4 },
   eyeBtn: { padding: 4 },
   input: {
     flex: 1,
@@ -241,6 +299,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
   },
+  errorText: { fontSize: 12, color: '#E53E3E', marginTop: -8 },
   button: {
     backgroundColor: Colors.accent,
     borderRadius: 12,
