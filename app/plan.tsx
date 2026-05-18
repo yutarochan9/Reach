@@ -146,7 +146,7 @@ export default function PlanScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.subtitle}>
-          フォロワーへの確実な配信を、手頃な価格で。{'\n'}近日中により多くのプランが利用可能になります。
+          ベータ期間中は全プランの機能を無料でお試しいただけます。{'\n'}正式リリース時に料金プランが適用される予定です。
         </Text>
 
         {PLANS.map((plan) => {
