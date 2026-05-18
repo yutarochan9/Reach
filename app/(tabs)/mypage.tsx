@@ -156,7 +156,7 @@ export default function MyPageScreen() {
               Clipboard.setString(profile.username)
               Alert.alert('コピーしました', `@${profile.username}`)
             }}>
-              <Text style={styles.username}>@{profile.username}　📋</Text>
+              <Text style={styles.username}>@{profile.username}</Text>
             </TouchableOpacity>
           )}
           {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}

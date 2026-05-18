@@ -146,7 +146,7 @@ export default function PlanScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.subtitle}>
-          LINEの半額以下で、フォロワーへの確実な配信を。
+          フォロワーへの確実な配信を、手頃な価格で。{'\n'}近日中により多くのプランが利用可能になります。
         </Text>
 
         {PLANS.map((plan) => {
