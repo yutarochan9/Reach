@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, SafeAreaView, ScrollView,
+  KeyboardAvoidingView, Platform, Alert, SafeAreaView, ScrollView, Image,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -46,12 +46,15 @@ export default function SignupScreen() {
     }
 
     setLoading(true)
+    // signUp が自動サインインを引き起こしてもホームに飛ばないようにスキップ
+    authFlags.skipNextSignedIn = true
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: { data: { display_name: displayName.trim() } },
     })
     if (error) {
+      authFlags.skipNextSignedIn = false
       setLoading(false)
       Alert.alert('エラー', error.message)
       return
@@ -131,9 +134,7 @@ export default function SignupScreen() {
 
         <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
           <View style={styles.logoArea}>
-            <View style={styles.logoIcon}>
-              <Text style={styles.logoIconText}>R</Text>
-            </View>
+            <Image source={require('../../assets/icon.png')} style={styles.logoIcon} />
             <Text style={styles.logoText}>Reach</Text>
           </View>
 
@@ -263,12 +264,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 8, alignSelf: 'flex-start' },
   inner: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 40 },
   logoArea: { alignItems: 'center', marginBottom: 36, gap: 10 },
-  logoIcon: {
-    width: 64, height: 64, borderRadius: 20,
-    backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  logoIconText: { fontSize: 32, fontWeight: '900', color: Colors.white },
+  logoIcon: { width: 80, height: 80, borderRadius: 20 },
   logoText: { fontSize: 28, fontWeight: '800', color: Colors.text, letterSpacing: 1 },
   card: {
     backgroundColor: Colors.white,
