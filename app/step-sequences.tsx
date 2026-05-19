@@ -101,7 +101,7 @@ export default function StepSequencesScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>ステップ配信</Text>
+        <Text style={styles.headerTitle}>フロー配信</Text>
         <TouchableOpacity onPress={() => setModalVisible(true)} style={styles.addButton}>
           <Ionicons name="add" size={24} color={Colors.accent} />
         </TouchableOpacity>
@@ -117,7 +117,7 @@ export default function StepSequencesScreen() {
       {sequences.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="git-branch-outline" size={48} color={Colors.border} />
-          <Text style={styles.emptyText}>ステップ配信がまだありません</Text>
+          <Text style={styles.emptyText}>フロー配信がまだありません</Text>
           <TouchableOpacity style={styles.emptyBtn} onPress={() => setModalVisible(true)}>
             <Text style={styles.emptyBtnText}>作成する</Text>
           </TouchableOpacity>

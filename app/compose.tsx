@@ -552,7 +552,7 @@ export default function ComposeScreen() {
           <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>{senderName[0] ?? 'R'}</Text></View>
           <View>
             <Text style={styles.phoneHeaderName}>{senderName || 'あなた'}</Text>
-            <Text style={styles.phoneHeaderSub}>公式アカウント</Text>
+            <Text style={styles.phoneHeaderSub}>配信アカウント</Text>
           </View>
         </View>
         <ScrollView style={styles.phoneChat} contentContainerStyle={styles.phoneChatContent}>
@@ -727,7 +727,7 @@ export default function ComposeScreen() {
           <View style={styles.toolsSection}>
             <ToolMenuItem
               icon="git-branch-outline"
-              label="ステップ配信"
+              label="フロー配信"
               desc="フォロー後に自動でメッセージを送る"
               plan="standard"
               onPress={() => router.push('/step-sequences' as any)}
@@ -753,7 +753,7 @@ export default function ComposeScreen() {
             <View style={styles.toolsDivider} />
             <ToolMenuItem
               icon="apps-outline"
-              label="リッチメニュー"
+              label="タイル"
               desc="プロフィールにボタンメニューを設置"
               plan="pro"
               onPress={() => router.push('/rich-menu' as any)}
@@ -765,7 +765,7 @@ export default function ComposeScreen() {
             <ToolMenuItem
               icon="bar-chart-outline"
               label="分析"
-              desc="既読・いいね・配信数を確認"
+              desc="閲覧数・いいね・配信数を確認"
               onPress={() => router.push('/analytics' as any)}
             />
           </View>

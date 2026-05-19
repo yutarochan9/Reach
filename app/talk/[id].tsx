@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
 } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -39,6 +39,7 @@ export default function TalkDetailScreen() {
   const [imText, setImText] = useState('')
   const [replyBroadcastId, setReplyBroadcastId] = useState<string | null>(null)
   const [replyPreview, setReplyPreview] = useState('')
+  const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
@@ -288,11 +289,12 @@ export default function TalkDetailScreen() {
             )}
             <TouchableOpacity
               style={styles.groupWrap}
-              activeOpacity={isSelf ? 0.75 : 1}
+              activeOpacity={0.9}
               onPress={isSelf ? () => router.push(`/broadcast-thread/${group.anchorId}` as any) : undefined}
+              onLongPress={() => setLongPressGroup(group)}
+              delayLongPress={400}
             >
               <View style={styles.broadcastRow}>
-                {/* アバター（自分の場合は非表示） */}
                 {!isSelf && (
                   <View style={styles.broadcastAvatar}>
                     {senderAvatar
@@ -312,39 +314,13 @@ export default function TalkDetailScreen() {
                       )}
                     </View>
                   ))}
-                  {/* リアクションバー（時間の上） */}
-                  <View style={styles.reactionBar}>
-                    <TouchableOpacity
-                      style={styles.reactionBtnInner}
-                      onPress={() => !isSelf && handleLike(group)}
-                      disabled={isSelf}
-                    >
-                      <Ionicons
-                        name={group.liked ? 'heart' : 'heart-outline'}
-                        size={16}
-                        color={group.liked ? '#E53E3E' : Colors.textLight}
-                      />
-                      {group.like_count > 0 && (
-                        <Text style={[styles.reactionCount, group.liked && { color: '#E53E3E' }]}>
-                          {group.like_count}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                    {isSelf ? (
-                      <TouchableOpacity
-                        style={styles.reactionBtnInner}
-                        onPress={() => router.push(`/broadcast-thread/${group.anchorId}` as any)}
-                      >
-                        <Ionicons name="chatbubble-outline" size={16} color={Colors.textLight} />
-                        <Text style={styles.reactionCount}>コメント</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity style={styles.reactionBtnInner} onPress={() => handleReplyPress(group)}>
-                        <Ionicons name="chatbubble-outline" size={16} color={Colors.textLight} />
-                        <Text style={styles.reactionCount}>コメント</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                  {/* いいね数のみ小さく表示 */}
+                  {group.like_count > 0 && (
+                    <View style={styles.likeCountBadge}>
+                      <Ionicons name="heart" size={11} color="#E53E3E" />
+                      <Text style={styles.likeCountText}>{group.like_count}</Text>
+                    </View>
+                  )}
                   <Text style={styles.bubbleTime}>
                     {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                   </Text>
@@ -355,6 +331,62 @@ export default function TalkDetailScreen() {
         )
       }}
     />
+  )
+
+  const ReactionPopup = (
+    <Modal
+      visible={!!longPressGroup}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setLongPressGroup(null)}
+    >
+      <Pressable style={styles.popupOverlay} onPress={() => setLongPressGroup(null)}>
+        <View style={styles.popupBox}>
+          {!isSelf && (
+            <TouchableOpacity
+              style={styles.popupBtn}
+              onPress={() => {
+                if (longPressGroup) handleLike(longPressGroup)
+                setLongPressGroup(null)
+              }}
+            >
+              <Ionicons
+                name={longPressGroup?.liked ? 'heart' : 'heart-outline'}
+                size={22}
+                color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
+              />
+              <Text style={styles.popupBtnText}>
+                {longPressGroup?.liked ? 'いいねを取り消す' : 'いいね'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {!isSelf && (
+            <TouchableOpacity
+              style={styles.popupBtn}
+              onPress={() => {
+                if (longPressGroup) handleReplyPress(longPressGroup)
+                setLongPressGroup(null)
+              }}
+            >
+              <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
+              <Text style={styles.popupBtnText}>コメントする</Text>
+            </TouchableOpacity>
+          )}
+          {isSelf && (
+            <TouchableOpacity
+              style={styles.popupBtn}
+              onPress={() => {
+                if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any)
+                setLongPressGroup(null)
+              }}
+            >
+              <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
+              <Text style={styles.popupBtnText}>コメントを見る</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </Pressable>
+    </Modal>
   )
 
   if (isSelf) {
@@ -368,6 +400,7 @@ export default function TalkDetailScreen() {
           <View style={{ width: 32 }} />
         </View>
         {BroadcastList}
+        {ReactionPopup}
       </View>
     )
   }
@@ -394,6 +427,7 @@ export default function TalkDetailScreen() {
       </View>
 
       {BroadcastList}
+      {ReactionPopup}
 
       {/* IM入力エリア */}
       <View style={styles.inputArea}>
@@ -487,24 +521,27 @@ const styles = StyleSheet.create({
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
   broadcastTextSelf: { color: Colors.white },
   bubbleTime: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginLeft: 2, alignSelf: 'flex-start' },
-  reactionBar: {
-    flexDirection: 'row',
-    marginTop: 6,
-    gap: 6,
+  likeCountBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    marginTop: 4, alignSelf: 'flex-start',
   },
-  reactionBtn: {},
-  reactionBtnInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  likeCountText: { fontSize: 11, color: '#E53E3E', fontWeight: '600' },
+  popupOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  popupBox: {
     backgroundColor: Colors.white,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: 16, paddingVertical: 8, paddingHorizontal: 4,
+    minWidth: 200,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
-  reactionCount: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
+  popupBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 14, paddingHorizontal: 20,
+  },
+  popupBtnText: { fontSize: 16, color: Colors.text, fontWeight: '500' },
   inputArea: {
     backgroundColor: Colors.white,
     borderTopWidth: 1,

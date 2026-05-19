@@ -69,7 +69,7 @@ export default function RichMenuScreen() {
       if (data) setMenuId(data.id)
     }
     setSaving(false)
-    Alert.alert('保存しました', 'リッチメニューが更新されました')
+    Alert.alert('保存しました', 'タイルが更新されました')
   }
 
   const openNew = () => {
@@ -112,7 +112,7 @@ export default function RichMenuScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>リッチメニュー</Text>
+        <Text style={styles.headerTitle}>タイル</Text>
         <TouchableOpacity
           onPress={handleSave}
           disabled={saving}

@@ -162,7 +162,7 @@ export default function AnalyticsScreen() {
           <View style={styles.statCard}>
             <Ionicons name="eye-outline" size={18} color={Colors.button} />
             <Text style={styles.statValue}>{stats?.totalReads.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>累計既読</Text>
+            <Text style={styles.statLabel}>累計閲覧数</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="heart-outline" size={18} color={Colors.button} />

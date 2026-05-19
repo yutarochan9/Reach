@@ -112,7 +112,7 @@ export default function CreatorScreen() {
       setIsFollowing(true)
       setFollowerCount(c => c + 1)
 
-      // アクティブなステップ配信シーケンスへ自動エンロール
+      // アクティブなフロー配信シーケンスへ自動エンロール
       const { data: sequences } = await supabase
         .from('step_sequences')
         .select('id')
