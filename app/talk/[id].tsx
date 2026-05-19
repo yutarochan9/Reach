@@ -330,11 +330,14 @@ export default function TalkDetailScreen() {
     <Modal
       visible={!!longPressGroup}
       transparent
-      animationType="fade"
+      animationType="slide"
       onRequestClose={() => setLongPressGroup(null)}
     >
       <Pressable style={styles.popupOverlay} onPress={() => setLongPressGroup(null)}>
-        <View style={styles.popupBox}>
+        <Pressable style={styles.popupBox} onPress={e => e.stopPropagation()}>
+          {/* ドラッグハンドル */}
+          <View style={styles.sheetHandle} />
+
           {/* いいね（視聴者のみ） */}
           {!isSelf && (
             <TouchableOpacity
@@ -344,11 +347,13 @@ export default function TalkDetailScreen() {
                 setLongPressGroup(null)
               }}
             >
-              <Ionicons
-                name={longPressGroup?.liked ? 'heart' : 'heart-outline'}
-                size={22}
-                color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
-              />
+              <View style={[styles.popupIconWrap, longPressGroup?.liked && { backgroundColor: '#FFF0F0' }]}>
+                <Ionicons
+                  name={longPressGroup?.liked ? 'heart' : 'heart-outline'}
+                  size={22}
+                  color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
+                />
+              </View>
               <Text style={styles.popupBtnText}>
                 {longPressGroup?.liked ? 'いいねを取り消す' : 'いいね'}
               </Text>
@@ -363,7 +368,9 @@ export default function TalkDetailScreen() {
               setLongPressGroup(null)
             }}
           >
-            <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
+            <View style={styles.popupIconWrap}>
+              <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
+            </View>
             <Text style={styles.popupBtnText}>
               {isSelf
                 ? `コメントを見る${longPressGroup && longPressGroup.comment_count > 0 ? ` (${longPressGroup.comment_count})` : ''}`
@@ -371,7 +378,12 @@ export default function TalkDetailScreen() {
               }
             </Text>
           </TouchableOpacity>
-        </View>
+
+          {/* キャンセル */}
+          <TouchableOpacity style={[styles.popupBtn, styles.popupCancelBtn]} onPress={() => setLongPressGroup(null)}>
+            <Text style={styles.popupCancelText}>キャンセル</Text>
+          </TouchableOpacity>
+        </Pressable>
       </Pressable>
     </Modal>
   )
@@ -497,18 +509,31 @@ const styles = StyleSheet.create({
   },
   moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 2 },
   popupOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end',
   },
   popupBox: {
-    backgroundColor: Colors.white, borderRadius: 16, paddingVertical: 8, paddingHorizontal: 4,
-    minWidth: 220, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingBottom: 32, paddingTop: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1, shadowRadius: 12, elevation: 12,
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 12,
   },
   popupBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    paddingVertical: 14, paddingHorizontal: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    paddingVertical: 16, paddingHorizontal: 24,
+  },
+  popupIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: Colors.background,
+    alignItems: 'center', justifyContent: 'center',
   },
   popupBtnText: { fontSize: 16, color: Colors.text, fontWeight: '500' },
+  popupCancelBtn: { marginTop: 4, borderTopWidth: 1, borderTopColor: Colors.border },
+  popupCancelText: { fontSize: 16, color: Colors.textLight, fontWeight: '500', flex: 1, textAlign: 'center' },
   inputArea: {
     backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border,
   },
