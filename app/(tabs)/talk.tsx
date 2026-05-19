@@ -32,7 +32,7 @@ type FlatRow =
 
 export default function TalkScreen() {
   const [myId, setMyId] = useState<string | null>(null)
-  const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string } | null>(null)
+  const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean } | null>(null)
   const [followingItems, setFollowingItems] = useState<FollowingItem[]>([])
   const [followerItems, setFollowerItems] = useState<FollowerItem[]>([])
   const [followingOpen, setFollowingOpen] = useState(true)
@@ -55,7 +55,7 @@ export default function TalkScreen() {
     ] = await Promise.all([
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('follows').select('follower_id').eq('following_id', user.id),
-      supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).single(),
+      supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', user.id).single(),
       supabase.from('broadcasts')
         .select('id, content, created_at')
         .eq('sender_id', user.id).eq('status', 'published')
@@ -71,6 +71,7 @@ export default function TalkScreen() {
       avatar: myProfile?.avatar_url ?? null,
       last_content: myLastBroadcast?.content ?? 'まだ配信がありません',
       created_at: myLastBroadcast?.created_at ?? new Date().toISOString(),
+      is_official: (myProfile as any)?.is_official ?? false,
     })
 
     // フォロー中セクション
@@ -248,13 +249,14 @@ export default function TalkScreen() {
                 <View style={[styles.avatar, styles.selfAvatar]}>
                   {item.avatar
                     ? <Image source={{ uri: item.avatar }} style={styles.avatarImage} />
-                    : <Ionicons name="radio" size={22} color={Colors.white} />
+                    : <Text style={styles.avatarText}>{item.name[0]}</Text>
                   }
                 </View>
                 <View style={styles.talkInfo}>
                   <View style={styles.talkHeader}>
                     <View style={styles.nameRow}>
-                      <Text style={styles.talkName}>あなたの配信</Text>
+                      <Text style={styles.talkName}>{item.name}</Text>
+                      {item.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
                       <View style={styles.selfBadge}>
                         <Text style={styles.selfBadgeText}>自分</Text>
                       </View>

@@ -187,7 +187,10 @@ export default function MyPageScreen() {
               </View>
             )}
           </TouchableOpacity>
-          <Text style={styles.displayName}>{displayName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.displayName}>{displayName}</Text>
+            {profile?.is_official && <Ionicons name="checkmark-circle" size={18} color="#1D9BF0" />}
+          </View>
           {profile?.username && (
             <Text style={styles.username}>@{profile.username}</Text>
           )}
