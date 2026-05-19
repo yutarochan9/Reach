@@ -12,6 +12,7 @@ type FollowingItem = {
   last_content: string
   created_at: string
   unread: number
+  is_official: boolean
 }
 
 type FollowerItem = {
@@ -20,6 +21,7 @@ type FollowerItem = {
   avatar: string | null
   lastIm: string | null
   lastImTime: string | null
+  is_official: boolean
 }
 
 type FlatRow =
@@ -80,13 +82,13 @@ export default function TalkScreen() {
           .eq('status', 'published')
           .order('created_at', { ascending: false }),
         supabase.from('talk_reads').select('sender_id, last_read_at').eq('user_id', user.id),
-        supabase.from('profiles').select('id, display_name, avatar_url').in('id', followingIds),
+        supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followingIds),
       ])
 
       const readMap: Record<string, string> = {}
       ;(reads ?? []).forEach((r: any) => { readMap[r.sender_id] = r.last_read_at })
 
-      const profMap: Record<string, { display_name: string; avatar_url: string | null }> = {}
+      const profMap: Record<string, { display_name: string; avatar_url: string | null; is_official: boolean }> = {}
       for (const p of (profiles ?? [])) profMap[p.id] = p
 
       const senderBroadcasts: Record<string, any[]> = {}
@@ -107,6 +109,7 @@ export default function TalkScreen() {
           last_content: latest?.content ?? 'まだ配信がありません',
           created_at: latest?.created_at ?? new Date(0).toISOString(),
           unread,
+          is_official: profMap[id]?.is_official ?? false,
         }
       }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
@@ -118,7 +121,7 @@ export default function TalkScreen() {
     // フォロワーセクション
     if (followerIds.length > 0) {
       const [{ data: profData }, { data: imMessages }] = await Promise.all([
-        supabase.from('profiles').select('id, display_name, avatar_url').in('id', followerIds),
+        supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followerIds),
         supabase.from('messages')
           .select('id, content, sender_id, created_at')
           .eq('receiver_id', user.id)
@@ -127,7 +130,7 @@ export default function TalkScreen() {
           .order('created_at', { ascending: false }),
       ])
 
-      const profMap2: Record<string, { display_name: string; avatar_url: string | null }> = {}
+      const profMap2: Record<string, { display_name: string; avatar_url: string | null; is_official: boolean }> = {}
       for (const p of (profData ?? [])) profMap2[p.id] = p
 
       const latestImMap: Record<string, { content: string; created_at: string }> = {}
@@ -143,6 +146,7 @@ export default function TalkScreen() {
         avatar: profMap2[id]?.avatar_url ?? null,
         lastIm: latestImMap[id]?.content ?? null,
         lastImTime: latestImMap[id]?.created_at ?? null,
+        is_official: profMap2[id]?.is_official ?? false,
       })))
     } else {
       setFollowerItems([])
@@ -298,7 +302,10 @@ export default function TalkScreen() {
                 </View>
                 <View style={styles.talkInfo}>
                   <View style={styles.talkHeader}>
-                    <Text style={styles.talkName}>{d.name}</Text>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.talkName}>{d.name}</Text>
+                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                    </View>
                     <Text style={styles.talkTime}>{formatTime(d.created_at)}</Text>
                   </View>
                   <View style={styles.talkFooter}>
@@ -328,7 +335,10 @@ export default function TalkScreen() {
                 </View>
                 <View style={styles.talkInfo}>
                   <View style={styles.talkHeader}>
-                    <Text style={styles.talkName}>{d.name}</Text>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.talkName}>{d.name}</Text>
+                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                    </View>
                     {d.lastImTime && <Text style={styles.talkTime}>{formatTime(d.lastImTime)}</Text>}
                   </View>
                   <Text style={styles.lastMessage} numberOfLines={1}>
@@ -399,6 +409,7 @@ const styles = StyleSheet.create({
   talkHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   talkName: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   selfBadge: {
     backgroundColor: Colors.accent, borderRadius: 8,
     paddingHorizontal: 6, paddingVertical: 2,

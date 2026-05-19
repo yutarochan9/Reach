@@ -39,6 +39,7 @@ export default function TalkDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [senderName, setSenderName] = useState('')
   const [senderAvatar, setSenderAvatar] = useState<string | null>(null)
+  const [senderIsOfficial, setSenderIsOfficial] = useState(false)
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
@@ -54,7 +55,7 @@ export default function TalkDetailScreen() {
       setIsSelf(self)
 
       const [{ data: profile }, { data: broadcasts }] = await Promise.all([
-        supabase.from('profiles').select('display_name, avatar_url').eq('id', senderId).single(),
+        supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
           .eq('sender_id', senderId)
@@ -64,6 +65,7 @@ export default function TalkDetailScreen() {
 
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
+      setSenderIsOfficial((profile as any)?.is_official ?? false)
 
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)
@@ -412,7 +414,10 @@ export default function TalkDetailScreen() {
               : <Text style={styles.headerAvatarText}>{senderName[0]}</Text>
             }
           </View>
-          <Text style={styles.headerName}>{senderName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={styles.headerName}>{senderName}</Text>
+            {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+          </View>
         </View>
         <View style={{ width: 32 }} />
       </View>

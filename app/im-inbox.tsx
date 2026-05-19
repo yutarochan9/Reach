@@ -11,6 +11,7 @@ type IMConvo = {
   userAvatar: string | null
   lastMessage: string
   lastTime: string
+  isOfficial: boolean
 }
 
 export default function IMInboxScreen() {
@@ -48,14 +49,15 @@ export default function IMInboxScreen() {
 
     const senderIds = raw.map(c => c.userId)
     const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name, avatar_url').in('id', senderIds)
-    const profMap: Record<string, { display_name: string; avatar_url: string | null }> = {}
+      .from('profiles').select('id, display_name, avatar_url, is_official').in('id', senderIds)
+    const profMap: Record<string, { display_name: string; avatar_url: string | null; is_official: boolean }> = {}
     for (const p of (profiles ?? [])) profMap[p.id] = p
 
     setConvos(raw.map(c => ({
       ...c,
       userName: profMap[c.userId]?.display_name ?? '?',
       userAvatar: profMap[c.userId]?.avatar_url ?? null,
+      isOfficial: profMap[c.userId]?.is_official ?? false,
     })))
     setLoading(false)
   }, [])
@@ -110,7 +112,10 @@ export default function IMInboxScreen() {
               )}
               <View style={styles.convoInfo}>
                 <View style={styles.convoHeader}>
-                  <Text style={styles.name}>{item.userName}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={styles.name}>{item.userName}</Text>
+                    {item.isOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                  </View>
                   <Text style={styles.time}>{formatTime(item.lastTime)}</Text>
                 </View>
                 <Text style={styles.lastMsg} numberOfLines={1}>{item.lastMessage}</Text>

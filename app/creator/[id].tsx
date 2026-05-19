@@ -13,6 +13,7 @@ type Profile = {
   display_name: string
   bio: string | null
   avatar_url: string | null
+  is_official: boolean
 }
 
 type Broadcast = {
@@ -154,7 +155,10 @@ export default function CreatorScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{profile.display_name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={styles.headerTitle}>{profile.display_name}</Text>
+          {profile.is_official && <Ionicons name="checkmark-circle" size={16} color="#1D9BF0" />}
+        </View>
         <View style={{ width: 32 }} />
       </View>
 
@@ -170,7 +174,10 @@ export default function CreatorScreen() {
                 : <View style={styles.avatar}><Text style={styles.avatarText}>{profile.display_name[0]}</Text></View>
               }
             </View>
-            <Text style={styles.name}>{profile.display_name}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.name}>{profile.display_name}</Text>
+              {profile.is_official && <Ionicons name="checkmark-circle" size={18} color="#1D9BF0" />}
+            </View>
             {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
