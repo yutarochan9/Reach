@@ -461,10 +461,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' },
   headerAvatar: {
-    width: 36, height: 36, borderRadius: 8,
+    width: 36, height: 36, borderRadius: 18,
     backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  headerAvatarImage: { width: 36, height: 36, borderRadius: 8 },
+  headerAvatarImage: { width: 36, height: 36, borderRadius: 18 },
   headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   messageList: { padding: 16, gap: 12, paddingBottom: 32 },
@@ -477,10 +477,10 @@ const styles = StyleSheet.create({
   groupWrap: { marginBottom: 4 },
   broadcastRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   broadcastAvatar: {
-    width: 36, height: 36, borderRadius: 8, backgroundColor: Colors.button,
+    width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.button,
     alignItems: 'center', justifyContent: 'center', marginTop: 2, overflow: 'hidden', flexShrink: 0,
   },
-  broadcastAvatarImg: { width: 36, height: 36, borderRadius: 8 },
+  broadcastAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   broadcastAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   blocksWrap: { flex: 1 },
   broadcastBubble: {

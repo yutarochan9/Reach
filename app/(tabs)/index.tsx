@@ -95,13 +95,17 @@ export default function HomeScreen() {
           </View>
         </View>
         {myProfile && (
-          <View style={styles.profileRow}>
+          <TouchableOpacity
+            style={styles.profileRow}
+            onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
+            activeOpacity={0.75}
+          >
             <Text style={styles.profileName}>{myProfile.display_name}</Text>
             <View style={styles.followerPill}>
               <Ionicons name="people-outline" size={13} color={Colors.accent} />
               <Text style={styles.followerNum}>{myProfile.follower_count.toLocaleString()}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
       </View>
 
