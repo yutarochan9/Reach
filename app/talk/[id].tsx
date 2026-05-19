@@ -42,7 +42,6 @@ export default function TalkDetailScreen() {
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
-  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
@@ -288,17 +287,7 @@ export default function TalkDetailScreen() {
                 </Text>
               </View>
             )}
-            <TouchableOpacity
-              style={styles.groupWrap}
-              activeOpacity={isSelf ? 0.9 : 1}
-              onPress={isSelf ? () => router.push(`/broadcast-thread/${group.anchorId}` as any) : undefined}
-              onLongPress={!isWeb && !isSelf ? () => setLongPressGroup(group) : (!isWeb && isSelf ? () => setLongPressGroup(group) : undefined)}
-              delayLongPress={400}
-              {...(isWeb && isSelf ? {
-                onMouseEnter: () => setHoveredGroupId(group.anchorId),
-                onMouseLeave: () => setHoveredGroupId(null),
-              } as any : {})}
-            >
+            <View style={styles.groupWrap}>
               <View style={styles.broadcastRow}>
                 {!isSelf && (
                   <View style={styles.broadcastAvatar}>
@@ -319,66 +308,22 @@ export default function TalkDetailScreen() {
                       )}
                     </View>
                   ))}
-
-                  {/* 時刻 + バッジ + ···ボタン（投稿者のみ） */}
-                  <View style={styles.bubbleFooter}>
-                    <Text style={styles.bubbleTime}>
-                      {formatTime(group.blocks[group.blocks.length - 1].created_at)}
-                    </Text>
-                    {isSelf && group.like_count > 0 && (
-                      <View style={styles.countBadge}>
-                        <Ionicons name="heart" size={10} color="#E53E3E" />
-                        <Text style={styles.countBadgeText}>{group.like_count}</Text>
-                      </View>
-                    )}
-                    {isSelf && group.comment_count > 0 && (
-                      <View style={styles.countBadge}>
-                        <Ionicons name="chatbubble" size={10} color={Colors.textLight} />
-                        <Text style={styles.countBadgeText}>{group.comment_count}</Text>
-                      </View>
-                    )}
-                    {isSelf && isWeb && hoveredGroupId === group.anchorId && (
-                      <TouchableOpacity
-                        style={styles.moreBtn}
-                        onPress={() => setLongPressGroup(group)}
-                      >
-                        <Text style={styles.moreBtnText}>···</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
                 </View>
               </View>
-            </TouchableOpacity>
 
-            {/* 視聴者向け常時表示アクションボタン */}
-            {!isSelf && (
-              <View style={styles.viewerActionRow}>
+              {/* 時刻 + ···ボタン（groupWrap直下で確実にタップ可能） */}
+              <View style={[styles.bubbleFooter, !isSelf && { paddingLeft: 44 }]}>
+                <Text style={styles.bubbleTime}>
+                  {formatTime(group.blocks[group.blocks.length - 1].created_at)}
+                </Text>
                 <TouchableOpacity
-                  style={styles.viewerActionBtn}
-                  onPress={() => handleLike(group)}
+                  style={styles.moreBtn}
+                  onPress={() => setLongPressGroup(group)}
                 >
-                  <Ionicons
-                    name={group.liked ? 'heart' : 'heart-outline'}
-                    size={16}
-                    color={group.liked ? '#E53E3E' : Colors.textLight}
-                  />
-                  {group.like_count > 0 && (
-                    <Text style={[styles.viewerActionText, group.liked && { color: '#E53E3E' }]}>
-                      {group.like_count}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.viewerActionBtn}
-                  onPress={() => router.push(`/broadcast-thread/${group.anchorId}` as any)}
-                >
-                  <Ionicons name="chatbubble-outline" size={16} color={Colors.textLight} />
-                  {group.comment_count > 0 && (
-                    <Text style={styles.viewerActionText}>{group.comment_count}</Text>
-                  )}
+                  <Text style={styles.moreBtnText}>···</Text>
                 </TouchableOpacity>
               </View>
-            )}
+            </View>
           </>
         )
       }}
@@ -547,13 +492,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap',
   },
   bubbleTime: { fontSize: 10, color: Colors.textLight },
-  countBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 2,
-    backgroundColor: Colors.white, borderRadius: 8,
-    paddingHorizontal: 5, paddingVertical: 2,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  countBadgeText: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
   moreBtn: {
     paddingHorizontal: 8, paddingVertical: 2,
     backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
@@ -589,16 +527,4 @@ const styles = StyleSheet.create({
   sendDisabled: { backgroundColor: '#B0B0B0' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
-  viewerActionRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    marginTop: 2, marginBottom: 4, paddingLeft: 44,
-  },
-  viewerActionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border,
-    backgroundColor: Colors.white,
-  },
-  viewerActionText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
 })
