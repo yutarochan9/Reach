@@ -191,15 +191,24 @@ export default function CreatorScreen() {
               </View>
             </View>
             {!isSelf && (
-              <TouchableOpacity
-                style={[styles.followButton, isFollowing && styles.followingButton]}
-                onPress={handleFollow}
-              >
-                {isFollowing
-                  ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
-                  : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
-                }
-              </TouchableOpacity>
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.followButton, isFollowing && styles.followingButton]}
+                  onPress={handleFollow}
+                >
+                  {isFollowing
+                    ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
+                    : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
+                  }
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.talkButton}
+                  onPress={() => router.push(`/talk/${id}` as any)}
+                >
+                  <Ionicons name="chatbubbles" size={18} color={Colors.white} />
+                  <Text style={styles.talkButtonText}>トーク</Text>
+                </TouchableOpacity>
+              </View>
             )}
             {richMenu && richMenu.buttons.length > 0 && (
               <View style={styles.richMenuGrid}>
@@ -293,14 +302,21 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 18, fontWeight: '700', color: Colors.text },
   statLabel: { fontSize: 12, color: Colors.textLight },
   statDivider: { width: 1, height: 28, backgroundColor: Colors.border },
+  actionButtons: { flexDirection: 'row', gap: 10, marginTop: 8 },
   followButton: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.button,
-    borderRadius: 24, paddingHorizontal: 28, paddingVertical: 10, marginTop: 8,
+    borderRadius: 24, paddingHorizontal: 24, paddingVertical: 10,
   },
   followingButton: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.button },
   followButtonText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
   followingButtonText: { color: Colors.button, fontWeight: '700', fontSize: 15 },
+  talkButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.accent,
+    borderRadius: 24, paddingHorizontal: 24, paddingVertical: 10,
+  },
+  talkButtonText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginTop: 16, alignSelf: 'flex-start' },
   richMenuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', marginTop: 8 },
   richMenuBtn: {

@@ -142,20 +142,28 @@ export default function HomeScreen() {
           </View>
         )}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.creatorRow}
-            onPress={() => router.push(`/talk/${item.id}` as any)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.display_name[0]}</Text>
-            </View>
-            <View style={styles.creatorInfo}>
-              <Text style={styles.creatorName}>{item.display_name}</Text>
-              {item.bio && <Text style={styles.creatorBio} numberOfLines={1}>{item.bio}</Text>}
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
-          </TouchableOpacity>
+          <View style={styles.creatorRow}>
+            <TouchableOpacity
+              style={styles.creatorLeft}
+              onPress={() => router.push(`/creator/${item.id}` as any)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{item.display_name[0]}</Text>
+              </View>
+              <View style={styles.creatorInfo}>
+                <Text style={styles.creatorName}>{item.display_name}</Text>
+                {item.bio && <Text style={styles.creatorBio} numberOfLines={1}>{item.bio}</Text>}
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.talkIconBtn}
+              onPress={() => router.push(`/talk/${item.id}` as any)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chatbubbles-outline" size={22} color={Colors.accent} />
+            </TouchableOpacity>
+          </View>
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
@@ -240,8 +248,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: 20, fontWeight: '700', color: Colors.white },
+  creatorLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   creatorInfo: { flex: 1 },
   creatorName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   creatorBio: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  talkIconBtn: { padding: 8 },
   separator: { height: 1, backgroundColor: Colors.border, marginLeft: 76 },
 })

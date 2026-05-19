@@ -294,12 +294,17 @@ export default function TalkScreen() {
             const d = item.data
             return (
               <TouchableOpacity style={styles.talkItem} onPress={() => router.push(`/talk/${d.id}` as any)}>
-                <View style={styles.avatar}>
-                  {d.avatar
-                    ? <Image source={{ uri: d.avatar }} style={styles.avatarImage} />
-                    : <Text style={styles.avatarText}>{d.name[0]}</Text>
-                  }
-                </View>
+                <TouchableOpacity
+                  onPress={() => router.push(`/creator/${d.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.avatar}>
+                    {d.avatar
+                      ? <Image source={{ uri: d.avatar }} style={styles.avatarImage} />
+                      : <Text style={styles.avatarText}>{d.name[0]}</Text>
+                    }
+                  </View>
+                </TouchableOpacity>
                 <View style={styles.talkInfo}>
                   <View style={styles.talkHeader}>
                     <View style={styles.nameRow}>
