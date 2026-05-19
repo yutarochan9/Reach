@@ -61,6 +61,7 @@ export default function ComposeScreen() {
   const [showSchedule, setShowSchedule] = useState(false)
   const [showTarget, setShowTarget] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
+  const [publicReactions, setPublicReactions] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -286,6 +287,7 @@ export default function ComposeScreen() {
       image_url: b.imageUrl ?? null, block_order: i,
       status, scheduled_at: scheduledDate?.toISOString() ?? null, target,
       group_id: groupId,
+      public_reactions: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? publicReactions : false,
     }))
     const { error } = await supabase.from('broadcasts').insert(inserts)
     if (error) { Alert.alert('エラー', error.message); asDraft ? setSaving(false) : setLoading(false); return }
@@ -297,12 +299,12 @@ export default function ComposeScreen() {
     if (status === 'draft') {
       Alert.alert('下書き保存', '下書きを保存しました。「下書き・予約」タブから配信できます。')
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-      setTarget('all'); setScheduledAt(''); setConfirmed(false)
+      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false)
       setActiveTab('drafts')
     } else if (status === 'scheduled') {
       Alert.alert('予約完了', `${scheduledLabel}に配信予定として保存しました。`)
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-      setTarget('all'); setScheduledAt(''); setConfirmed(false)
+      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false)
       setActiveTab('drafts')
     } else {
       // 配信後は自分のトーク画面へ遷移して送信内容を確認できる
@@ -342,6 +344,21 @@ export default function ComposeScreen() {
           <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]}>{scheduledLabel ?? 'スケジュール'}</Text>
         </TouchableOpacity>
+        {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
+          <TouchableOpacity
+            style={[styles.toolBtn, publicReactions && styles.toolBtnActive]}
+            onPress={() => setPublicReactions(v => !v)}
+          >
+            <Ionicons
+              name={publicReactions ? 'heart' : 'heart-outline'}
+              size={15}
+              color={publicReactions ? Colors.white : Colors.accent}
+            />
+            <Text style={[styles.toolBtnText, publicReactions && styles.toolBtnTextActive]}>
+              {publicReactions ? 'リアクション公開' : 'リアクション非公開'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {showTarget && (

@@ -17,6 +17,16 @@ type Broadcast = {
   created_at: string
   block_order: number
   group_id: string | null
+  public_reactions: boolean
+}
+
+type PublicComment = {
+  id: string
+  content: string
+  sender_name: string
+  sender_avatar: string | null
+  created_at: string
+  is_mine: boolean
 }
 
 type BroadcastGroup = {
@@ -26,6 +36,9 @@ type BroadcastGroup = {
   like_count: number
   liked: boolean
   read_count: number
+  public_reactions: boolean
+  public_comments: PublicComment[]
+  comment_count: number
 }
 
 export default function TalkDetailScreen() {
@@ -56,7 +69,7 @@ export default function TalkDetailScreen() {
     const [{ data: profile }, { data: broadcasts }] = await Promise.all([
       supabase.from('profiles').select('display_name, avatar_url').eq('id', senderId).single(),
       supabase.from('broadcasts')
-        .select('id, content, image_url, created_at, block_order, group_id')
+        .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
         .eq('sender_id', senderId)
         .eq('status', 'published')
         .order('created_at', { ascending: true }),
@@ -67,15 +80,43 @@ export default function TalkDetailScreen() {
 
     const bcs = (broadcasts ?? []) as Broadcast[]
     const bcIds = bcs.map(b => b.id)
+    const publicBcIds = bcs.filter(b => b.public_reactions).map(b => b.id)
 
-    const [{ data: reactions }, { data: reads }] = await Promise.all([
+    const [{ data: reactions }, { data: reads }, { data: publicMsgs }] = await Promise.all([
       bcIds.length > 0
         ? supabase.from('reactions').select('broadcast_id, user_id').in('broadcast_id', bcIds)
         : Promise.resolve({ data: [] }),
       bcIds.length > 0
         ? supabase.from('broadcast_reads').select('broadcast_id, user_id').in('broadcast_id', bcIds)
         : Promise.resolve({ data: [] }),
+      publicBcIds.length > 0
+        ? supabase.from('messages').select('id, content, created_at, sender_id, broadcast_id')
+            .in('broadcast_id', publicBcIds).order('created_at', { ascending: true })
+        : Promise.resolve({ data: [] }),
     ])
+
+    const commentSenderIds = [...new Set((publicMsgs ?? []).map((m: any) => m.sender_id))]
+    const { data: commentProfiles } = commentSenderIds.length > 0
+      ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', commentSenderIds)
+      : { data: [] }
+
+    const commentProfileMap: Record<string, { name: string; avatar: string | null }> = {}
+    for (const p of (commentProfiles ?? [])) {
+      commentProfileMap[p.id] = { name: p.display_name, avatar: p.avatar_url }
+    }
+    const commentMap: Record<string, PublicComment[]> = {}
+    for (const m of (publicMsgs ?? [])) {
+      const prof = commentProfileMap[(m as any).sender_id]
+      if (!commentMap[(m as any).broadcast_id]) commentMap[(m as any).broadcast_id] = []
+      commentMap[(m as any).broadcast_id].push({
+        id: (m as any).id,
+        content: (m as any).content,
+        sender_name: prof?.name ?? 'ユーザー',
+        sender_avatar: prof?.avatar ?? null,
+        created_at: (m as any).created_at,
+        is_mine: (m as any).sender_id === user.id,
+      })
+    }
 
     const likeMap: Record<string, { count: number; liked: boolean }> = {}
     const readMap: Record<string, number> = {}
@@ -98,6 +139,8 @@ export default function TalkDetailScreen() {
     const result: BroadcastGroup[] = groupOrder.map(key => {
       const blocks = groupMap.get(key)!.sort((a, b) => a.block_order - b.block_order)
       const anchor = blocks[0]
+      const isPublic = anchor.public_reactions
+      const comments = isPublic ? (commentMap[anchor.id] ?? []) : []
       return {
         anchorId: anchor.id,
         group_id: anchor.group_id,
@@ -105,6 +148,9 @@ export default function TalkDetailScreen() {
         like_count: likeMap[anchor.id]?.count ?? 0,
         liked: likeMap[anchor.id]?.liked ?? false,
         read_count: readMap[anchor.id] ?? 0,
+        public_reactions: isPublic,
+        public_comments: comments,
+        comment_count: comments.length,
       }
     })
 
@@ -168,7 +214,7 @@ export default function TalkDetailScreen() {
                 )
               }
             }
-            return [...prev, { anchorId: bc.id, group_id: bc.group_id ?? null, blocks: [newBlock], like_count: 0, liked: false, read_count: 0 }]
+            return [...prev, { anchorId: bc.id, group_id: bc.group_id ?? null, blocks: [newBlock], like_count: 0, liked: false, read_count: 0, public_reactions: bc.public_reactions ?? false, public_comments: [], comment_count: 0 }]
           })
           setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
           if (myId !== senderId) {
@@ -320,8 +366,8 @@ export default function TalkDetailScreen() {
                       )}
                     </View>
                   ))}
-                  {/* いいね数のみ小さく表示 */}
-                  {group.like_count > 0 && (
+                  {/* いいね数バッジ（公開リアクション無効時のみ） */}
+                  {group.like_count > 0 && !group.public_reactions && (
                     <View style={styles.likeCountBadge}>
                       <Ionicons name="heart" size={11} color="#E53E3E" />
                       <Text style={styles.likeCountText}>{group.like_count}</Text>
@@ -341,6 +387,63 @@ export default function TalkDetailScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
+
+                  {/* 公開リアクション（インスタ風） */}
+                  {group.public_reactions && (
+                    <View style={styles.publicReactionsWrap}>
+                      <View style={styles.publicStatsRow}>
+                        <TouchableOpacity
+                          style={styles.publicStat}
+                          onPress={() => { if (!isSelf) handleLike(group) }}
+                          activeOpacity={isSelf ? 1 : 0.7}
+                        >
+                          <Ionicons
+                            name={group.liked ? 'heart' : 'heart-outline'}
+                            size={17}
+                            color={group.liked ? '#E53E3E' : Colors.text}
+                          />
+                          <Text style={[styles.publicStatText, group.liked && { color: '#E53E3E' }]}>
+                            {group.like_count > 0 ? `${group.like_count} いいね` : 'いいね'}
+                          </Text>
+                        </TouchableOpacity>
+                        <View style={styles.publicStat}>
+                          <Ionicons name="chatbubble-outline" size={16} color={Colors.textLight} />
+                          <Text style={styles.publicStatTextMuted}>
+                            {group.comment_count > 0 ? `${group.comment_count} コメント` : 'コメント'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {group.public_comments.length > 0 && (
+                        <View style={styles.publicCommentsDivider} />
+                      )}
+
+                      {group.public_comments.slice(0, 3).map(comment => (
+                        <View key={comment.id} style={styles.publicComment}>
+                          <View style={styles.publicCommentAvatar}>
+                            {comment.sender_avatar
+                              ? <Image source={{ uri: comment.sender_avatar }} style={styles.publicCommentAvatarImg} />
+                              : <Text style={styles.publicCommentAvatarText}>{comment.sender_name[0]}</Text>
+                            }
+                          </View>
+                          <View style={styles.publicCommentBody}>
+                            <Text style={styles.publicCommentName}>{comment.sender_name}</Text>
+                            <Text style={styles.publicCommentText}>{comment.content}</Text>
+                          </View>
+                        </View>
+                      ))}
+
+                      {group.comment_count > 3 && (
+                        <TouchableOpacity
+                          onPress={() => isSelf ? router.push(`/broadcast-thread/${group.anchorId}` as any) : undefined}
+                        >
+                          <Text style={styles.publicMoreComments}>
+                            コメントをすべて見る（{group.comment_count}件）
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
                 </View>
               </View>
             </TouchableOpacity>
@@ -598,4 +701,70 @@ const styles = StyleSheet.create({
   sendDisabled: { backgroundColor: '#B0B0B0' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
+
+  // 公開リアクション（インスタ風）
+  publicReactionsWrap: {
+    marginTop: 6,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderTopLeftRadius: 2,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  publicStatsRow: {
+    flexDirection: 'row',
+    gap: 18,
+    alignItems: 'center',
+  },
+  publicStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  publicStatText: {
+    fontSize: 13,
+    color: Colors.text,
+    fontWeight: '600',
+  },
+  publicStatTextMuted: {
+    fontSize: 13,
+    color: Colors.textLight,
+    fontWeight: '500',
+  },
+  publicCommentsDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginHorizontal: -12,
+  },
+  publicComment: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  publicCommentAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: Colors.button,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    overflow: 'hidden',
+  },
+  publicCommentAvatarImg: { width: 24, height: 24, borderRadius: 6 },
+  publicCommentAvatarText: { fontSize: 11, fontWeight: '700', color: Colors.white },
+  publicCommentBody: { flex: 1 },
+  publicCommentName: { fontSize: 12, fontWeight: '700', color: Colors.text },
+  publicCommentText: { fontSize: 13, color: Colors.text, lineHeight: 18 },
+  publicMoreComments: {
+    fontSize: 12,
+    color: Colors.accent,
+    fontWeight: '600',
+    paddingTop: 2,
+  },
 })
