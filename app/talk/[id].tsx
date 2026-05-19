@@ -306,34 +306,11 @@ export default function TalkDetailScreen() {
                 </View>
               </View>
 
-              {/* 時刻 + カウント + ···ボタン */}
+              {/* 時刻 + ···ボタン */}
               <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
                 <Text style={styles.bubbleTime}>
                   {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                 </Text>
-                {group.public_reactions && group.like_count > 0 && (
-                  <TouchableOpacity
-                    style={styles.countBadge}
-                    onPress={() => !isSelf && handleLike(group)}
-                    activeOpacity={isSelf ? 1 : 0.7}
-                  >
-                    <Ionicons
-                      name={group.liked ? 'heart' : 'heart-outline'}
-                      size={12}
-                      color={group.liked ? '#E53E3E' : Colors.textLight}
-                    />
-                    <Text style={styles.countBadgeText}>{group.like_count}</Text>
-                  </TouchableOpacity>
-                )}
-                {group.public_reactions && group.comment_count > 0 && (
-                  <TouchableOpacity
-                    style={styles.countBadge}
-                    onPress={() => router.push(`/broadcast-thread/${group.anchorId}` as any)}
-                  >
-                    <Ionicons name="chatbubble-outline" size={12} color={Colors.textLight} />
-                    <Text style={styles.countBadgeText}>{group.comment_count}</Text>
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
                   style={styles.moreBtn}
                   onPress={() => setLongPressGroup(group)}
@@ -359,6 +336,18 @@ export default function TalkDetailScreen() {
         <Pressable style={styles.popupBox} onPress={e => e.stopPropagation()}>
           {/* ドラッグハンドル */}
           <View style={styles.sheetHandle} />
+
+          {/* 公開/非公開インジケーター */}
+          <View style={styles.popupPublicRow}>
+            <Ionicons
+              name={longPressGroup?.public_reactions ? 'globe-outline' : 'lock-closed-outline'}
+              size={13}
+              color={Colors.textLight}
+            />
+            <Text style={styles.popupPublicText}>
+              {longPressGroup?.public_reactions ? '公開配信' : '非公開配信'}
+            </Text>
+          </View>
 
           {/* いいね（視聴者のみ） */}
           {!isSelf && (
@@ -393,14 +382,7 @@ export default function TalkDetailScreen() {
             <View style={styles.popupIconWrap}>
               <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
             </View>
-            <Text style={styles.popupBtnText}>
-              {isSelf
-                ? `コメントを見る${longPressGroup && longPressGroup.comment_count > 0 ? ` (${longPressGroup.comment_count})` : ''}`
-                : longPressGroup?.public_reactions
-                  ? 'コメント欄を見る'
-                  : 'コメントする'
-              }
-            </Text>
+            <Text style={styles.popupBtnText}>コメント</Text>
           </TouchableOpacity>
 
           {/* キャンセル */}
@@ -552,6 +534,11 @@ const styles = StyleSheet.create({
     width: 36, height: 4, borderRadius: 2,
     backgroundColor: Colors.border, alignSelf: 'center', marginBottom: 12,
   },
+  popupPublicRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 24, paddingBottom: 12,
+  },
+  popupPublicText: { fontSize: 12, color: Colors.textLight },
   popupBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 16,
     paddingVertical: 16, paddingHorizontal: 24,

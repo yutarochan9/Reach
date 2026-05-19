@@ -298,26 +298,7 @@ export default function TalkScreen() {
                     </View>
                     <Text style={styles.talkTime}>{formatTime(item.created_at)}</Text>
                   </View>
-                  <View style={styles.lastMessageRow}>
-                    <Ionicons
-                      name={item.public_reactions ? 'globe-outline' : 'lock-closed-outline'}
-                      size={11}
-                      color={Colors.textLight}
-                    />
-                    <Text style={styles.lastMessage} numberOfLines={1}>{item.last_content}</Text>
-                    {item.public_reactions && item.like_count > 0 && (
-                      <View style={styles.talkCountBadge}>
-                        <Ionicons name="heart-outline" size={10} color={Colors.textLight} />
-                        <Text style={styles.talkCountText}>{item.like_count}</Text>
-                      </View>
-                    )}
-                    {item.public_reactions && item.comment_count > 0 && (
-                      <View style={styles.talkCountBadge}>
-                        <Ionicons name="chatbubble-outline" size={10} color={Colors.textLight} />
-                        <Text style={styles.talkCountText}>{item.comment_count}</Text>
-                      </View>
-                    )}
-                  </View>
+                  <Text style={styles.lastMessage} numberOfLines={1}>{item.last_content}</Text>
                 </View>
               </TouchableOpacity>
             )
@@ -370,28 +351,9 @@ export default function TalkScreen() {
                     <Text style={styles.talkTime}>{formatTime(d.created_at)}</Text>
                   </View>
                   <View style={styles.talkFooter}>
-                    <View style={[styles.lastMessageRow, { flex: 1 }]}>
-                      <Ionicons
-                        name={d.public_reactions ? 'globe-outline' : 'lock-closed-outline'}
-                        size={11}
-                        color={Colors.textLight}
-                      />
-                      <Text style={[styles.lastMessage, d.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
-                        {d.last_content}
-                      </Text>
-                      {d.public_reactions && d.like_count > 0 && (
-                        <View style={styles.talkCountBadge}>
-                          <Ionicons name="heart-outline" size={10} color={Colors.textLight} />
-                          <Text style={styles.talkCountText}>{d.like_count}</Text>
-                        </View>
-                      )}
-                      {d.public_reactions && d.comment_count > 0 && (
-                        <View style={styles.talkCountBadge}>
-                          <Ionicons name="chatbubble-outline" size={10} color={Colors.textLight} />
-                          <Text style={styles.talkCountText}>{d.comment_count}</Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text style={[styles.lastMessage, d.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
+                      {d.last_content}
+                    </Text>
                     {d.unread > 0 && (
                       <View style={styles.badge}>
                         <Text style={styles.badgeText}>{d.unread > 99 ? '99+' : d.unread}</Text>
