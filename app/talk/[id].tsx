@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
 } from 'react-native'
+const isWeb = Platform.OS === 'web'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -40,6 +41,7 @@ export default function TalkDetailScreen() {
   const [replyBroadcastId, setReplyBroadcastId] = useState<string | null>(null)
   const [replyPreview, setReplyPreview] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
@@ -291,8 +293,12 @@ export default function TalkDetailScreen() {
               style={styles.groupWrap}
               activeOpacity={0.9}
               onPress={isSelf ? () => router.push(`/broadcast-thread/${group.anchorId}` as any) : undefined}
-              onLongPress={() => setLongPressGroup(group)}
+              onLongPress={!isWeb ? () => setLongPressGroup(group) : undefined}
               delayLongPress={400}
+              {...(isWeb ? {
+                onMouseEnter: () => setHoveredGroupId(group.anchorId),
+                onMouseLeave: () => setHoveredGroupId(null),
+              } as any : {})}
             >
               <View style={styles.broadcastRow}>
                 {!isSelf && (
@@ -321,9 +327,20 @@ export default function TalkDetailScreen() {
                       <Text style={styles.likeCountText}>{group.like_count}</Text>
                     </View>
                   )}
-                  <Text style={styles.bubbleTime}>
-                    {formatTime(group.blocks[group.blocks.length - 1].created_at)}
-                  </Text>
+                  <View style={styles.bubbleFooter}>
+                    <Text style={styles.bubbleTime}>
+                      {formatTime(group.blocks[group.blocks.length - 1].created_at)}
+                    </Text>
+                    {/* PCのみ：ホバー時に「···」ボタン表示 */}
+                    {isWeb && hoveredGroupId === group.anchorId && (
+                      <TouchableOpacity
+                        style={styles.moreBtn}
+                        onPress={() => setLongPressGroup(group)}
+                      >
+                        <Text style={styles.moreBtnText}>···</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
             </TouchableOpacity>
@@ -520,7 +537,16 @@ const styles = StyleSheet.create({
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
   broadcastTextSelf: { color: Colors.white },
-  bubbleTime: { fontSize: 10, color: Colors.textLight, marginTop: 4, marginLeft: 2, alignSelf: 'flex-start' },
+  bubbleTime: { fontSize: 10, color: Colors.textLight, marginLeft: 2 },
+  bubbleFooter: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4,
+  },
+  moreBtn: {
+    paddingHorizontal: 8, paddingVertical: 2,
+    backgroundColor: Colors.white,
+    borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+  },
+  moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 2 },
   likeCountBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     marginTop: 4, alignSelf: 'flex-start',
