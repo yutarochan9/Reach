@@ -10,7 +10,7 @@ import { authFlags } from '../../lib/authState'
 import { Colors } from '../../constants/colors'
 
 export default function SignupScreen() {
-  const [step, setStep] = useState<'form' | 'otp'>('form')
+  const [step, setStep] = useState<'form' | 'otp' | 'profile'>('form')
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
@@ -21,7 +21,7 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false)
 
   const handleRegister = async () => {
-    if (!displayName.trim() || !email.trim() || !password) {
+    if (!email.trim() || !password) {
       Alert.alert('入力エラー', 'すべての項目を入力してください')
       return
     }
@@ -29,29 +29,12 @@ export default function SignupScreen() {
       Alert.alert('パスワードエラー', 'パスワードは8文字以上で入力してください')
       return
     }
-    setUsernameError('')
-
-    // ユーザーアドレス重複チェック
-    const trimmedUsername = username.trim() || null
-    if (trimmedUsername) {
-      const { data: existing } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', trimmedUsername)
-        .maybeSingle()
-      if (existing) {
-        setUsernameError('このユーザーアドレスはすでに使われています')
-        return
-      }
-    }
 
     setLoading(true)
-    // signUp が自動サインインを引き起こしてもホームに飛ばないようにスキップ
     authFlags.skipNextSignedIn = true
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { display_name: displayName.trim() } },
     })
     if (error) {
       authFlags.skipNextSignedIn = false
@@ -60,7 +43,6 @@ export default function SignupScreen() {
       return
     }
 
-    // アカウント作成後にメール認証コードを送信
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: { shouldCreateUser: false },
@@ -77,7 +59,6 @@ export default function SignupScreen() {
     if (otp.length < 6) return
     setLoading(true)
 
-    // OTP確認後のSIGNED_INはここで制御して自分でナビゲートする
     authFlags.skipNextSignedIn = true
     const { error } = await supabase.auth.verifyOtp({
       email: email.trim(),
@@ -91,15 +72,35 @@ export default function SignupScreen() {
       return
     }
 
-    // プロフィールにユーザー名・ユーザーアドレスを保存
+    setLoading(false)
+    setStep('profile')
+  }
+
+  const handleSaveProfile = async () => {
+    if (!displayName.trim()) {
+      Alert.alert('入力エラー', 'ユーザー名を入力してください')
+      return
+    }
+    setUsernameError('')
+
+    const trimmedUsername = username.trim() || null
+    if (trimmedUsername) {
+      const { data: existing } = await supabase
+        .from('profiles').select('id').eq('username', trimmedUsername).maybeSingle()
+      if (existing) {
+        setUsernameError('このユーザーアドレスはすでに使われています')
+        return
+      }
+    }
+
+    setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       await supabase.from('profiles').update({
         display_name: displayName.trim(),
-        username: username.trim() || null,
+        username: trimmedUsername,
       }).eq('id', user.id)
     }
-
     setLoading(false)
     router.replace('/(tabs)/')
   }
@@ -125,11 +126,11 @@ export default function SignupScreen() {
             <TouchableOpacity onPress={() => { setStep('form'); setOtp('') }} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
-          ) : (
+          ) : step === 'form' ? (
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
-          )}
+          ) : <View />}
         </View>
 
         <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
@@ -138,37 +139,10 @@ export default function SignupScreen() {
             <Text style={styles.logoText}>Reach</Text>
           </View>
 
-          {step === 'form' ? (
+          {step === 'form' && (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>サインアップ</Text>
               <Text style={styles.cardSub}>アカウントを作成してはじめましょう</Text>
-
-              <View style={styles.inputWrap}>
-                <Ionicons name="person-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="ユーザー名（表示名）"
-                  placeholderTextColor={Colors.textLight}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  maxLength={30}
-                />
-              </View>
-
-              <View style={[styles.inputWrap, usernameError ? styles.inputWrapError : null]}>
-                <Text style={styles.atSign}>@</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="ユーザーアドレス（英数字・_のみ）"
-                  placeholderTextColor={Colors.textLight}
-                  value={username}
-                  onChangeText={v => { setUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  maxLength={30}
-                />
-              </View>
-              {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
 
               <View style={styles.inputWrap}>
                 <Ionicons name="mail-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
@@ -202,9 +176,9 @@ export default function SignupScreen() {
               </View>
 
               <TouchableOpacity
-                style={[styles.button, (!displayName.trim() || !email.trim() || !password || loading) && styles.buttonDisabled]}
+                style={[styles.button, (!email.trim() || !password || loading) && styles.buttonDisabled]}
                 onPress={handleRegister}
-                disabled={!displayName.trim() || !email.trim() || !password || loading}
+                disabled={!email.trim() || !password || loading}
               >
                 <Text style={styles.buttonText}>{loading ? '処理中...' : '認証コードを送る'}</Text>
               </TouchableOpacity>
@@ -222,7 +196,9 @@ export default function SignupScreen() {
                 <Text style={styles.secondaryButtonText}>すでにアカウントをお持ちの方</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+          )}
+
+          {step === 'otp' && (
             <View style={styles.card}>
               <View style={styles.otpIconWrap}>
                 <Ionicons name="mail-open-outline" size={36} color={Colors.accent} />
@@ -244,10 +220,56 @@ export default function SignupScreen() {
                 onPress={handleVerifyOtp}
                 disabled={otp.length < 6 || loading}
               >
-                <Text style={styles.buttonText}>{loading ? '確認中...' : '登録する'}</Text>
+                <Text style={styles.buttonText}>{loading ? '確認中...' : '認証する'}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleResend} style={styles.resendBtn}>
                 <Text style={styles.resendText}>コードを再送する</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 'profile' && (
+            <View style={styles.card}>
+              <View style={styles.otpIconWrap}>
+                <Ionicons name="person-circle-outline" size={40} color={Colors.accent} />
+              </View>
+              <Text style={styles.cardTitle}>プロフィール設定</Text>
+              <Text style={styles.cardSub}>あなたの名前とアドレスを設定してください</Text>
+
+              <View style={styles.inputWrap}>
+                <Ionicons name="person-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="ユーザー名（表示名）"
+                  placeholderTextColor={Colors.textLight}
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  maxLength={30}
+                  autoFocus
+                />
+              </View>
+
+              <View style={[styles.inputWrap, usernameError ? styles.inputWrapError : null]}>
+                <Text style={styles.atSign}>@</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="ユーザーアドレス（英数字・_のみ）"
+                  placeholderTextColor={Colors.textLight}
+                  value={username}
+                  onChangeText={v => { setUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={30}
+                />
+              </View>
+              {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.button, (!displayName.trim() || loading) && styles.buttonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={!displayName.trim() || loading}
+              >
+                <Text style={styles.buttonText}>{loading ? '保存中...' : 'はじめる'}</Text>
               </TouchableOpacity>
             </View>
           )}
