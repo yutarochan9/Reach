@@ -291,14 +291,12 @@ export default function TalkDetailScreen() {
             )}
             <View style={styles.groupWrap}>
               <View style={styles.broadcastRow}>
-                {!isSelf && (
-                  <View style={styles.broadcastAvatar}>
-                    {senderAvatar
-                      ? <Image source={{ uri: senderAvatar }} style={styles.broadcastAvatarImg} />
-                      : <Text style={styles.broadcastAvatarText}>{senderName[0]}</Text>
-                    }
-                  </View>
-                )}
+                <View style={styles.broadcastAvatar}>
+                  {senderAvatar
+                    ? <Image source={{ uri: senderAvatar }} style={styles.broadcastAvatarImg} />
+                    : <Text style={styles.broadcastAvatarText}>{senderName[0]}</Text>
+                  }
+                </View>
                 <View style={styles.blocksWrap}>
                   {group.blocks.map((block, idx) => (
                     <View key={block.id} style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}>
@@ -314,7 +312,7 @@ export default function TalkDetailScreen() {
               </View>
 
               {/* 時刻 + ···ボタン（groupWrap直下で確実にタップ可能） */}
-              <View style={[styles.bubbleFooter, !isSelf && { paddingLeft: 44 }]}>
+              <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
                 <Text style={styles.bubbleTime}>
                   {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                 </Text>
