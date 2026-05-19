@@ -247,11 +247,7 @@ export default function TalkDetailScreen() {
 
   const formatTime = (iso: string) => {
     const d = new Date(iso)
-    const now = new Date()
-    const diff = Math.floor((now.getTime() - d.getTime()) / 86400000)
-    if (diff === 0) return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-    if (diff === 1) return '昨日'
-    return `${d.getMonth() + 1}/${d.getDate()}`
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
   }
 
   if (loading) {
