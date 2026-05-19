@@ -1,13 +1,15 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
 } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { sendPushToUsers } from '../../lib/notifications'
+
+const isWeb = Platform.OS === 'web'
 
 type IMMessage = {
   id: string
@@ -27,6 +29,8 @@ export default function IMScreen() {
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<IMMessage | null>(null)
   const [loading, setLoading] = useState(true)
+  const [longPressMsg, setLongPressMsg] = useState<IMMessage | null>(null)
+  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
   const flatListRef = useRef<FlatList>(null)
 
   const load = useCallback(async () => {
@@ -39,7 +43,6 @@ export default function IMScreen() {
     setPartnerName(profile?.display_name ?? '')
     setPartnerAvatar(profile?.avatar_url ?? null)
 
-    // IMメッセージ（broadcast_id IS NULL）
     const { data: msgs } = await supabase
       .from('messages')
       .select('id, content, sender_id, created_at, reply_to_id')
@@ -51,7 +54,6 @@ export default function IMScreen() {
 
     if (!msgs) { setLoading(false); return }
 
-    // reply_to_idのプレビュー取得
     const replyIds = [...new Set(msgs.filter((m: any) => m.reply_to_id).map((m: any) => m.reply_to_id))]
     const replyMap: Record<string, string> = {}
     if (replyIds.length > 0) {
@@ -69,7 +71,6 @@ export default function IMScreen() {
 
   useFocusEffect(useCallback(() => {
     load()
-    // リアルタイム購読
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       const channel = supabase
@@ -96,20 +97,11 @@ export default function IMScreen() {
     if (!text.trim() || !myId) return
     const content = text.trim()
     setText('')
-    const insertData: any = {
-      sender_id: myId,
-      receiver_id: partnerId,
-      content,
-    }
-    if (replyTo) {
-      insertData.reply_to_id = replyTo.id
-    }
+    const insertData: any = { sender_id: myId, receiver_id: partnerId, content }
+    if (replyTo) insertData.reply_to_id = replyTo.id
     const { data } = await supabase.from('messages').insert(insertData).select().single()
     if (data) {
-      setMessages(prev => [...prev, {
-        ...data,
-        reply_preview: replyTo ? replyTo.content : null,
-      }])
+      setMessages(prev => [...prev, { ...data, reply_preview: replyTo ? replyTo.content : null }])
       setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
     }
     setReplyTo(null)
@@ -117,7 +109,6 @@ export default function IMScreen() {
       .from('profiles').select('display_name').eq('id', myId).single()
     sendPushToUsers([partnerId], myProfile?.display_name ?? 'IM', content.slice(0, 80))
 
-    // 自動応答チェック（相手クリエイターのキーワードルールを確認）
     const { data: autoRules } = await supabase
       .from('auto_responses')
       .select('keyword, response_text, match_count')
@@ -127,22 +118,17 @@ export default function IMScreen() {
       content.toLowerCase().includes(rule.keyword.toLowerCase())
     )
     if (matched) {
-      // 少し遅延して自動返信（自然に見せる）
       setTimeout(async () => {
         const { data: autoReply } = await supabase.from('messages').insert({
-          sender_id: partnerId,
-          receiver_id: myId,
-          content: matched.response_text,
+          sender_id: partnerId, receiver_id: myId, content: matched.response_text,
         }).select().single()
         if (autoReply) {
           setMessages(prev => [...prev, { ...autoReply, reply_preview: null }])
           setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
         }
-        // マッチカウントを増やす
         await supabase.from('auto_responses')
           .update({ match_count: matched.match_count + 1 })
-          .eq('creator_id', partnerId)
-          .eq('keyword', matched.keyword)
+          .eq('creator_id', partnerId).eq('keyword', matched.keyword)
       }, 1200)
     }
   }
@@ -215,9 +201,14 @@ export default function IMScreen() {
                 </View>
               )}
               <TouchableOpacity
-                onLongPress={() => setReplyTo(item)}
                 activeOpacity={0.9}
                 style={[styles.msgRow, isOwn && styles.msgRowOwn]}
+                onLongPress={!isWeb ? () => setLongPressMsg(item) : undefined}
+                delayLongPress={400}
+                {...(isWeb ? {
+                  onMouseEnter: () => setHoveredMsgId(item.id),
+                  onMouseLeave: () => setHoveredMsgId(null),
+                } as any : {})}
               >
                 {!isOwn && (
                   partnerAvatar
@@ -226,7 +217,7 @@ export default function IMScreen() {
                         <Text style={styles.msgAvatarText}>{partnerName[0]}</Text>
                       </View>
                 )}
-                <View style={styles.bubbleWrap}>
+                <View style={[styles.bubbleWrap, isOwn && styles.bubbleWrapOwn]}>
                   {item.reply_preview && (
                     <View style={[styles.replyQuote, isOwn && styles.replyQuoteOwn]}>
                       <Ionicons name="return-down-forward-outline" size={11} color={isOwn ? 'rgba(255,255,255,0.7)' : Colors.textLight} />
@@ -238,13 +229,46 @@ export default function IMScreen() {
                   <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
                     <Text style={[styles.bubbleText, isOwn && styles.bubbleTextOwn]}>{item.content}</Text>
                   </View>
-                  <Text style={[styles.msgTime, isOwn && styles.msgTimeOwn]}>{formatTime(item.created_at)}</Text>
+                  <View style={[styles.msgFooter, isOwn && styles.msgFooterOwn]}>
+                    <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
+                    {isWeb && hoveredMsgId === item.id && (
+                      <TouchableOpacity
+                        style={styles.moreBtn}
+                        onPress={() => setLongPressMsg(item)}
+                      >
+                        <Text style={styles.moreBtnText}>···</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
             </>
           )
         }}
       />
+
+      {/* 長押し/ホバーポップアップ */}
+      <Modal
+        visible={!!longPressMsg}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLongPressMsg(null)}
+      >
+        <Pressable style={styles.popupOverlay} onPress={() => setLongPressMsg(null)}>
+          <View style={styles.popupBox}>
+            <TouchableOpacity
+              style={styles.popupBtn}
+              onPress={() => {
+                if (longPressMsg) setReplyTo(longPressMsg)
+                setLongPressMsg(null)
+              }}
+            >
+              <Ionicons name="return-down-forward-outline" size={22} color={Colors.text} />
+              <Text style={styles.popupBtnText}>返信する</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
 
       <View style={styles.inputArea}>
         {replyTo && (
@@ -279,17 +303,12 @@ export default function IMScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F0F0F0' },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.white,
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    backgroundColor: Colors.header,
+    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
   headerCenter: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' },
@@ -318,6 +337,7 @@ const styles = StyleSheet.create({
   },
   msgAvatarText: { fontSize: 13, fontWeight: '700', color: Colors.white },
   bubbleWrap: { maxWidth: '75%', alignItems: 'flex-start' },
+  bubbleWrapOwn: { alignItems: 'flex-end' },
   replyQuote: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(0,0,0,0.06)',
@@ -328,25 +348,39 @@ const styles = StyleSheet.create({
   replyQuoteText: { fontSize: 11, color: Colors.textLight, flex: 1 },
   replyQuoteTextOwn: { color: 'rgba(255,255,255,0.8)' },
   bubble: {
-    borderRadius: 18,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 1,
+    borderRadius: 18, padding: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
   },
   bubbleOther: { backgroundColor: Colors.white, borderBottomLeftRadius: 4 },
   bubbleOwn: { backgroundColor: Colors.accent, borderBottomRightRadius: 4 },
   bubbleText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
   bubbleTextOwn: { color: Colors.white },
-  msgTime: { fontSize: 10, color: Colors.textLight, marginTop: 3, alignSelf: 'flex-start' },
-  msgTimeOwn: { alignSelf: 'flex-end' },
-  inputArea: {
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+  msgFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  msgFooterOwn: { flexDirection: 'row-reverse' },
+  msgTime: { fontSize: 10, color: Colors.textLight },
+  moreBtn: {
+    paddingHorizontal: 8, paddingVertical: 2,
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
   },
+  moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 2 },
+  popupOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  popupBox: {
+    backgroundColor: Colors.white, borderRadius: 16,
+    paddingVertical: 8, paddingHorizontal: 4, minWidth: 200,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
+  },
+  popupBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 14, paddingHorizontal: 20,
+  },
+  popupBtnText: { fontSize: 16, color: Colors.text, fontWeight: '500' },
+  inputArea: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
   replyBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
@@ -354,19 +388,14 @@ const styles = StyleSheet.create({
   replyBarText: { flex: 1, fontSize: 12, color: Colors.accent, fontStyle: 'italic' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 10, gap: 8 },
   input: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: Colors.text,
-    maxHeight: 100,
+    flex: 1, backgroundColor: Colors.white,
+    borderRadius: 22, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 16, paddingVertical: 10,
+    fontSize: 14, color: Colors.text, maxHeight: 100,
   },
   sendBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
   },
   sendDisabled: { backgroundColor: '#B0B0B0' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
