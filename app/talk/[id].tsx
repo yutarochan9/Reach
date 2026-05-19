@@ -349,27 +349,26 @@ export default function TalkDetailScreen() {
             </Text>
           </View>
 
-          {/* いいね（視聴者のみ） */}
-          {!isSelf && (
-            <TouchableOpacity
-              style={styles.popupBtn}
-              onPress={() => {
-                if (longPressGroup) handleLike(longPressGroup)
-                setLongPressGroup(null)
-              }}
-            >
-              <View style={[styles.popupIconWrap, longPressGroup?.liked && { backgroundColor: '#FFF0F0' }]}>
-                <Ionicons
-                  name={longPressGroup?.liked ? 'heart' : 'heart-outline'}
-                  size={22}
-                  color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
-                />
-              </View>
-              <Text style={styles.popupBtnText}>
-                {longPressGroup?.liked ? 'いいねを取り消す' : 'いいね'}
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* いいね（全員表示、視聴者のみタップ可） */}
+          <TouchableOpacity
+            style={styles.popupBtn}
+            onPress={() => {
+              if (!isSelf && longPressGroup) handleLike(longPressGroup)
+              if (!isSelf) setLongPressGroup(null)
+            }}
+            activeOpacity={isSelf ? 1 : 0.7}
+          >
+            <View style={[styles.popupIconWrap, longPressGroup?.liked && { backgroundColor: '#FFF0F0' }]}>
+              <Ionicons
+                name={longPressGroup?.liked ? 'heart' : 'heart-outline'}
+                size={22}
+                color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
+              />
+            </View>
+            <Text style={styles.popupBtnText}>
+              いいね{longPressGroup && longPressGroup.like_count > 0 ? `（${longPressGroup.like_count}）` : ''}
+            </Text>
+          </TouchableOpacity>
 
           {/* コメント（全員） */}
           <TouchableOpacity
@@ -382,7 +381,9 @@ export default function TalkDetailScreen() {
             <View style={styles.popupIconWrap}>
               <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
             </View>
-            <Text style={styles.popupBtnText}>コメント</Text>
+            <Text style={styles.popupBtnText}>
+              コメント{longPressGroup && longPressGroup.comment_count > 0 ? `（${longPressGroup.comment_count}）` : ''}
+            </Text>
           </TouchableOpacity>
 
           {/* キャンセル */}

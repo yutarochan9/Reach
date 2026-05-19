@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -10,6 +10,7 @@ type FollowedCreator = {
   display_name: string
   bio: string | null
   is_official: boolean
+  avatar_url: string | null
 }
 
 type MyProfile = {
@@ -52,7 +53,7 @@ export default function HomeScreen() {
 
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, display_name, bio, is_official')
+      .select('id, display_name, bio, is_official, avatar_url')
       .in('id', followingIds)
       .order('display_name')
 
@@ -154,7 +155,10 @@ export default function HomeScreen() {
               activeOpacity={0.8}
             >
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{item.display_name[0]}</Text>
+                {item.avatar_url
+                  ? <Image source={{ uri: item.avatar_url }} style={styles.avatarImage} />
+                  : <Text style={styles.avatarText}>{item.display_name[0]}</Text>
+                }
               </View>
               <View style={styles.creatorInfo}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -256,6 +260,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: 20, fontWeight: '700', color: Colors.white },
+  avatarImage: { width: 48, height: 48, borderRadius: 24 },
   creatorLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   creatorInfo: { flex: 1 },
   creatorName: { fontSize: 15, fontWeight: '700', color: Colors.text },
