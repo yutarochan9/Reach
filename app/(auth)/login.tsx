@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, SafeAreaView,
+  KeyboardAvoidingView, Platform, Alert, SafeAreaView, Image,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -81,9 +81,7 @@ export default function LoginScreen() {
 
         <View style={styles.inner}>
           <View style={styles.logoArea}>
-            <View style={styles.logoIcon}>
-              <Text style={styles.logoIconText}>R</Text>
-            </View>
+            <Image source={require('../../assets/icon.png')} style={styles.logoIcon} />
             <Text style={styles.logoText}>Reach</Text>
           </View>
 
@@ -183,12 +181,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 8, alignSelf: 'flex-start' },
   inner: { flex: 1, paddingHorizontal: 24, justifyContent: 'center', paddingBottom: 40 },
   logoArea: { alignItems: 'center', marginBottom: 36, gap: 10 },
-  logoIcon: {
-    width: 64, height: 64, borderRadius: 20,
-    backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  logoIconText: { fontSize: 32, fontWeight: '900', color: Colors.white },
+  logoIcon: { width: 80, height: 80, borderRadius: 20 },
   logoText: { fontSize: 28, fontWeight: '800', color: Colors.text, letterSpacing: 1 },
   card: {
     backgroundColor: Colors.white,

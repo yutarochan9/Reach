@@ -12,6 +12,7 @@ type Creator = {
   avatar_url: string | null
   follower_count: number
   is_following: boolean
+  is_official: boolean
 }
 
 export default function DiscoverScreen() {
@@ -27,7 +28,7 @@ export default function DiscoverScreen() {
     setMyId(user.id)
 
     const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name, bio, avatar_url').neq('id', user.id)
+      .from('profiles').select('id, display_name, bio, avatar_url, is_official').neq('id', user.id)
 
     if (!profiles) return
 
@@ -131,7 +132,10 @@ export default function DiscoverScreen() {
               </View>
             )}
             <View style={styles.creatorInfo}>
-              <Text style={styles.creatorName}>{item.display_name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={styles.creatorName}>{item.display_name}</Text>
+                {item.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+              </View>
               {item.bio && <Text style={styles.creatorBio} numberOfLines={1}>{item.bio}</Text>}
               <Text style={styles.followerCount}>{item.follower_count.toLocaleString()} フォロワー</Text>
             </View>
