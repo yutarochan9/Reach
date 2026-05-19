@@ -20,17 +20,6 @@ type Broadcast = {
   public_reactions: boolean
 }
 
-type Comment = {
-  id: string
-  content: string
-  sender_id: string
-  sender_name: string
-  sender_avatar: string | null
-  created_at: string
-  is_mine: boolean
-  replies: Comment[]
-}
-
 type BroadcastGroup = {
   anchorId: string
   group_id: string | null
@@ -39,7 +28,6 @@ type BroadcastGroup = {
   liked: boolean
   read_count: number
   public_reactions: boolean
-  comments: Comment[]
   comment_count: number
 }
 
@@ -52,16 +40,10 @@ export default function TalkDetailScreen() {
   const [senderName, setSenderName] = useState('')
   const [senderAvatar, setSenderAvatar] = useState<string | null>(null)
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
-
-  const [inputText, setInputText] = useState('')
-  const [activeCommentBroadcastId, setActiveCommentBroadcastId] = useState<string | null>(null)
-  const [replyToComment, setReplyToComment] = useState<Comment | null>(null)
-  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
+  const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
-
   const flatListRef = useRef<FlatList>(null)
-  const inputRef = useRef<TextInput>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   const load = useCallback(async () => {
@@ -87,7 +69,7 @@ export default function TalkDetailScreen() {
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)
 
-      const [{ data: reactions }, { data: reads }, { data: allMsgs }] = await Promise.all([
+      const [{ data: reactions }, { data: reads }, { data: commentCounts }] = await Promise.all([
         bcIds.length > 0
           ? supabase.from('reactions').select('broadcast_id, user_id').in('broadcast_id', bcIds)
           : Promise.resolve({ data: [] }),
@@ -96,58 +78,22 @@ export default function TalkDetailScreen() {
           : Promise.resolve({ data: [] }),
         bcIds.length > 0
           ? supabase.from('messages')
-              .select('id, content, created_at, sender_id, receiver_id, broadcast_id, parent_message_id')
+              .select('broadcast_id')
               .in('broadcast_id', bcIds)
-              .order('created_at', { ascending: true })
+              .is('parent_message_id', null)
           : Promise.resolve({ data: [] }),
       ])
 
-      const msgSenderIds = [...new Set((allMsgs ?? []).map((m: any) => m.sender_id))]
-      const { data: msgProfiles } = msgSenderIds.length > 0
-        ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', msgSenderIds)
-        : { data: [] }
-
-      const msgProfileMap: Record<string, { name: string; avatar: string | null }> = {}
-      for (const p of (msgProfiles ?? [])) {
-        msgProfileMap[p.id] = { name: p.display_name, avatar: p.avatar_url ?? null }
-      }
-
       const likeMap: Record<string, { count: number; liked: boolean }> = {}
       const readMap: Record<string, number> = {}
+      const countMap: Record<string, number> = {}
       for (const r of (reactions ?? [])) {
         if (!likeMap[r.broadcast_id]) likeMap[r.broadcast_id] = { count: 0, liked: false }
         likeMap[r.broadcast_id].count++
         if (r.user_id === user.id) likeMap[r.broadcast_id].liked = true
       }
       for (const r of (reads ?? [])) readMap[r.broadcast_id] = (readMap[r.broadcast_id] ?? 0) + 1
-
-      // ネスト構造でコメントを構築
-      const topLevelByBcast: Record<string, Comment[]> = {}
-      const commentById: Record<string, Comment> = {}
-
-      for (const m of (allMsgs ?? []) as any[]) {
-        if (!m.parent_message_id) {
-          const c: Comment = {
-            id: m.id, content: m.content, sender_id: m.sender_id,
-            sender_name: msgProfileMap[m.sender_id]?.name ?? 'ユーザー',
-            sender_avatar: msgProfileMap[m.sender_id]?.avatar ?? null,
-            created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
-          }
-          commentById[m.id] = c
-          if (!topLevelByBcast[m.broadcast_id]) topLevelByBcast[m.broadcast_id] = []
-          topLevelByBcast[m.broadcast_id].push(c)
-        }
-      }
-      for (const m of (allMsgs ?? []) as any[]) {
-        if (m.parent_message_id && commentById[m.parent_message_id]) {
-          commentById[m.parent_message_id].replies.push({
-            id: m.id, content: m.content, sender_id: m.sender_id,
-            sender_name: msgProfileMap[m.sender_id]?.name ?? 'ユーザー',
-            sender_avatar: msgProfileMap[m.sender_id]?.avatar ?? null,
-            created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
-          })
-        }
-      }
+      for (const r of (commentCounts ?? [])) countMap[(r as any).broadcast_id] = (countMap[(r as any).broadcast_id] ?? 0) + 1
 
       const groupMap = new Map<string, Broadcast[]>()
       const groupOrder: string[] = []
@@ -160,15 +106,15 @@ export default function TalkDetailScreen() {
       const result: BroadcastGroup[] = groupOrder.map(key => {
         const blocks = groupMap.get(key)!.sort((a, b) => a.block_order - b.block_order)
         const anchor = blocks[0]
-        const comments = topLevelByBcast[anchor.id] ?? []
         return {
-          anchorId: anchor.id, group_id: anchor.group_id, blocks,
+          anchorId: anchor.id,
+          group_id: anchor.group_id,
+          blocks,
           like_count: likeMap[anchor.id]?.count ?? 0,
           liked: likeMap[anchor.id]?.liked ?? false,
           read_count: readMap[anchor.id] ?? 0,
           public_reactions: anchor.public_reactions,
-          comments,
-          comment_count: comments.reduce((acc, c) => acc + 1 + c.replies.length, 0),
+          comment_count: countMap[anchor.id] ?? 0,
         }
       })
       setGroups(result)
@@ -232,7 +178,7 @@ export default function TalkDetailScreen() {
             return [...prev, {
               anchorId: bc.id, group_id: bc.group_id ?? null, blocks: [newBlock],
               like_count: 0, liked: false, read_count: 0,
-              public_reactions: bc.public_reactions ?? false, comments: [], comment_count: 0,
+              public_reactions: bc.public_reactions ?? false, comment_count: 0,
             }]
           })
           setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
@@ -284,75 +230,26 @@ export default function TalkDetailScreen() {
     }
   }
 
-  const focusComment = (broadcastId: string) => {
-    setActiveCommentBroadcastId(broadcastId)
-    setReplyToComment(null)
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }
-
-  const focusReply = (comment: Comment, broadcastId: string) => {
-    setActiveCommentBroadcastId(broadcastId)
-    setReplyToComment(comment)
-    setTimeout(() => inputRef.current?.focus(), 100)
-  }
-
-  const cancelComment = () => {
-    setActiveCommentBroadcastId(null)
-    setReplyToComment(null)
-  }
-
-  const toggleReplies = (commentId: string) => {
-    setExpandedReplies(prev => {
-      const next = new Set(prev)
-      if (next.has(commentId)) next.delete(commentId)
-      else next.add(commentId)
-      return next
-    })
-  }
-
   const handleSend = async () => {
-    if (!inputText.trim() || !myId) return
-    const text = inputText.trim()
-    setInputText('')
-
-    if (activeCommentBroadcastId) {
-      let receiverId = senderId
-      if (replyToComment) {
-        receiverId = replyToComment.sender_id !== myId ? replyToComment.sender_id : senderId
-      }
-      await supabase.from('messages').insert({
-        sender_id: myId,
-        receiver_id: receiverId,
-        content: text,
-        broadcast_id: activeCommentBroadcastId,
-        parent_message_id: replyToComment?.id ?? null,
-      })
-      setReplyToComment(null)
-      setActiveCommentBroadcastId(null)
-      await load()
-    } else if (!isSelf) {
-      await supabase.from('messages').insert({
-        sender_id: myId,
-        receiver_id: senderId,
-        content: text,
-      })
-      const { data: myProfile } = await supabase
-        .from('profiles').select('display_name').eq('id', myId).single()
-      sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.slice(0, 80))
-    }
+    if (!imText.trim() || !myId) return
+    const text = imText.trim()
+    setImText('')
+    await supabase.from('messages').insert({
+      sender_id: myId,
+      receiver_id: senderId,
+      content: text,
+    })
+    const { data: myProfile } = await supabase
+      .from('profiles').select('display_name').eq('id', myId).single()
+    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.slice(0, 80))
   }
 
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    const diffHour = Math.floor(diffMs / 3600000)
-    const diffDay = Math.floor(diffMs / 86400000)
-    if (diffMin < 1) return 'たった今'
-    if (diffMin < 60) return `${diffMin}分前`
-    if (diffHour < 24) return `${diffHour}時間前`
-    if (diffDay === 1) return '昨日'
+    const diff = Math.floor((now.getTime() - d.getTime()) / 86400000)
+    if (diff === 0) return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+    if (diff === 1) return '昨日'
     return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
@@ -363,93 +260,6 @@ export default function TalkDetailScreen() {
       </View>
     )
   }
-
-  const renderComment = (comment: Comment, broadcastId: string, isReply = false) => {
-    const repliesExpanded = expandedReplies.has(comment.id)
-    return (
-      <View key={comment.id}>
-        <View style={[styles.commentRow, isReply && styles.commentRowReply]}>
-          <View style={styles.commentAvatar}>
-            {comment.sender_avatar
-              ? <Image source={{ uri: comment.sender_avatar }} style={styles.commentAvatarImg} />
-              : <Text style={styles.commentAvatarText}>{comment.sender_name[0]}</Text>
-            }
-          </View>
-          <View style={styles.commentBody}>
-            <View style={styles.commentMeta}>
-              <Text style={styles.commentName}>{comment.sender_name}</Text>
-              <Text style={styles.commentTime}>{formatTime(comment.created_at)}</Text>
-            </View>
-            <Text style={styles.commentText}>{comment.content}</Text>
-            {!isReply && (
-              <TouchableOpacity onPress={() => focusReply(comment, broadcastId)} style={styles.replyBtn}>
-                <Text style={styles.replyBtnText}>返信する</Text>
-              </TouchableOpacity>
-            )}
-            {!isReply && comment.replies.length > 0 && (
-              <TouchableOpacity onPress={() => toggleReplies(comment.id)} style={styles.showRepliesBtn}>
-                <Ionicons
-                  name={repliesExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={12} color={Colors.accent}
-                />
-                <Text style={styles.showRepliesText}>
-                  {repliesExpanded ? '返信を非表示' : `${comment.replies.length}件の返信`}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-        {!isReply && repliesExpanded && (
-          <View style={styles.repliesWrap}>
-            {comment.replies.map(reply => renderComment(reply, broadcastId, true))}
-          </View>
-        )}
-      </View>
-    )
-  }
-
-  const renderCommentsSection = (group: BroadcastGroup) => (
-    <View style={styles.commentsSection}>
-      {/* ハート・コメントアクションバー */}
-      <View style={styles.actionsBar}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => !isSelf && handleLike(group)}
-          activeOpacity={isSelf ? 1 : 0.7}
-        >
-          <Ionicons
-            name={group.liked ? 'heart' : 'heart-outline'}
-            size={22}
-            color={group.liked ? '#E53E3E' : isSelf ? Colors.border : Colors.text}
-          />
-          {group.like_count > 0 && (
-            <Text style={[styles.actionCount, group.liked && styles.actionCountLiked]}>
-              {group.like_count}
-            </Text>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => focusComment(group.anchorId)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chatbubble-outline" size={20} color={Colors.textLight} />
-          {group.comment_count > 0 && (
-            <Text style={styles.actionCountMuted}>{group.comment_count}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* コメント一覧 */}
-      {group.comments.length > 0 && (
-        <View style={styles.commentsList}>
-          {group.comments.map(c => renderComment(c, group.anchorId))}
-        </View>
-      )}
-    </View>
-  )
-
-  const isCommentMode = !!activeCommentBroadcastId
 
   const BroadcastList = (
     <FlatList
@@ -478,8 +288,12 @@ export default function TalkDetailScreen() {
                 </Text>
               </View>
             )}
-            <View
+            <TouchableOpacity
               style={styles.groupWrap}
+              activeOpacity={0.9}
+              onPress={isSelf ? () => router.push(`/broadcast-thread/${group.anchorId}` as any) : undefined}
+              onLongPress={!isWeb ? () => setLongPressGroup(group) : undefined}
+              delayLongPress={400}
               {...(isWeb ? {
                 onMouseEnter: () => setHoveredGroupId(group.anchorId),
                 onMouseLeave: () => setHoveredGroupId(null),
@@ -496,26 +310,33 @@ export default function TalkDetailScreen() {
                 )}
                 <View style={styles.blocksWrap}>
                   {group.blocks.map((block, idx) => (
-                    <TouchableOpacity
-                      key={block.id}
-                      style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}
-                      onPress={isSelf ? () => router.push(`/broadcast-thread/${group.anchorId}` as any) : undefined}
-                      onLongPress={!isWeb ? () => setLongPressGroup(group) : undefined}
-                      delayLongPress={400}
-                      activeOpacity={isSelf ? 0.8 : 0.95}
-                    >
+                    <View key={block.id} style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}>
                       {block.image_url && (
                         <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
                       )}
                       {block.content.trim() && block.content !== '　' && (
                         <Text style={[styles.broadcastText, isSelf && styles.broadcastTextSelf]}>{block.content}</Text>
                       )}
-                    </TouchableOpacity>
+                    </View>
                   ))}
+
+                  {/* 時刻 + バッジ + ···ボタン */}
                   <View style={styles.bubbleFooter}>
                     <Text style={styles.bubbleTime}>
                       {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                     </Text>
+                    {group.like_count > 0 && (
+                      <View style={styles.countBadge}>
+                        <Ionicons name="heart" size={10} color="#E53E3E" />
+                        <Text style={styles.countBadgeText}>{group.like_count}</Text>
+                      </View>
+                    )}
+                    {group.comment_count > 0 && (
+                      <View style={styles.countBadge}>
+                        <Ionicons name="chatbubble" size={10} color={Colors.textLight} />
+                        <Text style={styles.countBadgeText}>{group.comment_count}</Text>
+                      </View>
+                    )}
                     {isWeb && hoveredGroupId === group.anchorId && (
                       <TouchableOpacity
                         style={styles.moreBtn}
@@ -525,11 +346,9 @@ export default function TalkDetailScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-
-                  {renderCommentsSection(group)}
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           </>
         )
       }}
@@ -545,18 +364,42 @@ export default function TalkDetailScreen() {
     >
       <Pressable style={styles.popupOverlay} onPress={() => setLongPressGroup(null)}>
         <View style={styles.popupBox}>
-          {isSelf && (
+          {/* いいね（視聴者のみ） */}
+          {!isSelf && (
             <TouchableOpacity
               style={styles.popupBtn}
               onPress={() => {
-                if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any)
+                if (longPressGroup) handleLike(longPressGroup)
                 setLongPressGroup(null)
               }}
             >
-              <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
-              <Text style={styles.popupBtnText}>コメントを見る</Text>
+              <Ionicons
+                name={longPressGroup?.liked ? 'heart' : 'heart-outline'}
+                size={22}
+                color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
+              />
+              <Text style={styles.popupBtnText}>
+                {longPressGroup?.liked ? 'いいねを取り消す' : 'いいね'}
+              </Text>
             </TouchableOpacity>
           )}
+
+          {/* コメント（全員） */}
+          <TouchableOpacity
+            style={styles.popupBtn}
+            onPress={() => {
+              if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any)
+              setLongPressGroup(null)
+            }}
+          >
+            <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
+            <Text style={styles.popupBtnText}>
+              {isSelf
+                ? `コメントを見る${longPressGroup && longPressGroup.comment_count > 0 ? ` (${longPressGroup.comment_count})` : ''}`
+                : 'コメント'
+              }
+            </Text>
+          </TouchableOpacity>
         </View>
       </Pressable>
     </Modal>
@@ -574,38 +417,6 @@ export default function TalkDetailScreen() {
         </View>
         {BroadcastList}
         {ReactionPopup}
-        {/* 発信者用：返信モード時のみ表示 */}
-        {isCommentMode && (
-          <View style={styles.inputArea}>
-            <View style={styles.commentContext}>
-              <Ionicons name="return-down-forward-outline" size={14} color={Colors.accent} />
-              <Text style={styles.commentContextText} numberOfLines={1}>
-                {replyToComment ? `@${replyToComment.sender_name} に返信` : 'コメントを追加'}
-              </Text>
-              <TouchableOpacity onPress={cancelComment}>
-                <Ionicons name="close" size={16} color={Colors.textLight} />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.inputRow}>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                placeholder={replyToComment ? `@${replyToComment.sender_name} に返信...` : 'コメントを追加...'}
-                placeholderTextColor={Colors.textLight}
-                value={inputText}
-                onChangeText={setInputText}
-                multiline
-              />
-              <TouchableOpacity
-                style={[styles.sendButton, !inputText.trim() && styles.sendDisabled]}
-                onPress={handleSend}
-                disabled={!inputText.trim()}
-              >
-                <Ionicons name="send" size={18} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </View>
     )
   }
@@ -634,36 +445,21 @@ export default function TalkDetailScreen() {
       {BroadcastList}
       {ReactionPopup}
 
+      {/* DM入力エリア */}
       <View style={styles.inputArea}>
-        {isCommentMode && (
-          <View style={styles.commentContext}>
-            <Ionicons name={replyToComment ? 'return-down-forward-outline' : 'chatbubble-outline'} size={14} color={Colors.accent} />
-            <Text style={styles.commentContextText} numberOfLines={1}>
-              {replyToComment ? `@${replyToComment.sender_name} に返信` : 'コメントを追加'}
-            </Text>
-            <TouchableOpacity onPress={cancelComment}>
-              <Ionicons name="close" size={16} color={Colors.textLight} />
-            </TouchableOpacity>
-          </View>
-        )}
         <View style={styles.inputRow}>
           <TextInput
-            ref={inputRef}
             style={styles.input}
-            placeholder={
-              isCommentMode
-                ? (replyToComment ? `@${replyToComment.sender_name} に返信...` : 'コメントを追加...')
-                : 'メッセージを送る...'
-            }
+            placeholder="DMを送る..."
             placeholderTextColor={Colors.textLight}
-            value={inputText}
-            onChangeText={setInputText}
+            value={imText}
+            onChangeText={setImText}
             multiline
           />
           <TouchableOpacity
-            style={[styles.sendButton, !inputText.trim() && styles.sendDisabled]}
+            style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!imText.trim()}
           >
             <Ionicons name="send" size={18} color={Colors.white} />
           </TouchableOpacity>
@@ -691,7 +487,6 @@ const styles = StyleSheet.create({
   headerAvatarImage: { width: 36, height: 36, borderRadius: 8 },
   headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
-
   messageList: { padding: 16, gap: 12, paddingBottom: 32 },
   dateDivider: { alignItems: 'center', marginVertical: 8 },
   dateText: {
@@ -718,82 +513,38 @@ const styles = StyleSheet.create({
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
   broadcastTextSelf: { color: Colors.white },
-  bubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  bubbleTime: { fontSize: 10, color: Colors.textLight, marginLeft: 2 },
+  bubbleFooter: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap',
+  },
+  bubbleTime: { fontSize: 10, color: Colors.textLight },
+  countBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: Colors.white, borderRadius: 8,
+    paddingHorizontal: 5, paddingVertical: 2,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  countBadgeText: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
   moreBtn: {
     paddingHorizontal: 8, paddingVertical: 2,
     backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
   },
   moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 2 },
-
-  // コメントセクション
-  commentsSection: {
-    marginTop: 6,
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    borderTopLeftRadius: 2,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
+  popupOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center',
   },
-  actionsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 0,
+  popupBox: {
+    backgroundColor: Colors.white, borderRadius: 16, paddingVertical: 8, paddingHorizontal: 4,
+    minWidth: 220, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
   },
-  actionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingVertical: 2, paddingHorizontal: 6,
+  popupBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 14, paddingHorizontal: 20,
   },
-  actionCount: { fontSize: 14, fontWeight: '600', color: Colors.text },
-  actionCountLiked: { color: '#E53E3E' },
-  actionCountMuted: { fontSize: 13, color: Colors.textLight, fontWeight: '500' },
-
-  commentsList: {
-    borderTopWidth: 1, borderTopColor: Colors.border,
-    paddingTop: 4, paddingBottom: 8,
+  popupBtnText: { fontSize: 16, color: Colors.text, fontWeight: '500' },
+  inputArea: {
+    backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border,
   },
-  commentRow: {
-    flexDirection: 'row', gap: 10,
-    paddingHorizontal: 12, paddingVertical: 8,
-    alignItems: 'flex-start',
-  },
-  commentRowReply: {
-    paddingLeft: 20,
-  },
-  commentAvatar: {
-    width: 30, height: 30, borderRadius: 8,
-    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0, overflow: 'hidden',
-  },
-  commentAvatarImg: { width: 30, height: 30, borderRadius: 8 },
-  commentAvatarText: { fontSize: 13, fontWeight: '700', color: Colors.white },
-  commentBody: { flex: 1, gap: 2 },
-  commentMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  commentName: { fontSize: 13, fontWeight: '700', color: Colors.text },
-  commentTime: { fontSize: 11, color: Colors.textLight },
-  commentText: { fontSize: 13, color: Colors.text, lineHeight: 19 },
-  replyBtn: { marginTop: 4, alignSelf: 'flex-start' },
-  replyBtnText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
-  showRepliesBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, alignSelf: 'flex-start',
-  },
-  showRepliesText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  repliesWrap: {
-    borderLeftWidth: 2, borderLeftColor: Colors.border, marginLeft: 27,
-  },
-
-  // 入力エリア
-  inputArea: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
-  commentContext: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
-    backgroundColor: '#F8F4EE',
-  },
-  commentContextText: { flex: 1, fontSize: 12, color: Colors.accent, fontWeight: '500' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 10, gap: 8 },
   input: {
     flex: 1, backgroundColor: Colors.white, borderRadius: 22,
@@ -806,18 +557,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
   },
   sendDisabled: { backgroundColor: '#B0B0B0' },
-
-  popupOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center',
-  },
-  popupBox: {
-    backgroundColor: Colors.white, borderRadius: 16, paddingVertical: 8, paddingHorizontal: 4,
-    minWidth: 200, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
-  },
-  popupBtn: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14, paddingHorizontal: 20 },
-  popupBtnText: { fontSize: 16, color: Colors.text, fontWeight: '500' },
-
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
 })

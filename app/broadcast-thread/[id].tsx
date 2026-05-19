@@ -1,17 +1,22 @@
-import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native'
+import { useState, useCallback, useRef } from 'react'
+import {
+  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image,
+} from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
-type ReplyItem = {
+type Comment = {
   id: string
   content: string
   sender_id: string
   sender_name: string
   sender_avatar: string | null
   created_at: string
+  is_mine: boolean
+  replies: Comment[]
 }
 
 type BroadcastBlock = {
@@ -23,90 +28,218 @@ type BroadcastBlock = {
 
 export default function BroadcastThreadScreen() {
   const { id: anchorId } = useLocalSearchParams<{ id: string }>()
-  const [replies, setReplies] = useState<ReplyItem[]>([])
+  const [myId, setMyId] = useState<string | null>(null)
+  const [isSelf, setIsSelf] = useState(false)
+  const [broadcastSenderId, setBroadcastSenderId] = useState<string | null>(null)
   const [blocks, setBlocks] = useState<BroadcastBlock[]>([])
+  const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
+  const [inputText, setInputText] = useState('')
+  const [replyToComment, setReplyToComment] = useState<Comment | null>(null)
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
+  const [sending, setSending] = useState(false)
+  const inputRef = useRef<TextInput>(null)
+  const listRef = useRef<FlatList>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+    setMyId(user.id)
 
-    // アンカー配信を取得してgroup_id確認
     const { data: anchor } = await supabase
       .from('broadcasts')
-      .select('id, content, image_url, block_order, group_id')
+      .select('id, content, image_url, block_order, group_id, sender_id')
       .eq('id', anchorId)
       .single()
 
     if (!anchor) { setLoading(false); return }
 
-    // 同一グループの全ブロック取得
-    let broadcastIds: string[] = [anchorId]
-    let allBlocks: BroadcastBlock[] = [anchor]
+    const self = user.id === anchor.sender_id
+    setIsSelf(self)
+    setBroadcastSenderId(anchor.sender_id)
 
+    let broadcastIds: string[] = [anchorId as string]
+    let allBlocks: BroadcastBlock[] = [anchor]
     if (anchor.group_id) {
       const { data: groupBlocks } = await supabase
         .from('broadcasts')
         .select('id, content, image_url, block_order')
         .eq('group_id', anchor.group_id)
         .order('block_order', { ascending: true })
-      if (groupBlocks && groupBlocks.length > 0) {
+      if (groupBlocks?.length) {
         allBlocks = groupBlocks
         broadcastIds = groupBlocks.map((b: any) => b.id)
       }
     }
-
     setBlocks(allBlocks.sort((a, b) => a.block_order - b.block_order))
 
-    // この配信グループへの返信メッセージ
-    const { data: messages } = await supabase
+    const { data: allMsgs } = await supabase
       .from('messages')
-      .select('id, content, sender_id, created_at')
+      .select('id, content, created_at, sender_id, receiver_id, broadcast_id, parent_message_id')
       .in('broadcast_id', broadcastIds)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
 
-    if (!messages || messages.length === 0) {
-      setReplies([])
-      setLoading(false)
-      return
-    }
+    if (!allMsgs?.length) { setComments([]); setLoading(false); return }
 
-    const senderIds = [...new Set(messages.map((m: any) => m.sender_id))]
+    const senderIds = [...new Set(allMsgs.map((m: any) => m.sender_id))]
     const { data: profiles } = await supabase
       .from('profiles').select('id, display_name, avatar_url').in('id', senderIds)
+    const profMap: Record<string, { name: string; avatar: string | null }> = {}
+    for (const p of (profiles ?? [])) profMap[p.id] = { name: p.display_name, avatar: p.avatar_url ?? null }
 
-    const profMap: Record<string, { display_name: string; avatar_url: string | null }> = {}
-    for (const p of (profiles ?? [])) profMap[p.id] = p
+    const topLevel: Comment[] = []
+    const byId: Record<string, Comment> = {}
 
-    setReplies(messages.map((m: any) => ({
-      id: m.id,
-      content: m.content,
-      sender_id: m.sender_id,
-      sender_name: profMap[m.sender_id]?.display_name ?? '?',
-      sender_avatar: profMap[m.sender_id]?.avatar_url ?? null,
-      created_at: m.created_at,
-    })))
-
+    for (const m of allMsgs as any[]) {
+      if (!m.parent_message_id) {
+        const c: Comment = {
+          id: m.id, content: m.content, sender_id: m.sender_id,
+          sender_name: profMap[m.sender_id]?.name ?? 'ユーザー',
+          sender_avatar: profMap[m.sender_id]?.avatar ?? null,
+          created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
+        }
+        byId[m.id] = c
+        topLevel.push(c)
+      }
+    }
+    for (const m of allMsgs as any[]) {
+      if (m.parent_message_id && byId[m.parent_message_id]) {
+        byId[m.parent_message_id].replies.push({
+          id: m.id, content: m.content, sender_id: m.sender_id,
+          sender_name: profMap[m.sender_id]?.name ?? 'ユーザー',
+          sender_avatar: profMap[m.sender_id]?.avatar ?? null,
+          created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
+        })
+      }
+    }
+    setComments(topLevel)
     setLoading(false)
   }, [anchorId])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  const handleSend = async () => {
+    if (!inputText.trim() || !myId || !broadcastSenderId) return
+    setSending(true)
+    const text = inputText.trim()
+    setInputText('')
+
+    let receiverId = broadcastSenderId
+    let parentId: string | null = null
+
+    if (replyToComment) {
+      parentId = replyToComment.id
+      receiverId = replyToComment.sender_id !== myId ? replyToComment.sender_id : broadcastSenderId
+    }
+
+    await supabase.from('messages').insert({
+      sender_id: myId,
+      receiver_id: receiverId,
+      content: text,
+      broadcast_id: anchorId,
+      parent_message_id: parentId,
+    })
+
+    setReplyToComment(null)
+    setSending(false)
+    await load()
+    setTimeout(() => listRef.current?.scrollToEnd(), 200)
+  }
+
+  const toggleReplies = (commentId: string) => {
+    setExpandedReplies(prev => {
+      const next = new Set(prev)
+      if (next.has(commentId)) next.delete(commentId)
+      else next.add(commentId)
+      return next
+    })
+  }
+
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     const now = new Date()
-    const diff = Math.floor((now.getTime() - d.getTime()) / 86400000)
-    if (diff === 0) return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-    if (diff === 1) return '昨日'
+    const diffMs = now.getTime() - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    const diffHour = Math.floor(diffMs / 3600000)
+    const diffDay = Math.floor(diffMs / 86400000)
+    if (diffMin < 1) return 'たった今'
+    if (diffMin < 60) return `${diffMin}分前`
+    if (diffHour < 24) return `${diffHour}時間前`
+    if (diffDay < 7) return `${diffDay}日前`
     return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
+  const renderComment = (comment: Comment, isReply = false) => {
+    const expanded = expandedReplies.has(comment.id)
+    const isCreator = comment.sender_id === broadcastSenderId
+    return (
+      <View key={comment.id}>
+        <View style={[styles.commentRow, isReply && styles.commentRowReply]}>
+          <View style={[styles.commentAvatar, isCreator && styles.commentAvatarCreator]}>
+            {comment.sender_avatar
+              ? <Image source={{ uri: comment.sender_avatar }} style={styles.commentAvatarImg} />
+              : <Text style={styles.commentAvatarText}>{comment.sender_name[0]}</Text>
+            }
+          </View>
+          <View style={styles.commentBody}>
+            <View style={styles.commentMeta}>
+              <Text style={[styles.commentName, isCreator && styles.commentNameCreator]}>
+                {comment.sender_name}
+                {isCreator && <Text style={styles.creatorBadge}> 配信者</Text>}
+              </Text>
+              <Text style={styles.commentTime}>{formatTime(comment.created_at)}</Text>
+            </View>
+            <Text style={styles.commentText}>{comment.content}</Text>
+
+            {!isReply && (
+              <TouchableOpacity
+                onPress={() => {
+                  setReplyToComment(comment)
+                  setTimeout(() => inputRef.current?.focus(), 100)
+                }}
+                style={styles.replyBtn}
+              >
+                <Text style={styles.replyBtnText}>コメントする</Text>
+              </TouchableOpacity>
+            )}
+
+            {!isReply && comment.replies.length > 0 && (
+              <TouchableOpacity onPress={() => toggleReplies(comment.id)} style={styles.showRepliesBtn}>
+                <Ionicons
+                  name={expanded ? 'chevron-up' : 'chevron-down'}
+                  size={13} color={Colors.accent}
+                />
+                <Text style={styles.showRepliesText}>
+                  {expanded ? '返信を非表示' : `${comment.replies.length}件の返信を見る`}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {!isReply && expanded && (
+          <View style={styles.repliesWrap}>
+            {comment.replies.map(r => renderComment(r, true))}
+          </View>
+        )}
+      </View>
+    )
+  }
+
+  const totalCount = comments.reduce((acc, c) => acc + 1 + c.replies.length, 0)
+  const isCommentMode = !!replyToComment
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>返信一覧</Text>
+        <Text style={styles.headerTitle}>コメント</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -116,61 +249,81 @@ export default function BroadcastThreadScreen() {
         </View>
       ) : (
         <FlatList
-          data={replies}
+          ref={listRef}
+          data={comments}
           keyExtractor={item => item.id}
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={styles.listContent}
           ListHeaderComponent={() => (
-            <View style={styles.broadcastPreview}>
-              <Text style={styles.broadcastPreviewLabel}>配信内容</Text>
-              {blocks.map(block => (
-                <View key={block.id} style={styles.blockItem}>
-                  {block.image_url && (
-                    <Image source={{ uri: block.image_url }} style={styles.blockImage} resizeMode="cover" />
-                  )}
-                  {block.content.trim() && block.content !== '　' && (
-                    <Text style={styles.blockText}>{block.content}</Text>
-                  )}
-                </View>
-              ))}
-              <View style={styles.divider} />
-              <Text style={styles.replyCountLabel}>{replies.length}件の返信</Text>
-            </View>
+            <>
+              {/* 配信プレビュー */}
+              <View style={styles.broadcastPreview}>
+                {blocks.map(block => (
+                  <View key={block.id}>
+                    {block.image_url && (
+                      <Image source={{ uri: block.image_url }} style={styles.blockImage} resizeMode="cover" />
+                    )}
+                    {block.content.trim() && block.content !== '　' && (
+                      <Text style={styles.blockText}>{block.content}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+
+              {/* コメント数 */}
+              <View style={styles.commentCountRow}>
+                <Ionicons name="chatbubble-outline" size={14} color={Colors.textLight} />
+                <Text style={styles.commentCountText}>
+                  {totalCount > 0 ? `${totalCount}件のコメント` : 'コメントはまだありません'}
+                </Text>
+              </View>
+            </>
           )}
           ListEmptyComponent={() => (
             <View style={styles.emptyWrap}>
               <Ionicons name="chatbubble-outline" size={40} color={Colors.border} />
-              <Text style={styles.emptyText}>返信はまだありません</Text>
+              <Text style={styles.emptyText}>最初のコメントを書いてみましょう</Text>
             </View>
           )}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.replyRow}
-              onPress={() => router.push(`/im/${item.sender_id}` as any)}
-              activeOpacity={0.85}
-            >
-              {item.sender_avatar ? (
-                <Image source={{ uri: item.sender_avatar }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarText}>{item.sender_name[0]}</Text>
-                </View>
-              )}
-              <View style={styles.replyContent}>
-                <View style={styles.replyHeader}>
-                  <Text style={styles.senderName}>{item.sender_name}</Text>
-                  <Text style={styles.replyTime}>{formatTime(item.created_at)}</Text>
-                </View>
-                <Text style={styles.replyText}>{item.content}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={14} color={Colors.border} />
-            </TouchableOpacity>
-          )}
-          ItemSeparatorComponent={() => (
-            <View style={{ height: 1, backgroundColor: Colors.border, marginLeft: 68 }} />
-          )}
+          renderItem={({ item }) => renderComment(item)}
         />
       )}
-    </View>
+
+      {/* 入力エリア */}
+      <View style={styles.inputArea}>
+        {isCommentMode && (
+          <View style={styles.replyContext}>
+            <Ionicons name="return-down-forward-outline" size={14} color={Colors.accent} />
+            <Text style={styles.replyContextText} numberOfLines={1}>
+              @{replyToComment.sender_name} に返信
+            </Text>
+            <TouchableOpacity onPress={() => setReplyToComment(null)}>
+              <Ionicons name="close" size={16} color={Colors.textLight} />
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={styles.inputRow}>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder={isCommentMode ? `@${replyToComment?.sender_name} に返信...` : 'コメントを追加...'}
+            placeholderTextColor={Colors.textLight}
+            value={inputText}
+            onChangeText={setInputText}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendDisabled]}
+            onPress={handleSend}
+            disabled={!inputText.trim() || sending}
+          >
+            {sending
+              ? <ActivityIndicator size="small" color={Colors.white} />
+              : <Ionicons name="send" size={18} color={Colors.white} />
+            }
+          </TouchableOpacity>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -178,53 +331,88 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+
+  listContent: { paddingBottom: 32 },
+
   broadcastPreview: {
     backgroundColor: Colors.white,
-    margin: 12,
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    margin: 12, marginBottom: 0,
+    borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: Colors.border,
+    gap: 8,
   },
-  broadcastPreviewLabel: {
-    fontSize: 11, fontWeight: '700', color: Colors.textLight,
-    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10,
+  blockImage: { width: '100%', height: 160, borderRadius: 10 },
+  blockText: { fontSize: 14, color: Colors.text, lineHeight: 22 },
+
+  commentCountRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  blockItem: { marginBottom: 8 },
-  blockImage: { width: '100%', height: 160, borderRadius: 10, marginBottom: 6 },
-  blockText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 12 },
-  replyCountLabel: { fontSize: 13, fontWeight: '600', color: Colors.textLight },
-  replyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
+  commentCountText: { fontSize: 13, color: Colors.textLight, fontWeight: '600' },
+
+  commentRow: {
+    flexDirection: 'row', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    alignItems: 'flex-start',
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
     backgroundColor: Colors.white,
-    gap: 12,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22 },
-  avatarFallback: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.button,
-    alignItems: 'center', justifyContent: 'center',
+  commentRowReply: {
+    paddingLeft: 24, backgroundColor: '#FAFAF8',
   },
-  avatarText: { fontSize: 18, fontWeight: '700', color: Colors.white },
-  replyContent: { flex: 1 },
-  replyHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
-  senderName: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  replyTime: { fontSize: 11, color: Colors.textLight },
-  replyText: { fontSize: 13, color: Colors.text, lineHeight: 19 },
-  emptyWrap: { alignItems: 'center', padding: 40, gap: 10 },
-  emptyText: { fontSize: 14, color: Colors.textLight },
+  commentAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, overflow: 'hidden',
+  },
+  commentAvatarCreator: { borderWidth: 2, borderColor: Colors.accent },
+  commentAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  commentAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  commentBody: { flex: 1, gap: 4 },
+  commentMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  commentName: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  commentNameCreator: { color: Colors.accent },
+  creatorBadge: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
+  commentTime: { fontSize: 11, color: Colors.textLight },
+  commentText: { fontSize: 14, color: Colors.text, lineHeight: 20 },
+  replyBtn: { alignSelf: 'flex-start', marginTop: 4 },
+  replyBtnText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
+  showRepliesBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    marginTop: 6, alignSelf: 'flex-start',
+  },
+  showRepliesText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  repliesWrap: {
+    borderLeftWidth: 2, borderLeftColor: Colors.border, marginLeft: 30,
+  },
+
+  emptyWrap: { alignItems: 'center', padding: 48, gap: 12 },
+  emptyText: { fontSize: 14, color: Colors.textLight, textAlign: 'center' },
+
+  inputArea: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
+  replyContext: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
+    backgroundColor: '#F8F4EE',
+  },
+  replyContextText: { flex: 1, fontSize: 12, color: Colors.accent, fontWeight: '500' },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 10, gap: 8 },
+  input: {
+    flex: 1, backgroundColor: Colors.background, borderRadius: 22,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 16, paddingVertical: 10,
+    fontSize: 14, color: Colors.text, maxHeight: 100,
+  },
+  sendButton: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
+  },
+  sendDisabled: { backgroundColor: '#B0B0B0' },
 })
