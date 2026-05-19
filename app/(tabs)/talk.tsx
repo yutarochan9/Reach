@@ -13,6 +13,9 @@ type FollowingItem = {
   created_at: string
   unread: number
   is_official: boolean
+  public_reactions: boolean
+  like_count: number
+  comment_count: number
 }
 
 type FollowerItem = {
@@ -25,14 +28,14 @@ type FollowerItem = {
 }
 
 type FlatRow =
-  | { type: 'my'; myId: string; name: string; avatar: string | null; last_content: string; created_at: string }
+  | { type: 'my'; myId: string; name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number }
   | { type: 'section-header'; sectionId: 'following' | 'followers'; label: string; open: boolean; count: number }
   | { type: 'following-item'; data: FollowingItem }
   | { type: 'follower-item'; data: FollowerItem }
 
 export default function TalkScreen() {
   const [myId, setMyId] = useState<string | null>(null)
-  const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean } | null>(null)
+  const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number } | null>(null)
   const [followingItems, setFollowingItems] = useState<FollowingItem[]>([])
   const [followerItems, setFollowerItems] = useState<FollowerItem[]>([])
   const [followingOpen, setFollowingOpen] = useState(true)
@@ -57,7 +60,7 @@ export default function TalkScreen() {
       supabase.from('follows').select('follower_id').eq('following_id', user.id),
       supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', user.id).single(),
       supabase.from('broadcasts')
-        .select('id, content, created_at')
+        .select('id, content, created_at, public_reactions')
         .eq('sender_id', user.id).eq('status', 'published')
         .order('created_at', { ascending: false }).limit(1),
     ])
@@ -66,19 +69,32 @@ export default function TalkScreen() {
     const followerIds = (followerData ?? []).map((f: any) => f.follower_id)
 
     const myLastBroadcast = myBroadcasts?.[0]
+    let myLikeCount = 0
+    let myCommentCount = 0
+    if (myLastBroadcast?.public_reactions) {
+      const [{ data: myReactions }, { data: myComments }] = await Promise.all([
+        supabase.from('reactions').select('id', { count: 'exact', head: false }).eq('broadcast_id', myLastBroadcast.id),
+        supabase.from('messages').select('id', { count: 'exact', head: false }).eq('broadcast_id', myLastBroadcast.id),
+      ])
+      myLikeCount = (myReactions ?? []).length
+      myCommentCount = (myComments ?? []).length
+    }
     setMyItem({
       name: myProfile?.display_name ?? 'あなた',
       avatar: myProfile?.avatar_url ?? null,
       last_content: myLastBroadcast?.content ?? 'まだ配信がありません',
       created_at: myLastBroadcast?.created_at ?? new Date().toISOString(),
       is_official: (myProfile as any)?.is_official ?? false,
+      public_reactions: myLastBroadcast?.public_reactions ?? false,
+      like_count: myLikeCount,
+      comment_count: myCommentCount,
     })
 
     // フォロー中セクション
     if (followingIds.length > 0) {
       const [{ data: broadcasts }, { data: reads }, { data: profiles }] = await Promise.all([
         supabase.from('broadcasts')
-          .select('id, sender_id, content, created_at')
+          .select('id, sender_id, content, created_at, public_reactions')
           .in('sender_id', followingIds)
           .eq('status', 'published')
           .order('created_at', { ascending: false }),
@@ -98,6 +114,22 @@ export default function TalkScreen() {
         senderBroadcasts[b.sender_id].push(b)
       }
 
+      const publicBcIds = followingIds
+        .map(id => senderBroadcasts[id]?.[0])
+        .filter((b: any) => b?.public_reactions)
+        .map((b: any) => b.id)
+
+      const likeMap: Record<string, number> = {}
+      const commentMap: Record<string, number> = {}
+      if (publicBcIds.length > 0) {
+        const [{ data: rData }, { data: cData }] = await Promise.all([
+          supabase.from('reactions').select('broadcast_id').in('broadcast_id', publicBcIds),
+          supabase.from('messages').select('broadcast_id').in('broadcast_id', publicBcIds),
+        ])
+        for (const r of (rData ?? [])) likeMap[r.broadcast_id] = (likeMap[r.broadcast_id] ?? 0) + 1
+        for (const c of (cData ?? [])) commentMap[(c as any).broadcast_id] = (commentMap[(c as any).broadcast_id] ?? 0) + 1
+      }
+
       const fItems: FollowingItem[] = followingIds.map(id => {
         const bcs = senderBroadcasts[id] ?? []
         const latest = bcs[0]
@@ -111,6 +143,9 @@ export default function TalkScreen() {
           created_at: latest?.created_at ?? new Date(0).toISOString(),
           unread,
           is_official: profMap[id]?.is_official ?? false,
+          public_reactions: latest?.public_reactions ?? false,
+          like_count: latest?.public_reactions ? (likeMap[latest.id] ?? 0) : 0,
+          comment_count: latest?.public_reactions ? (commentMap[latest.id] ?? 0) : 0,
         }
       }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
@@ -263,7 +298,26 @@ export default function TalkScreen() {
                     </View>
                     <Text style={styles.talkTime}>{formatTime(item.created_at)}</Text>
                   </View>
-                  <Text style={styles.lastMessage} numberOfLines={1}>{item.last_content}</Text>
+                  <View style={styles.lastMessageRow}>
+                    <Ionicons
+                      name={item.public_reactions ? 'globe-outline' : 'lock-closed-outline'}
+                      size={11}
+                      color={Colors.textLight}
+                    />
+                    <Text style={styles.lastMessage} numberOfLines={1}>{item.last_content}</Text>
+                    {item.public_reactions && item.like_count > 0 && (
+                      <View style={styles.talkCountBadge}>
+                        <Ionicons name="heart-outline" size={10} color={Colors.textLight} />
+                        <Text style={styles.talkCountText}>{item.like_count}</Text>
+                      </View>
+                    )}
+                    {item.public_reactions && item.comment_count > 0 && (
+                      <View style={styles.talkCountBadge}>
+                        <Ionicons name="chatbubble-outline" size={10} color={Colors.textLight} />
+                        <Text style={styles.talkCountText}>{item.comment_count}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
               </TouchableOpacity>
             )
@@ -316,9 +370,28 @@ export default function TalkScreen() {
                     <Text style={styles.talkTime}>{formatTime(d.created_at)}</Text>
                   </View>
                   <View style={styles.talkFooter}>
-                    <Text style={[styles.lastMessage, d.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
-                      {d.last_content}
-                    </Text>
+                    <View style={[styles.lastMessageRow, { flex: 1 }]}>
+                      <Ionicons
+                        name={d.public_reactions ? 'globe-outline' : 'lock-closed-outline'}
+                        size={11}
+                        color={Colors.textLight}
+                      />
+                      <Text style={[styles.lastMessage, d.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
+                        {d.last_content}
+                      </Text>
+                      {d.public_reactions && d.like_count > 0 && (
+                        <View style={styles.talkCountBadge}>
+                          <Ionicons name="heart-outline" size={10} color={Colors.textLight} />
+                          <Text style={styles.talkCountText}>{d.like_count}</Text>
+                        </View>
+                      )}
+                      {d.public_reactions && d.comment_count > 0 && (
+                        <View style={styles.talkCountBadge}>
+                          <Ionicons name="chatbubble-outline" size={10} color={Colors.textLight} />
+                          <Text style={styles.talkCountText}>{d.comment_count}</Text>
+                        </View>
+                      )}
+                    </View>
                     {d.unread > 0 && (
                       <View style={styles.badge}>
                         <Text style={styles.badgeText}>{d.unread > 99 ? '99+' : d.unread}</Text>
@@ -348,9 +421,9 @@ export default function TalkScreen() {
                     </View>
                     {d.lastImTime && <Text style={styles.talkTime}>{formatTime(d.lastImTime)}</Text>}
                   </View>
-                  <Text style={styles.lastMessage} numberOfLines={1}>
-                    {d.lastIm ?? 'IMはまだありません'}
-                  </Text>
+                  {d.lastIm && (
+                    <Text style={styles.lastMessage} numberOfLines={1}>{d.lastIm}</Text>
+                  )}
                 </View>
               </TouchableOpacity>
             )
@@ -424,8 +497,11 @@ const styles = StyleSheet.create({
   selfBadgeText: { fontSize: 10, color: Colors.white, fontWeight: '700' },
   talkTime: { fontSize: 12, color: Colors.textLight },
   talkFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  lastMessageRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lastMessage: { fontSize: 13, color: Colors.textLight, flex: 1 },
   lastMessageUnread: { color: Colors.text, fontWeight: '600' },
+  talkCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  talkCountText: { fontSize: 10, color: Colors.textLight },
   badge: {
     backgroundColor: Colors.accent, borderRadius: 10,
     minWidth: 20, height: 20,

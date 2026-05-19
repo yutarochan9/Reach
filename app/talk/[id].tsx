@@ -81,7 +81,6 @@ export default function TalkDetailScreen() {
           ? supabase.from('messages')
               .select('broadcast_id')
               .in('broadcast_id', bcIds)
-              .is('parent_message_id', null)
           : Promise.resolve({ data: [] }),
       ])
 
@@ -307,11 +306,34 @@ export default function TalkDetailScreen() {
                 </View>
               </View>
 
-              {/* 時刻 + ···ボタン（groupWrap直下で確実にタップ可能） */}
+              {/* 時刻 + カウント + ···ボタン */}
               <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
                 <Text style={styles.bubbleTime}>
                   {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                 </Text>
+                {group.public_reactions && group.like_count > 0 && (
+                  <TouchableOpacity
+                    style={styles.countBadge}
+                    onPress={() => !isSelf && handleLike(group)}
+                    activeOpacity={isSelf ? 1 : 0.7}
+                  >
+                    <Ionicons
+                      name={group.liked ? 'heart' : 'heart-outline'}
+                      size={12}
+                      color={group.liked ? '#E53E3E' : Colors.textLight}
+                    />
+                    <Text style={styles.countBadgeText}>{group.like_count}</Text>
+                  </TouchableOpacity>
+                )}
+                {group.public_reactions && group.comment_count > 0 && (
+                  <TouchableOpacity
+                    style={styles.countBadge}
+                    onPress={() => router.push(`/broadcast-thread/${group.anchorId}` as any)}
+                  >
+                    <Ionicons name="chatbubble-outline" size={12} color={Colors.textLight} />
+                    <Text style={styles.countBadgeText}>{group.comment_count}</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={styles.moreBtn}
                   onPress={() => setLongPressGroup(group)}
@@ -374,7 +396,9 @@ export default function TalkDetailScreen() {
             <Text style={styles.popupBtnText}>
               {isSelf
                 ? `コメントを見る${longPressGroup && longPressGroup.comment_count > 0 ? ` (${longPressGroup.comment_count})` : ''}`
-                : 'コメント'
+                : longPressGroup?.public_reactions
+                  ? 'コメント欄を見る'
+                  : 'コメントする'
               }
             </Text>
           </TouchableOpacity>
@@ -503,6 +527,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap',
   },
   bubbleTime: { fontSize: 10, color: Colors.textLight },
+  countBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 8, paddingVertical: 2,
+  },
+  countBadgeText: { fontSize: 11, color: Colors.textLight },
   moreBtn: {
     paddingHorizontal: 8, paddingVertical: 2,
     backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,

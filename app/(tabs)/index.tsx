@@ -9,6 +9,7 @@ type FollowedCreator = {
   id: string
   display_name: string
   bio: string | null
+  is_official: boolean
 }
 
 type MyProfile = {
@@ -51,7 +52,7 @@ export default function HomeScreen() {
 
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, display_name, bio')
+      .select('id, display_name, bio, is_official')
       .in('id', followingIds)
       .order('display_name')
 
@@ -156,7 +157,10 @@ export default function HomeScreen() {
                 <Text style={styles.avatarText}>{item.display_name[0]}</Text>
               </View>
               <View style={styles.creatorInfo}>
-                <Text style={styles.creatorName}>{item.display_name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={styles.creatorName}>{item.display_name}</Text>
+                  {item.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                </View>
                 {item.bio && <Text style={styles.creatorBio} numberOfLines={1}>{item.bio}</Text>}
               </View>
             </TouchableOpacity>

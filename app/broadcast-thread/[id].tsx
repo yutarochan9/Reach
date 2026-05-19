@@ -88,29 +88,21 @@ export default function BroadcastThreadScreen() {
     const profMap: Record<string, { name: string; avatar: string | null }> = {}
     for (const p of (profiles ?? [])) profMap[p.id] = { name: p.display_name, avatar: p.avatar_url ?? null }
 
-    const topLevel: Comment[] = []
     const byId: Record<string, Comment> = {}
-
     for (const m of allMsgs as any[]) {
-      if (!m.parent_message_id) {
-        const c: Comment = {
-          id: m.id, content: m.content, sender_id: m.sender_id,
-          sender_name: profMap[m.sender_id]?.name ?? 'ユーザー',
-          sender_avatar: profMap[m.sender_id]?.avatar ?? null,
-          created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
-        }
-        byId[m.id] = c
-        topLevel.push(c)
+      byId[m.id] = {
+        id: m.id, content: m.content, sender_id: m.sender_id,
+        sender_name: profMap[m.sender_id]?.name ?? 'ユーザー',
+        sender_avatar: profMap[m.sender_id]?.avatar ?? null,
+        created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
       }
     }
+    const topLevel: Comment[] = []
     for (const m of allMsgs as any[]) {
-      if (m.parent_message_id && byId[m.parent_message_id]) {
-        byId[m.parent_message_id].replies.push({
-          id: m.id, content: m.content, sender_id: m.sender_id,
-          sender_name: profMap[m.sender_id]?.name ?? 'ユーザー',
-          sender_avatar: profMap[m.sender_id]?.avatar ?? null,
-          created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
-        })
+      if (!m.parent_message_id) {
+        topLevel.push(byId[m.id])
+      } else if (byId[m.parent_message_id]) {
+        byId[m.parent_message_id].replies.push(byId[m.id])
       }
     }
     setComments(topLevel)
@@ -170,9 +162,19 @@ export default function BroadcastThreadScreen() {
     return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
+  const getDescendants = (c: Comment): Comment[] => {
+    const result: Comment[] = []
+    for (const r of c.replies) {
+      result.push(r)
+      result.push(...getDescendants(r))
+    }
+    return result
+  }
+
   const renderComment = (comment: Comment, isReply = false) => {
     const expanded = expandedReplies.has(comment.id)
     const isCreator = comment.sender_id === broadcastSenderId
+    const descendants = isReply ? [] : getDescendants(comment)
     return (
       <View key={comment.id}>
         <View style={[styles.commentRow, isReply && styles.commentRowReply]}>
@@ -192,26 +194,24 @@ export default function BroadcastThreadScreen() {
             </View>
             <Text style={styles.commentText}>{comment.content}</Text>
 
-            {!isReply && (
-              <TouchableOpacity
-                onPress={() => {
-                  setReplyToComment(comment)
-                  setTimeout(() => inputRef.current?.focus(), 100)
-                }}
-                style={styles.replyBtn}
-              >
-                <Text style={styles.replyBtnText}>コメントする</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              onPress={() => {
+                setReplyToComment(comment)
+                setTimeout(() => inputRef.current?.focus(), 100)
+              }}
+              style={styles.replyBtn}
+            >
+              <Text style={styles.replyBtnText}>コメントする</Text>
+            </TouchableOpacity>
 
-            {!isReply && comment.replies.length > 0 && (
+            {!isReply && descendants.length > 0 && (
               <TouchableOpacity onPress={() => toggleReplies(comment.id)} style={styles.showRepliesBtn}>
                 <Ionicons
                   name={expanded ? 'chevron-up' : 'chevron-down'}
                   size={13} color={Colors.accent}
                 />
                 <Text style={styles.showRepliesText}>
-                  {expanded ? '返信を非表示' : `${comment.replies.length}件の返信を見る`}
+                  {expanded ? '返信を非表示' : `${descendants.length}件の返信を見る`}
                 </Text>
               </TouchableOpacity>
             )}
@@ -220,14 +220,15 @@ export default function BroadcastThreadScreen() {
 
         {!isReply && expanded && (
           <View style={styles.repliesWrap}>
-            {comment.replies.map(r => renderComment(r, true))}
+            {descendants.map(r => renderComment(r, true))}
           </View>
         )}
       </View>
     )
   }
 
-  const totalCount = comments.reduce((acc, c) => acc + 1 + c.replies.length, 0)
+  const countAll = (c: Comment): number => 1 + c.replies.reduce((a, r) => a + countAll(r), 0)
+  const totalCount = comments.reduce((acc, c) => acc + countAll(c), 0)
   const isCommentMode = !!replyToComment
 
   return (
