@@ -30,6 +30,7 @@ export default function HomeScreen() {
   const [creators, setCreators] = useState<FollowedCreator[]>([])
   const [followers, setFollowers] = useState<FollowerProfile[]>([])
   const [myDisplayName, setMyDisplayName] = useState('')
+  const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [myUserId, setMyUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -43,13 +44,14 @@ export default function HomeScreen() {
     setMyUserId(user.id)
 
     const [{ data: profile }, { data: followersData }, { data: follows }, { count: notifCount }] = await Promise.all([
-      supabase.from('profiles').select('display_name').eq('id', user.id).single(),
+      supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', user.id),
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false),
     ])
 
     setMyDisplayName(profile?.display_name ?? '')
+    setMyAvatar((profile as any)?.avatar_url ?? null)
     setUnreadNotifs(notifCount ?? 0)
 
     const followingIds = (follows ?? []).map((f: any) => f.following_id)
@@ -98,9 +100,16 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity
+            style={styles.headerProfile}
             onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
             activeOpacity={0.75}
           >
+            <View style={styles.headerAvatar}>
+              {myAvatar
+                ? <Image source={{ uri: myAvatar }} style={styles.headerAvatarImg} />
+                : <Text style={styles.headerAvatarText}>{myDisplayName[0]}</Text>
+              }
+            </View>
             <Text style={styles.headerTitle}>{myDisplayName}</Text>
           </TouchableOpacity>
           <View style={styles.headerActions}>
@@ -261,6 +270,13 @@ const styles = StyleSheet.create({
   notifBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   profileName: { fontSize: 14, fontWeight: '600', color: Colors.text },
+  headerProfile: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerAvatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  headerAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   list: { paddingBottom: 32 },
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
