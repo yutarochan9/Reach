@@ -18,28 +18,28 @@ type FollowingItem = {
   comment_count: number
 }
 
-type FollowerItem = {
-  id: string
+type DmItem = {
+  otherId: string
   name: string
   avatar: string | null
-  lastIm: string | null
-  lastImTime: string | null
+  lastContent: string
+  lastTime: string
   is_official: boolean
 }
 
 type FlatRow =
   | { type: 'my'; myId: string; name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number }
-  | { type: 'section-header'; sectionId: 'following' | 'followers'; label: string; open: boolean; count: number }
+  | { type: 'section-header'; sectionId: 'following' | 'dm'; label: string; open: boolean }
   | { type: 'following-item'; data: FollowingItem }
-  | { type: 'follower-item'; data: FollowerItem }
+  | { type: 'dm-item'; data: DmItem }
 
 export default function TalkScreen() {
   const [myId, setMyId] = useState<string | null>(null)
   const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number } | null>(null)
   const [followingItems, setFollowingItems] = useState<FollowingItem[]>([])
-  const [followerItems, setFollowerItems] = useState<FollowerItem[]>([])
+  const [dmItems, setDmItems] = useState<DmItem[]>([])
   const [followingOpen, setFollowingOpen] = useState(true)
-  const [followersOpen, setFollowersOpen] = useState(true)
+  const [dmOpen, setDmOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -52,12 +52,10 @@ export default function TalkScreen() {
 
     const [
       { data: followingData },
-      { data: followerData },
       { data: myProfile },
       { data: myBroadcasts },
     ] = await Promise.all([
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
-      supabase.from('follows').select('follower_id').eq('following_id', user.id),
       supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', user.id).single(),
       supabase.from('broadcasts')
         .select('id, content, created_at, public_reactions')
@@ -66,7 +64,6 @@ export default function TalkScreen() {
     ])
 
     const followingIds = (followingData ?? []).map((f: any) => f.following_id)
-    const followerIds = (followerData ?? []).map((f: any) => f.follower_id)
 
     const myLastBroadcast = myBroadcasts?.[0]
     let myLikeCount = 0
@@ -154,38 +151,44 @@ export default function TalkScreen() {
       setFollowingItems([])
     }
 
-    // フォロワーセクション
-    if (followerIds.length > 0) {
-      const [{ data: profData }, { data: imMessages }] = await Promise.all([
-        supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followerIds),
-        supabase.from('messages')
-          .select('id, content, sender_id, created_at')
-          .eq('receiver_id', user.id)
-          .is('broadcast_id', null)
-          .in('sender_id', followerIds)
-          .order('created_at', { ascending: false }),
-      ])
+    // DMセクション: 自分が送受信したDM全件を取得
+    const { data: dmMessages } = await supabase
+      .from('messages')
+      .select('id, content, sender_id, receiver_id, created_at')
+      .is('broadcast_id', null)
+      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+      .order('created_at', { ascending: false })
 
-      const profMap2: Record<string, { display_name: string; avatar_url: string | null; is_official: boolean }> = {}
-      for (const p of (profData ?? [])) profMap2[p.id] = p
-
-      const latestImMap: Record<string, { content: string; created_at: string }> = {}
-      for (const m of (imMessages ?? [])) {
-        if (!latestImMap[m.sender_id]) {
-          latestImMap[m.sender_id] = { content: m.content, created_at: m.created_at }
-        }
+    const latestByOther: Record<string, { content: string; created_at: string }> = {}
+    for (const m of (dmMessages ?? [])) {
+      const otherId = m.sender_id === user.id ? m.receiver_id : m.sender_id
+      if (!latestByOther[otherId]) {
+        latestByOther[otherId] = { content: m.content, created_at: m.created_at }
       }
+    }
+    const otherIds = Object.keys(latestByOther)
+    if (otherIds.length > 0) {
+      const { data: dmProfs } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url, is_official')
+        .in('id', otherIds)
+      const dmProfMap: Record<string, { display_name: string; avatar_url: string | null; is_official: boolean }> = {}
+      for (const p of (dmProfs ?? [])) dmProfMap[p.id] = p
 
-      setFollowerItems(followerIds.map(id => ({
-        id,
-        name: profMap2[id]?.display_name ?? '?',
-        avatar: profMap2[id]?.avatar_url ?? null,
-        lastIm: latestImMap[id]?.content ?? null,
-        lastImTime: latestImMap[id]?.created_at ?? null,
-        is_official: profMap2[id]?.is_official ?? false,
-      })))
+      setDmItems(
+        otherIds
+          .map(id => ({
+            otherId: id,
+            name: dmProfMap[id]?.display_name ?? '?',
+            avatar: dmProfMap[id]?.avatar_url ?? null,
+            lastContent: latestByOther[id].content,
+            lastTime: latestByOther[id].created_at,
+            is_official: dmProfMap[id]?.is_official ?? false,
+          }))
+          .sort((a, b) => new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime())
+      )
     } else {
-      setFollowerItems([])
+      setDmItems([])
     }
 
     setLoading(false)
@@ -254,11 +257,11 @@ export default function TalkScreen() {
   }
 
   flatData.push({
-    type: 'section-header', sectionId: 'followers',
-    label: 'フォロワー', open: followersOpen, count: followerItems.filter(d => d.lastIm !== null).length,
+    type: 'section-header', sectionId: 'dm',
+    label: 'DM', open: dmOpen,
   })
-  if (followersOpen) {
-    followerItems.filter(d => d.lastIm !== null).forEach(d => flatData.push({ type: 'follower-item', data: d }))
+  if (dmOpen) {
+    dmItems.forEach(d => flatData.push({ type: 'dm-item', data: d }))
   }
 
   return (
@@ -273,7 +276,7 @@ export default function TalkScreen() {
           if (item.type === 'my') return 'my'
           if (item.type === 'section-header') return `header-${item.sectionId}`
           if (item.type === 'following-item') return `following-${item.data.id}`
-          if (item.type === 'follower-item') return `follower-${item.data.id}`
+          if (item.type === 'dm-item') return `dm-${item.data.otherId}`
           return 'unknown'
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
@@ -307,7 +310,7 @@ export default function TalkScreen() {
           if (item.type === 'section-header') {
             const toggle = item.sectionId === 'following'
               ? () => setFollowingOpen(v => !v)
-              : () => setFollowersOpen(v => !v)
+              : () => setDmOpen(v => !v)
             return (
               <TouchableOpacity style={styles.sectionHeader} onPress={toggle} activeOpacity={0.7}>
                 <Text style={styles.sectionHeaderText}>{item.label}</Text>
@@ -358,10 +361,10 @@ export default function TalkScreen() {
             )
           }
 
-          if (item.type === 'follower-item') {
+          if (item.type === 'dm-item') {
             const d = item.data
             return (
-              <TouchableOpacity style={styles.talkItem} onPress={() => router.push(`/im/${d.id}` as any)}>
+              <TouchableOpacity style={styles.talkItem} onPress={() => router.push(`/im/${d.otherId}` as any)}>
                 <View style={styles.avatar}>
                   {d.avatar
                     ? <Image source={{ uri: d.avatar }} style={styles.avatarImage} />
@@ -374,11 +377,9 @@ export default function TalkScreen() {
                       <Text style={styles.talkName}>{d.name}</Text>
                       {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
                     </View>
-                    {d.lastImTime && <Text style={styles.talkTime}>{formatTime(d.lastImTime)}</Text>}
+                    <Text style={styles.talkTime}>{formatTime(d.lastTime)}</Text>
                   </View>
-                  {d.lastIm && (
-                    <Text style={styles.lastMessage} numberOfLines={1}>{d.lastIm}</Text>
-                  )}
+                  <Text style={styles.lastMessage} numberOfLines={1}>{d.lastContent}</Text>
                 </View>
               </TouchableOpacity>
             )
