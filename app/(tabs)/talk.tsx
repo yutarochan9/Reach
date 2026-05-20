@@ -1,9 +1,12 @@
 import { useState, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Animated, PanResponder, Platform, Alert } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+
+const ACTION_WIDTH = 140
+const isWeb = Platform.OS === 'web'
 
 type FollowingItem = {
   id: string
@@ -32,6 +35,103 @@ type FlatRow =
   | { type: 'section-header'; sectionId: 'following' | 'dm'; label: string; open: boolean }
   | { type: 'following-item'; data: FollowingItem }
   | { type: 'dm-item'; data: DmItem }
+
+function SwipeableDmRow({
+  data,
+  onPress,
+  onHide,
+  onDelete,
+  formatTime,
+}: {
+  data: DmItem
+  onPress: () => void
+  onHide: () => void
+  onDelete: () => void
+  formatTime: (iso: string) => string
+}) {
+  const translateX = useRef(new Animated.Value(0)).current
+  const isOpen = useRef(false)
+
+  const close = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 80 }).start()
+    isOpen.current = false
+  }
+  const open = () => {
+    Animated.spring(translateX, { toValue: -ACTION_WIDTH, useNativeDriver: true, tension: 80 }).start()
+    isOpen.current = true
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => { translateX.stopAnimation() },
+      onPanResponderMove: (_, g) => {
+        const base = isOpen.current ? -ACTION_WIDTH : 0
+        const val = Math.max(-ACTION_WIDTH, Math.min(0, base + g.dx))
+        translateX.setValue(val)
+      },
+      onPanResponderRelease: (_, g) => {
+        if (isOpen.current) {
+          g.dx > 40 ? close() : open()
+        } else {
+          g.dx < -40 ? open() : close()
+        }
+      },
+    })
+  ).current
+
+  return (
+    <View style={swipeStyles.wrap}>
+      {/* アクションボタン（背面） */}
+      <View style={swipeStyles.actions}>
+        <TouchableOpacity
+          style={swipeStyles.hideBtn}
+          onPress={() => { close(); setTimeout(onHide, 200) }}
+        >
+          <Ionicons name="eye-off-outline" size={18} color={Colors.white} />
+          <Text style={swipeStyles.actionText}>非表示</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={swipeStyles.deleteBtn}
+          onPress={() => { close(); setTimeout(onDelete, 200) }}
+        >
+          <Ionicons name="trash-outline" size={18} color={Colors.white} />
+          <Text style={swipeStyles.actionText}>削除</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* スライドする行 */}
+      <Animated.View
+        style={[swipeStyles.row, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity
+          style={styles.talkItem}
+          onPress={() => { if (isOpen.current) { close() } else { onPress() } }}
+          activeOpacity={0.8}
+        >
+          <View style={styles.avatar}>
+            {data.avatar
+              ? <Image source={{ uri: data.avatar }} style={styles.avatarImage} />
+              : <Text style={styles.avatarText}>{data.name[0]}</Text>
+            }
+          </View>
+          <View style={styles.talkInfo}>
+            <View style={styles.talkHeader}>
+              <View style={styles.nameRow}>
+                <Text style={styles.talkName}>{data.name}</Text>
+                {data.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+              </View>
+              <Text style={styles.talkTime}>{formatTime(data.lastTime)}</Text>
+            </View>
+            <Text style={styles.lastMessage} numberOfLines={1}>{data.lastContent}</Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  )
+}
 
 export default function TalkScreen() {
   const [myId, setMyId] = useState<string | null>(null)
@@ -151,7 +251,7 @@ export default function TalkScreen() {
       setFollowingItems([])
     }
 
-    // DMセクション: 自分が送受信したDM全件を取得
+    // DMセクション
     const { data: dmMessages } = await supabase
       .from('messages')
       .select('id, content, sender_id, receiver_id, created_at')
@@ -162,6 +262,8 @@ export default function TalkScreen() {
     const latestByOther: Record<string, { content: string; created_at: string }> = {}
     for (const m of (dmMessages ?? [])) {
       const otherId = m.sender_id === user.id ? m.receiver_id : m.sender_id
+      // 自分自身へのDMは除外
+      if (otherId === user.id) continue
       if (!latestByOther[otherId]) {
         latestByOther[otherId] = { content: m.content, created_at: m.created_at }
       }
@@ -224,6 +326,30 @@ export default function TalkScreen() {
     setRefreshing(false)
   }
 
+  const handleHideDm = (otherId: string) => {
+    setDmItems(prev => prev.filter(d => d.otherId !== otherId))
+  }
+
+  const handleDeleteDm = (otherId: string) => {
+    const confirm = () => {
+      supabase.from('messages')
+        .delete()
+        .is('broadcast_id', null)
+        .or(`and(sender_id.eq.${myId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${myId})`)
+        .then(() => {
+          setDmItems(prev => prev.filter(d => d.otherId !== otherId))
+        })
+    }
+    if (isWeb) {
+      if (window.confirm('このDM履歴を削除しますか？')) confirm()
+    } else {
+      Alert.alert('DMを削除', 'このDM履歴を削除しますか？', [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '削除', style: 'destructive', onPress: confirm },
+      ])
+    }
+  }
+
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     const now = new Date()
@@ -241,7 +367,6 @@ export default function TalkScreen() {
     )
   }
 
-  // フラットリストデータを構築
   const flatData: FlatRow[] = []
 
   if (myId && myItem) {
@@ -250,7 +375,7 @@ export default function TalkScreen() {
 
   flatData.push({
     type: 'section-header', sectionId: 'following',
-    label: 'フォロー中', open: followingOpen, count: followingItems.length,
+    label: 'フォロー中', open: followingOpen,
   })
   if (followingOpen) {
     followingItems.forEach(d => flatData.push({ type: 'following-item', data: d }))
@@ -362,26 +487,14 @@ export default function TalkScreen() {
           }
 
           if (item.type === 'dm-item') {
-            const d = item.data
             return (
-              <TouchableOpacity style={styles.talkItem} onPress={() => router.push(`/im/${d.otherId}` as any)}>
-                <View style={styles.avatar}>
-                  {d.avatar
-                    ? <Image source={{ uri: d.avatar }} style={styles.avatarImage} />
-                    : <Text style={styles.avatarText}>{d.name[0]}</Text>
-                  }
-                </View>
-                <View style={styles.talkInfo}>
-                  <View style={styles.talkHeader}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.talkName}>{d.name}</Text>
-                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
-                    </View>
-                    <Text style={styles.talkTime}>{formatTime(d.lastTime)}</Text>
-                  </View>
-                  <Text style={styles.lastMessage} numberOfLines={1}>{d.lastContent}</Text>
-                </View>
-              </TouchableOpacity>
+              <SwipeableDmRow
+                data={item.data}
+                onPress={() => router.push(`/im/${item.data.otherId}` as any)}
+                onHide={() => handleHideDm(item.data.otherId)}
+                onDelete={() => handleDeleteDm(item.data.otherId)}
+                formatTime={formatTime}
+              />
             )
           }
 
@@ -392,6 +505,24 @@ export default function TalkScreen() {
     </View>
   )
 }
+
+const swipeStyles = StyleSheet.create({
+  wrap: { position: 'relative', overflow: 'hidden', backgroundColor: Colors.white },
+  actions: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    width: ACTION_WIDTH, flexDirection: 'row',
+  },
+  hideBtn: {
+    flex: 1, backgroundColor: '#8E8E93',
+    alignItems: 'center', justifyContent: 'center', gap: 4,
+  },
+  deleteBtn: {
+    flex: 1, backgroundColor: '#E53E3E',
+    alignItems: 'center', justifyContent: 'center', gap: 4,
+  },
+  actionText: { fontSize: 11, color: Colors.white, fontWeight: '700' },
+  row: { backgroundColor: Colors.white },
+})
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
@@ -414,17 +545,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionHeaderText: {
     fontSize: 13, fontWeight: '700', color: Colors.textLight,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
-  sectionCount: {
-    backgroundColor: Colors.border, borderRadius: 10,
-    minWidth: 20, height: 20, paddingHorizontal: 5,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  sectionCountText: { fontSize: 11, color: Colors.textLight, fontWeight: '700' },
   talkItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -443,9 +567,8 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 22, fontWeight: '700', color: Colors.white },
   talkInfo: { flex: 1 },
   talkHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  talkName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  talkName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   selfBadge: {
     backgroundColor: Colors.accent, borderRadius: 8,
     paddingHorizontal: 6, paddingVertical: 2,
@@ -453,11 +576,8 @@ const styles = StyleSheet.create({
   selfBadgeText: { fontSize: 10, color: Colors.white, fontWeight: '700' },
   talkTime: { fontSize: 12, color: Colors.textLight },
   talkFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  lastMessageRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   lastMessage: { fontSize: 13, color: Colors.textLight, flex: 1 },
   lastMessageUnread: { color: Colors.text, fontWeight: '600' },
-  talkCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  talkCountText: { fontSize: 10, color: Colors.textLight },
   badge: {
     backgroundColor: Colors.accent, borderRadius: 10,
     minWidth: 20, height: 20,
