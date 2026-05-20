@@ -13,51 +13,59 @@ type FollowedCreator = {
   avatar_url: string | null
 }
 
-type MyProfile = {
+type FollowerProfile = {
+  id: string
   display_name: string
-  follower_count: number
+  avatar_url: string | null
+  is_official: boolean
 }
+
+type HomeRow =
+  | { type: 'my-posts' }
+  | { type: 'section'; sectionId: 'following' | 'followers'; count: number; open: boolean }
+  | { type: 'following-item'; data: FollowedCreator }
+  | { type: 'follower-item'; data: FollowerProfile }
 
 export default function HomeScreen() {
   const [creators, setCreators] = useState<FollowedCreator[]>([])
-  const [myProfile, setMyProfile] = useState<MyProfile | null>(null)
+  const [followers, setFollowers] = useState<FollowerProfile[]>([])
+  const [myDisplayName, setMyDisplayName] = useState('')
   const [myUserId, setMyUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [unreadNotifs, setUnreadNotifs] = useState(0)
+  const [followingOpen, setFollowingOpen] = useState(true)
+  const [followersOpen, setFollowersOpen] = useState(true)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setMyUserId(user.id)
 
-    const [{ data: profile }, { data: followers }, { data: follows }, { count: notifCount }] = await Promise.all([
+    const [{ data: profile }, { data: followersData }, { data: follows }, { count: notifCount }] = await Promise.all([
       supabase.from('profiles').select('display_name').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', user.id),
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false),
     ])
 
-    setMyProfile({
-      display_name: profile?.display_name ?? '',
-      follower_count: (followers ?? []).length,
-    })
+    setMyDisplayName(profile?.display_name ?? '')
     setUnreadNotifs(notifCount ?? 0)
 
     const followingIds = (follows ?? []).map((f: any) => f.following_id)
-    if (followingIds.length === 0) {
-      setCreators([])
-      setLoading(false)
-      return
-    }
+    const followerIds = (followersData ?? []).map((f: any) => f.follower_id)
 
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, display_name, bio, is_official, avatar_url')
-      .in('id', followingIds)
-      .order('display_name')
+    const [followingProfiles, followerProfiles] = await Promise.all([
+      followingIds.length > 0
+        ? supabase.from('profiles').select('id, display_name, bio, is_official, avatar_url').in('id', followingIds).order('display_name')
+        : Promise.resolve({ data: [] }),
+      followerIds.length > 0
+        ? supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followerIds)
+        : Promise.resolve({ data: [] }),
+    ])
 
-    setCreators(profiles ?? [])
+    setCreators((followingProfiles.data ?? []) as FollowedCreator[])
+    setFollowers((followerProfiles.data ?? []) as FollowerProfile[])
     setLoading(false)
   }, [])
 
@@ -76,6 +84,14 @@ export default function HomeScreen() {
       </View>
     )
   }
+
+  const flatData: HomeRow[] = [
+    { type: 'my-posts' },
+    { type: 'section', sectionId: 'following', count: creators.length, open: followingOpen },
+    ...(followingOpen ? creators.map(c => ({ type: 'following-item' as const, data: c })) : []),
+    { type: 'section', sectionId: 'followers', count: followers.length, open: followersOpen },
+    ...(followersOpen ? followers.map(f => ({ type: 'follower-item' as const, data: f })) : []),
+  ]
 
   return (
     <View style={styles.container}>
@@ -96,88 +112,131 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        {myProfile && (
+        {myDisplayName ? (
           <TouchableOpacity
             style={styles.profileRow}
             onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
             activeOpacity={0.75}
           >
-            <Text style={styles.profileName}>{myProfile.display_name}</Text>
-            <View style={styles.followerPill}>
-              <Ionicons name="people-outline" size={13} color={Colors.accent} />
-              <Text style={styles.followerNum}>{myProfile.follower_count.toLocaleString()}</Text>
-            </View>
+            <Text style={styles.profileName}>{myDisplayName}</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
 
       <FlatList
-        data={creators}
-        keyExtractor={item => item.id}
-        contentContainerStyle={creators.length === 0 ? styles.emptyContainer : styles.list}
+        data={flatData}
+        keyExtractor={(item, index) => {
+          if (item.type === 'my-posts') return 'my-posts'
+          if (item.type === 'section') return `section-${item.sectionId}`
+          if (item.type === 'following-item') return `following-${item.data.id}`
+          if (item.type === 'follower-item') return `follower-${item.data.id}`
+          return `row-${index}`
+        }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
-        ListHeaderComponent={() => (
-          <View>
-            <TouchableOpacity
-              style={styles.myPostsCard}
-              onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
-              activeOpacity={0.85}
-            >
-              <View style={styles.myPostsIcon}>
-                <Ionicons name="grid-outline" size={20} color={Colors.white} />
-              </View>
-              <View style={styles.myPostsText}>
-                <Text style={styles.myPostsTitle}>あなたの投稿</Text>
-                <Text style={styles.myPostsSub}>配信履歴・返信を確認</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
-            </TouchableOpacity>
-            {creators.length > 0 && (
-              <Text style={styles.sectionLabel}>フォロー中のアカウント</Text>
-            )}
-          </View>
-        )}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyWrap}>
-            <Ionicons name="radio-outline" size={48} color={Colors.border} />
-            <Text style={styles.emptyTitle}>フォロー中の発信者がいません</Text>
-            <Text style={styles.emptyDesc}>発信者をフォローすると{'\n'}ここに表示されます</Text>
-            <TouchableOpacity style={styles.discoverButton} onPress={() => router.push('/(tabs)/shop' as any)}>
-              <Text style={styles.discoverText}>発信者を探す</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        renderItem={({ item }) => (
-          <View style={styles.creatorRow}>
-            <TouchableOpacity
-              style={styles.creatorLeft}
-              onPress={() => router.push(`/creator/${item.id}` as any)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.avatar}>
-                {item.avatar_url
-                  ? <Image source={{ uri: item.avatar_url }} style={styles.avatarImage} />
-                  : <Text style={styles.avatarText}>{item.display_name[0]}</Text>
-                }
-              </View>
-              <View style={styles.creatorInfo}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={styles.creatorName}>{item.display_name}</Text>
-                  {item.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+        contentContainerStyle={styles.list}
+        ItemSeparatorComponent={({ leadingItem }) => {
+          if (!leadingItem) return null
+          if (leadingItem.type === 'section' || leadingItem.type === 'my-posts') return null
+          return <View style={styles.separator} />
+        }}
+        renderItem={({ item }) => {
+          if (item.type === 'my-posts') {
+            return (
+              <TouchableOpacity
+                style={styles.myPostsCard}
+                onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.myPostsIcon}>
+                  <Ionicons name="grid-outline" size={20} color={Colors.white} />
                 </View>
-                {item.bio && <Text style={styles.creatorBio} numberOfLines={1}>{item.bio}</Text>}
+                <View style={styles.myPostsText}>
+                  <Text style={styles.myPostsTitle}>あなたの投稿</Text>
+                  <Text style={styles.myPostsSub}>配信履歴・返信を確認</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+              </TouchableOpacity>
+            )
+          }
+
+          if (item.type === 'section') {
+            const toggle = item.sectionId === 'following'
+              ? () => setFollowingOpen(v => !v)
+              : () => setFollowersOpen(v => !v)
+            const label = item.sectionId === 'following' ? 'フォロー中' : 'フォロワー'
+            return (
+              <TouchableOpacity style={styles.sectionHeader} onPress={toggle} activeOpacity={0.7}>
+                <View style={styles.sectionHeaderLeft}>
+                  <Text style={styles.sectionHeaderText}>{label}</Text>
+                  <View style={styles.sectionCount}>
+                    <Text style={styles.sectionCountText}>{item.count}</Text>
+                  </View>
+                </View>
+                <Ionicons name={item.open ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.textLight} />
+              </TouchableOpacity>
+            )
+          }
+
+          if (item.type === 'following-item') {
+            const d = item.data
+            return (
+              <View style={styles.creatorRow}>
+                <TouchableOpacity
+                  style={styles.creatorLeft}
+                  onPress={() => router.push(`/creator/${d.id}` as any)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.avatar}>
+                    {d.avatar_url
+                      ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
+                      : <Text style={styles.avatarText}>{d.display_name[0]}</Text>
+                    }
+                  </View>
+                  <View style={styles.creatorInfo}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={styles.creatorName}>{d.display_name}</Text>
+                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                    </View>
+                    {d.bio && <Text style={styles.creatorBio} numberOfLines={1}>{d.bio}</Text>}
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.talkIconBtn}
+                  onPress={() => router.push(`/talk/${d.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chatbubbles-outline" size={22} color={Colors.accent} />
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.talkIconBtn}
-              onPress={() => router.push(`/talk/${item.id}` as any)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chatbubbles-outline" size={22} color={Colors.accent} />
-            </TouchableOpacity>
-          </View>
-        )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+            )
+          }
+
+          if (item.type === 'follower-item') {
+            const d = item.data
+            return (
+              <TouchableOpacity
+                style={styles.creatorRow}
+                onPress={() => router.push(`/creator/${d.id}` as any)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.avatar}>
+                  {d.avatar_url
+                    ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
+                    : <Text style={styles.avatarText}>{d.display_name[0]}</Text>
+                  }
+                </View>
+                <View style={styles.creatorInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={styles.creatorName}>{d.display_name}</Text>
+                    {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )
+          }
+
+          return null
+        }}
       />
     </View>
   )
@@ -206,25 +265,30 @@ const styles = StyleSheet.create({
   notifBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
   profileName: { fontSize: 14, fontWeight: '600', color: Colors.text },
-  followerPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.white, borderRadius: 20,
-    paddingHorizontal: 10, paddingVertical: 3,
-    borderWidth: 1, borderColor: Colors.border,
+  list: { paddingBottom: 32 },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: Colors.background,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  followerNum: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+  sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionHeaderText: {
+    fontSize: 13, fontWeight: '700', color: Colors.textLight,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+  sectionCount: {
+    backgroundColor: Colors.border, borderRadius: 10,
+    minWidth: 20, height: 20, paddingHorizontal: 5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sectionCountText: { fontSize: 11, color: Colors.textLight, fontWeight: '700' },
   myPostsCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: Colors.white,
-    marginHorizontal: 16,
-    marginTop: 14,
-    marginBottom: 4,
-    borderRadius: 14,
-    padding: 14,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    marginHorizontal: 16, marginTop: 14, marginBottom: 4,
+    borderRadius: 14, padding: 14, gap: 12,
+    borderWidth: 1, borderColor: Colors.border,
   },
   myPostsIcon: {
     width: 40, height: 40, borderRadius: 10,
@@ -234,21 +298,6 @@ const styles = StyleSheet.create({
   myPostsText: { flex: 1 },
   myPostsTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
   myPostsSub: { fontSize: 12, color: Colors.textLight, marginTop: 1 },
-  sectionLabel: {
-    fontSize: 12, fontWeight: '700', color: Colors.textLight,
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  list: { paddingVertical: 8 },
-  emptyContainer: { flex: 1 },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
-  emptyDesc: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22 },
-  discoverButton: {
-    marginTop: 8, backgroundColor: Colors.button,
-    borderRadius: 20, paddingHorizontal: 24, paddingVertical: 10,
-  },
-  discoverText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
   creatorRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 14,

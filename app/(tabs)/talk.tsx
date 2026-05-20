@@ -310,14 +310,7 @@ export default function TalkScreen() {
               : () => setFollowersOpen(v => !v)
             return (
               <TouchableOpacity style={styles.sectionHeader} onPress={toggle} activeOpacity={0.7}>
-                <View style={styles.sectionHeaderLeft}>
-                  <Text style={styles.sectionHeaderText}>{item.label}</Text>
-                  {item.count > 0 && (
-                    <View style={styles.sectionCount}>
-                      <Text style={styles.sectionCountText}>{item.count}</Text>
-                    </View>
-                  )}
-                </View>
+                <Text style={styles.sectionHeaderText}>{item.label}</Text>
                 <Ionicons
                   name={item.open ? 'chevron-up' : 'chevron-down'}
                   size={16}
