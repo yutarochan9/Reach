@@ -264,7 +264,7 @@ export default function TalkScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>トーク</Text>
+        <Text style={styles.headerTitle}>メッセージ</Text>
       </View>
 
       <FlatList

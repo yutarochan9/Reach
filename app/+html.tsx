@@ -19,6 +19,8 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Reach" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <link rel="icon" type="image/png" href="/assets/icon.png" />
+        <link rel="apple-touch-icon" href="/assets/icon.png" />
         <ScrollViewStyleReset />
         <style>{`
           html, body, #root {
