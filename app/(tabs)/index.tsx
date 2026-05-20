@@ -219,33 +219,24 @@ export default function HomeScreen() {
           if (item.type === 'follower-item') {
             const d = item.data
             return (
-              <View style={styles.creatorRow}>
-                <TouchableOpacity
-                  style={styles.creatorLeft}
-                  onPress={() => router.push(`/creator/${d.id}` as any)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.avatar}>
-                    {d.avatar_url
-                      ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
-                      : <Text style={styles.avatarText}>{d.display_name[0]}</Text>
-                    }
+              <TouchableOpacity
+                style={styles.creatorRow}
+                onPress={() => router.push(`/creator/${d.id}` as any)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.avatar}>
+                  {d.avatar_url
+                    ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
+                    : <Text style={styles.avatarText}>{d.display_name[0]}</Text>
+                  }
+                </View>
+                <View style={styles.creatorInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={styles.creatorName}>{d.display_name}</Text>
+                    {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
                   </View>
-                  <View style={styles.creatorInfo}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Text style={styles.creatorName}>{d.display_name}</Text>
-                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.talkIconBtn}
-                  onPress={() => router.push(`/im/${d.id}` as any)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="chatbubble-outline" size={22} color={Colors.accent} />
-                </TouchableOpacity>
-              </View>
+                </View>
+              </TouchableOpacity>
             )
           }
 

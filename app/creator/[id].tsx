@@ -202,7 +202,14 @@ export default function CreatorScreen() {
                   onPress={() => router.push(`/talk/${id}` as any)}
                 >
                   <Ionicons name="chatbubbles" size={18} color={Colors.white} />
-                  <Text style={styles.talkButtonText}>トーク</Text>
+                  <Text style={styles.talkButtonText}>メッセージ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dmButton}
+                  onPress={() => router.push(`/im/${id}` as any)}
+                >
+                  <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
+                  <Text style={styles.dmButtonText}>DM</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -310,9 +317,16 @@ const styles = StyleSheet.create({
   talkButton: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.accent,
-    borderRadius: 24, paddingHorizontal: 24, paddingVertical: 10,
+    borderRadius: 24, paddingHorizontal: 20, paddingVertical: 10,
   },
   talkButtonText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
+  dmButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.white,
+    borderRadius: 24, paddingHorizontal: 20, paddingVertical: 10,
+    borderWidth: 1.5, borderColor: Colors.accent,
+  },
+  dmButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 15 },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginTop: 16, alignSelf: 'flex-start' },
   richMenuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', marginTop: 8 },
   richMenuBtn: {
