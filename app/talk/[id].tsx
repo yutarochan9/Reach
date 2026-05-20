@@ -293,6 +293,7 @@ export default function TalkDetailScreen() {
                   }
                 </View>
                 <View style={styles.blocksWrap}>
+                  <Text style={styles.senderNameLabel}>{senderName}</Text>
                   {group.blocks.map((block, idx) => (
                     <View key={block.id} style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}>
                       {block.image_url && (
@@ -492,6 +493,7 @@ const styles = StyleSheet.create({
   broadcastAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   broadcastAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   blocksWrap: { flex: 1 },
+  senderNameLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 3, fontWeight: '600' },
   broadcastBubble: {
     backgroundColor: Colors.white, borderRadius: 16, borderTopLeftRadius: 4,
     padding: 12, shadowColor: '#000',

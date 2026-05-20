@@ -23,6 +23,8 @@ type IMMessage = {
 export default function IMScreen() {
   const { userId: partnerId } = useLocalSearchParams<{ userId: string }>()
   const [myId, setMyId] = useState<string | null>(null)
+  const [myName, setMyName] = useState('')
+  const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [partnerName, setPartnerName] = useState('')
   const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null)
   const [messages, setMessages] = useState<IMMessage[]>([])
@@ -38,10 +40,14 @@ export default function IMScreen() {
     if (!user) return
     setMyId(user.id)
 
-    const { data: profile } = await supabase
-      .from('profiles').select('display_name, avatar_url').eq('id', partnerId).single()
+    const [{ data: profile }, { data: myProfile }] = await Promise.all([
+      supabase.from('profiles').select('display_name, avatar_url').eq('id', partnerId).single(),
+      supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).single(),
+    ])
     setPartnerName(profile?.display_name ?? '')
     setPartnerAvatar(profile?.avatar_url ?? null)
+    setMyName(myProfile?.display_name ?? '')
+    setMyAvatar(myProfile?.avatar_url ?? null)
 
     const { data: msgs } = await supabase
       .from('messages')
@@ -210,14 +216,21 @@ export default function IMScreen() {
                   onMouseLeave: () => setHoveredMsgId(null),
                 } as any : {})}
               >
-                {!isOwn && (
+                {!isOwn ? (
                   partnerAvatar
                     ? <Image source={{ uri: partnerAvatar }} style={styles.msgAvatar} />
                     : <View style={styles.msgAvatarFallback}>
                         <Text style={styles.msgAvatarText}>{partnerName[0]}</Text>
                       </View>
+                ) : (
+                  myAvatar
+                    ? <Image source={{ uri: myAvatar }} style={styles.msgAvatar} />
+                    : <View style={styles.msgAvatarFallback}>
+                        <Text style={styles.msgAvatarText}>{myName[0]}</Text>
+                      </View>
                 )}
                 <View style={[styles.bubbleWrap, isOwn && styles.bubbleWrapOwn]}>
+                  <Text style={styles.msgNameLabel}>{isOwn ? myName : partnerName}</Text>
                   {item.reply_preview && (
                     <View style={[styles.replyQuote, isOwn && styles.replyQuoteOwn]}>
                       <Ionicons name="return-down-forward-outline" size={11} color={isOwn ? 'rgba(255,255,255,0.7)' : Colors.textLight} />
@@ -327,17 +340,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.08)',
     paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12,
   },
-  msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginBottom: 6 },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 6 },
   msgRowOwn: { flexDirection: 'row-reverse' },
-  msgAvatar: { width: 32, height: 32, borderRadius: 16, marginBottom: 18 },
+  msgAvatar: { width: 32, height: 32, borderRadius: 16 },
   msgAvatarFallback: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
-    marginBottom: 18,
   },
   msgAvatarText: { fontSize: 13, fontWeight: '700', color: Colors.white },
   bubbleWrap: { maxWidth: '75%', alignItems: 'flex-start' },
   bubbleWrapOwn: { alignItems: 'flex-end' },
+  msgNameLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600', marginBottom: 3 },
   replyQuote: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(0,0,0,0.06)',
