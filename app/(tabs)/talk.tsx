@@ -255,10 +255,10 @@ export default function TalkScreen() {
 
   flatData.push({
     type: 'section-header', sectionId: 'followers',
-    label: 'フォロワー', open: followersOpen, count: followerItems.length,
+    label: 'フォロワー', open: followersOpen, count: followerItems.filter(d => d.lastIm !== null).length,
   })
   if (followersOpen) {
-    followerItems.forEach(d => flatData.push({ type: 'follower-item', data: d }))
+    followerItems.filter(d => d.lastIm !== null).forEach(d => flatData.push({ type: 'follower-item', data: d }))
   }
 
   return (
