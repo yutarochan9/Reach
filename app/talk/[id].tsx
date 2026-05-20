@@ -365,9 +365,7 @@ export default function TalkDetailScreen() {
                 color={longPressGroup?.liked ? '#E53E3E' : Colors.text}
               />
             </View>
-            <Text style={styles.popupBtnText}>
-              いいね{longPressGroup && longPressGroup.like_count > 0 ? `（${longPressGroup.like_count}）` : ''}
-            </Text>
+            <Text style={styles.popupBtnText}>いいね（{longPressGroup?.like_count ?? 0}）</Text>
           </TouchableOpacity>
 
           {/* コメント（全員） */}
@@ -381,9 +379,7 @@ export default function TalkDetailScreen() {
             <View style={styles.popupIconWrap}>
               <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
             </View>
-            <Text style={styles.popupBtnText}>
-              コメント{longPressGroup && longPressGroup.comment_count > 0 ? `（${longPressGroup.comment_count}）` : ''}
-            </Text>
+            <Text style={styles.popupBtnText}>コメント（{longPressGroup?.comment_count ?? 0}）</Text>
           </TouchableOpacity>
 
           {/* キャンセル */}

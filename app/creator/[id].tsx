@@ -155,10 +155,6 @@ export default function CreatorScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Text style={styles.headerTitle}>{profile.display_name}</Text>
-          {profile.is_official && <Ionicons name="checkmark-circle" size={16} color="#1D9BF0" />}
-        </View>
         <View style={{ width: 32 }} />
       </View>
 
