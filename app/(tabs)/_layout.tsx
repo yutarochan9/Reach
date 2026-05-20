@@ -14,7 +14,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
     const iconMap: Record<string, { active: IoniconsName; inactive: IoniconsName; label: string }> = {
       index:  { active: 'home',         inactive: 'home-outline',         label: 'ホーム' },
-      talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'トーク' },
+      talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'メッセージ' },
       shop:   { active: 'compass',      inactive: 'compass-outline',      label: '発見' },
       mypage: { active: 'person',       inactive: 'person-outline',       label: 'マイページ' },
     }

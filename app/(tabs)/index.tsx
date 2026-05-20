@@ -97,7 +97,12 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>Reach</Text>
+          <TouchableOpacity
+            onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.headerTitle}>{myDisplayName}</Text>
+          </TouchableOpacity>
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push('/notifications' as any)}>
               <Ionicons name="notifications-outline" size={22} color={Colors.accent} />
@@ -112,15 +117,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        {myDisplayName ? (
-          <TouchableOpacity
-            style={styles.profileRow}
-            onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.profileName}>{myDisplayName}</Text>
-          </TouchableOpacity>
-        ) : null}
       </View>
 
       <FlatList
