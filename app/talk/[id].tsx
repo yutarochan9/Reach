@@ -426,8 +426,9 @@ export default function TalkDetailScreen() {
                   >
                     {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
                     {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
-                    <Ionicons name={btn.icon ?? 'link-outline'} size={20} color="#FFFFFF" />
-                    <Text style={styles.tileBtnLabel} numberOfLines={2}>{btn.label}</Text>
+                    <Ionicons name={btn.icon ?? 'link-outline'} size={26} color="#FFFFFF" />
+                    <View style={styles.tileSeparator} />
+                    <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -634,29 +635,32 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: Colors.textLight },
   tileContainer: {
     backgroundColor: '#1C1C1E', overflow: 'hidden',
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
+    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)',
   },
   panelDimOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  tileGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', padding: 4, gap: 3,
-  },
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   tileBtn: {
-    width: '33.33%', height: 72, overflow: 'hidden',
+    width: '33.33%', aspectRatio: 1, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',
-    gap: 4, padding: 6, backgroundColor: 'rgba(44,44,46,0.85)',
+    paddingVertical: 14,
+    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   tileBtnImgOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
+  tileSeparator: { width: 36, height: 2, backgroundColor: Colors.accent, marginVertical: 7 },
   tileBtnLabel: {
-    fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF',
+    fontSize: 11, fontWeight: '600', textAlign: 'center', color: '#FFFFFF',
   },
   tileToggleBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingVertical: 6,
+    gap: 4, paddingVertical: 7,
     borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
   },
   tileToggleText: { fontSize: 12, color: Colors.textLight },
