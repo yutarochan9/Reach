@@ -58,12 +58,12 @@ export default function TalkDetailScreen() {
 
       const [{ data: profile }, { data: broadcasts }, { data: menu }] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', senderId).single(),
-        supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', senderId).maybeSingle(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
           .eq('sender_id', senderId)
           .eq('status', 'published')
           .order('created_at', { ascending: true }),
+        supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', senderId).maybeSingle(),
       ])
 
       setSenderName(profile?.display_name ?? '')
