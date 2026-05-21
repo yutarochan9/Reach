@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -43,6 +43,8 @@ export default function TalkDetailScreen() {
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
+  const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean } | null>(null)
+  const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
@@ -54,8 +56,9 @@ export default function TalkDetailScreen() {
       const self = user.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }] = await Promise.all([
+      const [{ data: profile }, { data: broadcasts }, { data: menu }] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', senderId).single(),
+        supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', senderId).maybeSingle(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
           .eq('sender_id', senderId)
@@ -66,6 +69,7 @@ export default function TalkDetailScreen() {
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
       setSenderIsOfficial((profile as any)?.is_official ?? false)
+      setRichMenu(menu && menu.is_active ? menu : null)
 
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)
@@ -435,6 +439,32 @@ export default function TalkDetailScreen() {
       {BroadcastList}
       {ReactionPopup}
 
+      {/* タイル（クリエイターがリッチメニューを設定している場合のみ表示） */}
+      {richMenu && richMenu.buttons.length > 0 && (
+        <View style={styles.tileContainer}>
+          {tileOpen && (
+            <View style={styles.tileGrid}>
+              {richMenu.buttons.map((btn: any) => (
+                <TouchableOpacity
+                  key={btn.id}
+                  style={[styles.tileBtn, { backgroundColor: btn.bgColor ?? '#2C2C2E' }]}
+                  onPress={() => Linking.openURL(btn.url)}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name={btn.icon ?? 'link-outline'} size={26} color={btn.textColor ?? '#FFFFFF'} />
+                  <Text style={[styles.tileBtnLabel, { color: btn.textColor ?? '#FFFFFF' }]} numberOfLines={2}>{btn.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity style={styles.tileToggleBar} onPress={() => setTileOpen(p => !p)}>
+            <Ionicons name="keypad-outline" size={18} color={Colors.textLight} />
+            <Text style={styles.tileToggleText}>メニューを閉じる／開く</Text>
+            <Ionicons name={tileOpen ? 'chevron-down' : 'chevron-up'} size={14} color={Colors.textLight} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* DM入力エリア */}
       <View style={styles.inputArea}>
         <View style={styles.inputRow}>
@@ -567,4 +597,27 @@ const styles = StyleSheet.create({
   sendDisabled: { backgroundColor: '#B0B0B0' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
+  tileContainer: {
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    backgroundColor: Colors.header,
+  },
+  tileGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    padding: 4,
+  },
+  tileBtn: {
+    width: '33.33%', aspectRatio: 1.2,
+    alignItems: 'center', justifyContent: 'center',
+    gap: 6, padding: 8,
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  tileBtnLabel: {
+    fontSize: 11, fontWeight: '600', textAlign: 'center',
+  },
+  tileToggleBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  tileToggleText: { fontSize: 12, color: Colors.textLight },
 })

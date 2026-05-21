@@ -13,6 +13,8 @@ type RichMenuButton = {
   label: string
   url: string
   icon: string
+  bgColor?: string
+  textColor?: string
 }
 
 const ICON_OPTIONS = [
@@ -26,6 +28,19 @@ const ICON_OPTIONS = [
   { name: 'gift-outline', label: 'プレゼント' },
   { name: 'star-outline', label: 'お気に入り' },
   { name: 'information-circle-outline', label: '情報' },
+]
+
+const COLOR_OPTIONS = [
+  { bg: '#2C2C2E', text: '#FFFFFF', label: 'ダーク' },
+  { bg: '#1C1C1E', text: '#FFFFFF', label: 'ブラック' },
+  { bg: '#38A169', text: '#FFFFFF', label: 'グリーン' },
+  { bg: '#028090', text: '#FFFFFF', label: 'ティール' },
+  { bg: '#3182CE', text: '#FFFFFF', label: 'ブルー' },
+  { bg: '#E53E3E', text: '#FFFFFF', label: 'レッド' },
+  { bg: '#DD6B20', text: '#FFFFFF', label: 'オレンジ' },
+  { bg: '#805AD5', text: '#FFFFFF', label: 'パープル' },
+  { bg: '#FFFFFF', text: '#2D3748', label: 'ホワイト' },
+  { bg: '#F4F6FA', text: '#2D3748', label: 'ライト' },
 ]
 
 const genId = () => Math.random().toString(36).slice(2)
@@ -148,9 +163,9 @@ export default function RichMenuScreen() {
           ) : (
             <View style={styles.previewGrid}>
               {buttons.map(btn => (
-                <View key={btn.id} style={styles.previewBtn}>
-                  <Ionicons name={btn.icon as any} size={22} color={Colors.accent} />
-                  <Text style={styles.previewBtnLabel} numberOfLines={1}>{btn.label}</Text>
+                <View key={btn.id} style={[styles.previewBtn, { backgroundColor: btn.bgColor ?? '#2C2C2E' }]}>
+                  <Ionicons name={btn.icon as any} size={22} color={btn.textColor ?? '#FFFFFF'} />
+                  <Text style={[styles.previewBtnLabel, { color: btn.textColor ?? '#FFFFFF' }]} numberOfLines={1}>{btn.label}</Text>
                 </View>
               ))}
             </View>
@@ -223,6 +238,22 @@ export default function RichMenuScreen() {
                 ))}
               </View>
 
+              <Text style={styles.fieldLabel}>ボタンの色</Text>
+              <View style={styles.colorGrid}>
+                {COLOR_OPTIONS.map((opt, i) => {
+                  const isSelected = (editingBtn?.bgColor ?? '#2C2C2E') === opt.bg
+                  return (
+                    <TouchableOpacity
+                      key={i}
+                      style={[styles.colorOption, { backgroundColor: opt.bg }, isSelected && styles.colorOptionActive]}
+                      onPress={() => setEditingBtn(prev => ({ ...prev, bgColor: opt.bg, textColor: opt.text }))}
+                    >
+                      {isSelected && <Ionicons name="checkmark" size={16} color={opt.text} />}
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+
               <Text style={styles.fieldLabel}>ラベル</Text>
               <TextInput
                 style={styles.input}
@@ -279,11 +310,17 @@ const styles = StyleSheet.create({
   previewEmptyText: { fontSize: 13, color: Colors.textLight },
   previewGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   previewBtn: {
-    flex: 1, minWidth: '30%', backgroundColor: Colors.background,
-    borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    flex: 1, minWidth: '30%', borderRadius: 12,
     padding: 12, alignItems: 'center', gap: 6,
   },
-  previewBtnLabel: { fontSize: 11, color: Colors.text, fontWeight: '600' },
+  previewBtnLabel: { fontSize: 11, fontWeight: '600' },
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  colorOption: {
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  colorOptionActive: { borderWidth: 2, borderColor: Colors.accent },
   btnRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 10, borderTopWidth: 1, borderTopColor: Colors.border,
