@@ -36,8 +36,8 @@ const BUCKET = 'broadcast-images'
 const SLOTS = [0, 1, 2, 3, 4, 5]
 const genId = () => Math.random().toString(36).slice(2)
 
-// Web は fetch+blob、Native は XHR+FormData でアップロード
-async function uploadImage(
+// Native のみ: XHR + FormData でアップロード
+async function uploadImageNative(
   userId: string,
   asset: ImagePicker.ImagePickerAsset,
   token: string,
@@ -48,40 +48,54 @@ async function uploadImage(
   const filename = `img_${Date.now()}.${ext}`
   const path = `tiles/${userId}/${filename}`
   const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
-
-  if (Platform.OS === 'web') {
-    try {
-      const blob = await fetch(asset.uri).then(r => r.blob())
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, blob, { contentType: mimeType, upsert: true })
-      if (error) { Alert.alert('アップロードエラー', error.message); return null }
-      return publicUrl
-    } catch (e: any) {
-      Alert.alert('エラー', e?.message ?? '画像のアップロードに失敗しました')
-      return null
-    }
-  }
-
-  // Native: XHR + FormData
   return new Promise<string | null>(resolve => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`)
     xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.setRequestHeader('x-upsert', 'true')
     xhr.onload = () => {
-      if (xhr.status === 200 || xhr.status === 201) {
-        resolve(publicUrl)
-      } else {
-        Alert.alert('アップロードエラー', `${xhr.status}: ${xhr.responseText}`)
-        resolve(null)
-      }
+      if (xhr.status === 200 || xhr.status === 201) { resolve(publicUrl) }
+      else { Alert.alert('アップロードエラー', `${xhr.status}: ${xhr.responseText}`); resolve(null) }
     }
     xhr.onerror = () => { Alert.alert('エラー', 'ネットワークエラー'); resolve(null) }
     const fd = new FormData()
     fd.append('', { uri: asset.uri, type: mimeType, name: filename } as any)
     xhr.send(fd)
   })
+}
+
+// Web のみ: ブラウザ標準のfile inputを使って File オブジェクトを直接アップロード
+// expo-image-picker の web 実装はモーダル内で canceled:true になる不具合があるため使わない
+function pickImageWeb(userId: string, onSuccess: (url: string) => void, setUploading: (v: boolean) => void) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/jpeg,image/png,image/webp,image/gif'
+  input.style.display = 'none'
+  document.body.appendChild(input)
+  input.onchange = async () => {
+    document.body.removeChild(input)
+    const file = input.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+      const path = `tiles/${userId}/img_${Date.now()}.${ext}`
+      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
+      if (error) { Alert.alert('アップロードエラー', error.message); return }
+      onSuccess(publicUrl)
+    } catch (e: any) {
+      Alert.alert('エラー', e?.message ?? 'エラーが発生しました')
+    } finally {
+      setUploading(false)
+    }
+  }
+  input.addEventListener('cancel', () => {
+    if (document.body.contains(input)) document.body.removeChild(input)
+  })
+  input.click()
 }
 
 function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -179,20 +193,21 @@ export default function RichMenuScreen() {
 
   const pickImage = async (onSuccess: (url: string) => void) => {
     if (!userId) return
-    if (Platform.OS !== 'web') {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      if (status !== 'granted') { Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください'); return }
+    if (Platform.OS === 'web') {
+      // Web: expo-image-pickerを使わず、ブラウザのfile inputを直接使う
+      pickImageWeb(userId, onSuccess, setUploading)
+      return
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-    })
-    if (result.canceled || !result.assets[0]) return
+    // Native
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください'); return }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
+    if (!result.assets?.[0]) return
     setUploading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const url = await uploadImage(userId, result.assets[0], session.access_token)
+      const url = await uploadImageNative(userId, result.assets[0], session.access_token)
       if (url) onSuccess(url)
     } finally {
       setUploading(false)
