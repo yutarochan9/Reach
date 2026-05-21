@@ -245,108 +245,146 @@ export default function RichMenuScreen() {
           <ToggleSwitch value={isActive} onChange={setIsActive} />
         </View>
 
-        {/* パネル背景画像 */}
-        <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch' }]}>
-          <Text style={[styles.cardTitle, { marginBottom: 10 }]}>パネル背景画像</Text>
-          {panelBgImage ? (
-            <View style={styles.bgActions}>
-              <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
-              <TouchableOpacity style={styles.bgBtn} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
-                {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
-                <Text style={styles.bgBtnDelText}>削除</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity style={styles.bgPicker} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
-              {uploading
-                ? <ActivityIndicator size="small" color={Colors.accent} />
-                : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
-              }
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* 左右二列レイアウト */}
+        <View style={styles.twoCol}>
 
-        {/* プレビュー（メッセージ画面と同じ見た目） */}
-        <Text style={styles.sectionLabel}>タップして編集（最大6コマ）</Text>
-        <View style={styles.phoneFrame}>
-          {/* ヘッダー */}
-          <View style={styles.phoneHeader}>
-            <View style={styles.phoneAvatar}>
-              <Text style={styles.phoneAvatarText}>R</Text>
-            </View>
-            <Text style={styles.phoneName}>クリエイター名</Text>
-          </View>
-          {/* チャットエリア */}
-          <View style={styles.phoneChat}>
-            <View style={styles.bubbleRow}>
-              <View style={styles.bubble}>
-                <Text style={styles.bubbleText}>こんにちは！</Text>
-              </View>
-            </View>
-            <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
-              <View style={[styles.bubble, styles.bubbleSelf]}>
-                <Text style={[styles.bubbleText, { color: '#FFFFFF' }]}>よろしくお願いします</Text>
-              </View>
-            </View>
-          </View>
-          {/* タイルパネル */}
-          <View style={styles.tilePanel}>
-            {panelBgImage && (
-              <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-            )}
-            <View style={styles.panelOverlay} />
-            <View style={styles.tileHandleArea}>
-              <View style={styles.tileHandleBar} />
-            </View>
-            <View style={styles.tileGrid}>
-              {SLOTS.map(i => {
-                const btn = buttons[i]
-                return (
-                  <TouchableOpacity
-                    key={btn ? btn.id : `empty-${i}`}
-                    style={styles.tileSlot}
-                    onPress={() => openSlot(i)}
-                    activeOpacity={0.8}
-                  >
-                    {btn ? (
-                      <>
-                        {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                        {btn.bgImage && <View style={styles.tileImgOverlay} />}
-                        <Ionicons name={btn.icon as any} size={24} color="#FFFFFF" />
-                        <View style={styles.tileSeparator} />
-                        <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
-                        <TouchableOpacity
-                          style={styles.tileDeleteBtn}
-                          onPress={() => handleDeleteBtn(btn.id)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <Ionicons name="add" size={26} color="rgba(255,255,255,0.3)" />
-                    )}
+          {/* 左：タイル設定 */}
+          <View style={styles.leftCol}>
+            {/* パネル背景画像 */}
+            <View style={[styles.card, { marginHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
+              <Text style={[styles.cardTitle, { marginBottom: 10 }]}>パネル背景</Text>
+              {panelBgImage ? (
+                <View style={styles.bgActions}>
+                  <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
+                  <TouchableOpacity style={styles.bgBtn} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
+                    {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
                   </TouchableOpacity>
-                )
-              })}
+                  <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
+                    <Text style={styles.bgBtnDelText}>削除</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.bgPicker} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
+                  {uploading
+                    ? <ActivityIndicator size="small" color={Colors.accent} />
+                    : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
+                  }
+                </TouchableOpacity>
+              )}
             </View>
-          </View>
-          {/* DM入力エリア（モック） */}
-          <View style={styles.phoneDmArea}>
-            <View style={styles.phoneDmField}>
-              <Text style={styles.phoneDmPlaceholder}>メッセージ</Text>
-            </View>
-            <View style={styles.phoneDmSend}>
-              <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
-            </View>
-          </View>
-        </View>
 
-        <Text style={styles.note}>
-          ※ URLには https:// から始まるリンクを入力してください。
-        </Text>
+            {/* 編集タイルグリッド */}
+            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>タップして編集</Text>
+            <View style={styles.tilePanel}>
+              {panelBgImage && (
+                <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              )}
+              <View style={styles.panelOverlay} />
+              <View style={styles.tileHandleArea}>
+                <View style={styles.tileHandleBar} />
+              </View>
+              <View style={styles.tileGrid}>
+                {SLOTS.map(i => {
+                  const btn = buttons[i]
+                  return (
+                    <TouchableOpacity
+                      key={btn ? btn.id : `empty-${i}`}
+                      style={styles.tileSlot}
+                      onPress={() => openSlot(i)}
+                      activeOpacity={0.8}
+                    >
+                      {btn ? (
+                        <>
+                          {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                          {btn.bgImage && <View style={styles.tileImgOverlay} />}
+                          <Ionicons name={btn.icon as any} size={22} color="#FFFFFF" />
+                          <View style={styles.tileSeparator} />
+                          <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
+                          <TouchableOpacity
+                            style={styles.tileDeleteBtn}
+                            onPress={() => handleDeleteBtn(btn.id)}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
+                          </TouchableOpacity>
+                        </>
+                      ) : (
+                        <Ionicons name="add" size={24} color="rgba(255,255,255,0.3)" />
+                      )}
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+            </View>
+
+            <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
+              ※ URLには https:// から始まるリンクを入力してください。
+            </Text>
+          </View>
+
+          {/* 右：プレビュー */}
+          <View style={styles.rightCol}>
+            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>プレビュー</Text>
+            <View style={[styles.phoneFrame, { marginHorizontal: 0 }]}>
+              <View style={styles.phoneHeader}>
+                <View style={styles.phoneAvatar}>
+                  <Text style={styles.phoneAvatarText}>R</Text>
+                </View>
+                <Text style={styles.phoneName}>クリエイター名</Text>
+              </View>
+              <View style={styles.phoneChat}>
+                <View style={styles.bubbleRow}>
+                  <View style={styles.bubble}>
+                    <Text style={styles.bubbleText}>こんにちは！</Text>
+                  </View>
+                </View>
+                <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
+                  <View style={[styles.bubble, styles.bubbleSelf]}>
+                    <Text style={[styles.bubbleText, { color: '#FFFFFF' }]}>よろしくお願いします</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.tilePanel}>
+                {panelBgImage && (
+                  <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                )}
+                <View style={styles.panelOverlay} />
+                <View style={styles.tileHandleArea}>
+                  <View style={styles.tileHandleBar} />
+                </View>
+                <View style={styles.tileGrid}>
+                  {SLOTS.map(i => {
+                    const btn = buttons[i]
+                    return (
+                      <View key={btn ? btn.id : `prev-${i}`} style={styles.tileSlot}>
+                        {btn ? (
+                          <>
+                            {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                            {btn.bgImage && <View style={styles.tileImgOverlay} />}
+                            <Ionicons name={btn.icon as any} size={18} color="#FFFFFF" />
+                            <View style={styles.tileSeparator} />
+                            <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
+                          </>
+                        ) : (
+                          <Ionicons name="add" size={18} color="rgba(255,255,255,0.2)" />
+                        )}
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+              <View style={styles.phoneDmArea}>
+                <View style={styles.phoneDmField}>
+                  <Text style={styles.phoneDmPlaceholder}>メッセージ</Text>
+                </View>
+                <View style={styles.phoneDmSend}>
+                  <Ionicons name="arrow-up" size={14} color="#FFFFFF" />
+                </View>
+              </View>
+            </View>
+          </View>
+
+        </View>
       </ScrollView>
 
       {/* タイル編集モーダル */}
@@ -510,6 +548,11 @@ const styles = StyleSheet.create({
   },
   bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
 
+  // 二列レイアウト
+  twoCol: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, alignItems: 'flex-start' },
+  leftCol: { flex: 1, gap: 10 },
+  rightCol: { flex: 1 },
+
   // セクションラベル
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
 
@@ -570,7 +613,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.08)',
   },
   tileSlot: {
-    width: '33.33%', height: 90, overflow: 'hidden',
+    width: '33.33%', aspectRatio: 1, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',
     borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)',
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
