@@ -33,23 +33,37 @@ const ICON_OPTIONS = [
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const BUCKET = 'broadcast-images'
-
 const SLOTS = [0, 1, 2, 3, 4, 5]
 const genId = () => Math.random().toString(36).slice(2)
 
-// XHR + FormData でアップロード（React Native の fetch で arrayBuffer が動かないため）
+// Web は fetch+blob、Native は XHR+FormData でアップロード
 async function uploadImage(
   userId: string,
-  prefix: string,
   asset: ImagePicker.ImagePickerAsset,
   token: string,
 ): Promise<string | null> {
   const mimeType = asset.mimeType ?? 'image/jpeg'
   const rawExt = asset.uri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg'
   const ext = ['jpg', 'jpeg', 'png', 'webp'].includes(rawExt) ? rawExt : 'jpg'
-  const filename = `${prefix}_${Date.now()}.${ext}`
+  const filename = `img_${Date.now()}.${ext}`
   const path = `tiles/${userId}/${filename}`
+  const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
 
+  if (Platform.OS === 'web') {
+    try {
+      const blob = await fetch(asset.uri).then(r => r.blob())
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, blob, { contentType: mimeType, upsert: true })
+      if (error) { Alert.alert('アップロードエラー', error.message); return null }
+      return publicUrl
+    } catch (e: any) {
+      Alert.alert('エラー', e?.message ?? '画像のアップロードに失敗しました')
+      return null
+    }
+  }
+
+  // Native: XHR + FormData
   return new Promise<string | null>(resolve => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`)
@@ -57,20 +71,19 @@ async function uploadImage(
     xhr.setRequestHeader('x-upsert', 'true')
     xhr.onload = () => {
       if (xhr.status === 200 || xhr.status === 201) {
-        resolve(`${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`)
+        resolve(publicUrl)
       } else {
         Alert.alert('アップロードエラー', `${xhr.status}: ${xhr.responseText}`)
         resolve(null)
       }
     }
     xhr.onerror = () => { Alert.alert('エラー', 'ネットワークエラー'); resolve(null) }
-    const formData = new FormData()
-    formData.append('', { uri: asset.uri, type: mimeType, name: filename } as any)
-    xhr.send(formData)
+    const fd = new FormData()
+    fd.append('', { uri: asset.uri, type: mimeType, name: filename } as any)
+    xhr.send(fd)
   })
 }
 
-// カスタムトグルスイッチ
 function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current
   useEffect(() => {
@@ -118,7 +131,11 @@ export default function RichMenuScreen() {
   const handleSave = async () => {
     if (!userId) return
     setSaving(true)
-    const payload = { buttons, is_active: isActive, panel_bg_image: panelBgImage, updated_at: new Date().toISOString() }
+    const payload = {
+      buttons, is_active: isActive,
+      panel_bg_image: panelBgImage,
+      updated_at: new Date().toISOString(),
+    }
     if (menuId) {
       await supabase.from('rich_menus').update(payload).eq('id', menuId)
     } else {
@@ -166,14 +183,20 @@ export default function RichMenuScreen() {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (status !== 'granted') { Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください'); return }
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    })
     if (result.canceled || !result.assets[0]) return
     setUploading(true)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { setUploading(false); return }
-    const url = await uploadImage(userId, 'img', result.assets[0], session.access_token)
-    if (url) onSuccess(url)
-    setUploading(false)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      const url = await uploadImage(userId, result.assets[0], session.access_token)
+      if (url) onSuccess(url)
+    } finally {
+      setUploading(false)
+    }
   }
 
   if (loading) {
@@ -197,8 +220,9 @@ export default function RichMenuScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
+
         {/* 表示切り替えトグル */}
-        <View style={styles.toggleCard}>
+        <View style={styles.card}>
           <View>
             <Text style={styles.toggleLabel}>メニューを表示</Text>
             <Text style={styles.toggleDesc}>トーク画面にタイルメニューを表示します</Text>
@@ -206,70 +230,76 @@ export default function RichMenuScreen() {
           <ToggleSwitch value={isActive} onChange={setIsActive} />
         </View>
 
-        {/* タイルグリッド */}
-        <View style={styles.gridCard}>
-          <Text style={styles.gridCaption}>タイルをタップして追加・編集（最大6コマ）</Text>
-
-          {/* パネル背景画像 */}
-          <View style={styles.bgPickerRow}>
-            <Text style={styles.bgPickerLabel}>パネル背景</Text>
-            {panelBgImage ? (
-              <View style={styles.bgPickerActions}>
-                <Image source={{ uri: panelBgImage }} style={styles.bgPickerThumb} resizeMode="cover" />
-                <TouchableOpacity style={styles.bgBtn} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
-                  {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
-                  <Text style={styles.bgBtnDelText}>削除</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.bgPickerEmpty} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
-                {uploading
-                  ? <ActivityIndicator size="small" color={Colors.accent} />
-                  : <><Ionicons name="image-outline" size={17} color={Colors.accent} /><Text style={styles.bgPickerEmptyText}>背景画像を選択</Text></>
-                }
+        {/* パネル背景画像 */}
+        <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch' }]}>
+          <Text style={[styles.cardTitle, { marginBottom: 10 }]}>パネル背景画像</Text>
+          {panelBgImage ? (
+            <View style={styles.bgActions}>
+              <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
+              <TouchableOpacity style={styles.bgBtn} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
+                {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
               </TouchableOpacity>
-            )}
-          </View>
-
-          {/* タイルパネルプレビュー */}
-          <View style={styles.tilePanel}>
-            {panelBgImage && <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-            <View style={styles.panelOverlay} />
-            <View style={styles.tileGrid}>
-              {SLOTS.map(i => {
-                const btn = buttons[i]
-                return (
-                  <TouchableOpacity
-                    key={btn ? btn.id : `empty-${i}`}
-                    style={styles.tileSlot}
-                    onPress={() => openSlot(i)}
-                    activeOpacity={0.8}
-                  >
-                    {btn ? (
-                      <>
-                        {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                        {btn.bgImage && <View style={styles.tileImgOverlay} />}
-                        <Ionicons name={btn.icon as any} size={28} color="#FFFFFF" />
-                        <View style={styles.tileSeparator} />
-                        <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
-                        <TouchableOpacity style={styles.tileDeleteBtn} onPress={() => handleDeleteBtn(btn.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <Ionicons name="add" size={28} color="rgba(255,255,255,0.3)" />
-                    )}
-                  </TouchableOpacity>
-                )
-              })}
+              <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
+                <Text style={styles.bgBtnDelText}>削除</Text>
+              </TouchableOpacity>
             </View>
+          ) : (
+            <TouchableOpacity style={styles.bgPicker} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
+              {uploading
+                ? <ActivityIndicator size="small" color={Colors.accent} />
+                : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
+              }
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* タイルパネル（トーク画面と同じ見た目） */}
+        <Text style={styles.sectionLabel}>タップして編集（最大6コマ）</Text>
+        <View style={styles.tilePanel}>
+          {panelBgImage && (
+            <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+          )}
+          <View style={styles.panelOverlay} />
+          <View style={styles.tileGrid}>
+            {SLOTS.map(i => {
+              const btn = buttons[i]
+              return (
+                <TouchableOpacity
+                  key={btn ? btn.id : `empty-${i}`}
+                  style={styles.tileSlot}
+                  onPress={() => openSlot(i)}
+                  activeOpacity={0.8}
+                >
+                  {btn ? (
+                    <>
+                      {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                      {btn.bgImage && <View style={styles.tileImgOverlay} />}
+                      <Ionicons name={btn.icon as any} size={26} color="#FFFFFF" />
+                      <View style={styles.tileSeparator} />
+                      <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
+                      <TouchableOpacity
+                        style={styles.tileDeleteBtn}
+                        onPress={() => handleDeleteBtn(btn.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Ionicons name="add" size={28} color="rgba(255,255,255,0.3)" />
+                  )}
+                </TouchableOpacity>
+              )
+            })}
+          </View>
+          {/* トグルバー（プレビュー用） */}
+          <View style={styles.tileToggleBar}>
+            <Ionicons name="keypad-outline" size={16} color="rgba(255,255,255,0.5)" />
+            <Ionicons name="chevron-down" size={13} color="rgba(255,255,255,0.5)" />
           </View>
         </View>
 
         <Text style={styles.note}>
-          ※ タイルは最大6コマまで設定できます。{'\n'}
           ※ URLには https:// から始まるリンクを入力してください。
         </Text>
       </ScrollView>
@@ -294,10 +324,12 @@ export default function RichMenuScreen() {
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
-              {/* プレビュー */}
+              {/* タイルプレビュー */}
               <View style={styles.previewWrap}>
                 <View style={styles.previewTile}>
-                  {editingBtn?.bgImage && <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                  {editingBtn?.bgImage && (
+                    <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                  )}
                   {editingBtn?.bgImage && <View style={styles.tileImgOverlay} />}
                   <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={30} color="#FFFFFF" />
                   <View style={styles.tileSeparator} />
@@ -305,24 +337,35 @@ export default function RichMenuScreen() {
                 </View>
               </View>
 
-              {/* タイル背景画像 */}
+              {/* 背景画像 */}
               <Text style={styles.fieldLabel}>背景画像</Text>
-              <View style={styles.bgImageRow}>
+              <View style={styles.bgActions}>
                 {editingBtn?.bgImage ? (
                   <>
-                    <Image source={{ uri: editingBtn.bgImage }} style={styles.bgImageThumb} resizeMode="cover" />
-                    <TouchableOpacity style={styles.bgBtn} onPress={() => pickImage(url => setEditingBtn(prev => prev ? { ...prev, bgImage: url } : prev))} disabled={uploading}>
+                    <Image source={{ uri: editingBtn.bgImage }} style={styles.bgThumb} resizeMode="cover" />
+                    <TouchableOpacity
+                      style={styles.bgBtn}
+                      onPress={() => pickImage(url => setEditingBtn(prev => prev ? { ...prev, bgImage: url } : prev))}
+                      disabled={uploading}
+                    >
                       {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setEditingBtn(prev => prev ? { ...prev, bgImage: undefined } : prev)}>
+                    <TouchableOpacity
+                      style={[styles.bgBtn, styles.bgBtnDel]}
+                      onPress={() => setEditingBtn(prev => prev ? { ...prev, bgImage: undefined } : prev)}
+                    >
                       <Text style={styles.bgBtnDelText}>削除</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
-                  <TouchableOpacity style={styles.bgImagePicker} onPress={() => pickImage(url => setEditingBtn(prev => prev ? { ...prev, bgImage: url } : prev))} disabled={uploading}>
+                  <TouchableOpacity
+                    style={styles.bgPicker}
+                    onPress={() => pickImage(url => setEditingBtn(prev => prev ? { ...prev, bgImage: url } : prev))}
+                    disabled={uploading}
+                  >
                     {uploading
                       ? <ActivityIndicator size="small" color={Colors.accent} />
-                      : <><Ionicons name="image-outline" size={20} color={Colors.accent} /><Text style={styles.bgImagePickerText}>画像を選択</Text></>
+                      : <><Ionicons name="image-outline" size={20} color={Colors.accent} /><Text style={styles.bgPickerText}>画像を選択</Text></>
                     }
                   </TouchableOpacity>
                 )}
@@ -385,13 +428,17 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   saveButton: { width: 40, alignItems: 'flex-end' },
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
-  content: { padding: 16, gap: 12, paddingBottom: 40 },
+  content: { paddingTop: 16, paddingBottom: 40, gap: 12 },
 
-  toggleCard: {
+  // カード（トグル・パネル背景）
+  card: {
     backgroundColor: Colors.white, borderRadius: 16,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, marginHorizontal: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    gap: 12,
   },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 10 },
   toggleLabel: { fontSize: 15, fontWeight: '600', color: Colors.text },
   toggleDesc: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
@@ -401,34 +448,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
   },
 
-  gridCard: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 12, gap: 10,
-  },
-  gridCaption: { fontSize: 11, color: Colors.textLight, textAlign: 'center' },
-
-  // パネル背景選択
-  bgPickerRow: { gap: 6 },
-  bgPickerLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.4 },
-  bgPickerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bgPickerThumb: { width: 44, height: 44, borderRadius: 8 },
-  bgPickerEmpty: {
-    height: 40, borderRadius: 10, borderWidth: 1.5,
-    borderColor: Colors.accent, borderStyle: 'dashed',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-  },
-  bgPickerEmptyText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
-
+  // パネル背景
+  bgActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  bgThumb: { width: 48, height: 48, borderRadius: 8 },
   bgBtn: {
-    paddingHorizontal: 12, paddingVertical: 7,
+    paddingHorizontal: 13, paddingVertical: 7,
     borderRadius: 8, borderWidth: 1, borderColor: Colors.accent,
   },
   bgBtnText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   bgBtnDel: { borderColor: '#E53E3E' },
   bgBtnDelText: { fontSize: 13, color: '#E53E3E', fontWeight: '600' },
+  bgPicker: {
+    flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5,
+    borderColor: Colors.accent, borderStyle: 'dashed',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
 
-  // タイルパネル
+  // セクションラベル
+  sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
+
+  // タイルパネル（トーク画面と同じ見た目）
   tilePanel: {
     backgroundColor: '#1C1C1E', overflow: 'hidden',
     borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
@@ -438,18 +478,24 @@ const styles = StyleSheet.create({
   tileGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   tileSlot: {
     width: '33.33%', aspectRatio: 1, overflow: 'hidden',
-    alignItems: 'center', justifyContent: 'center', gap: 0,
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14,
     borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)',
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)',
-    paddingVertical: 14,
   },
   tileImgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   tileSeparator: { width: 36, height: 2, backgroundColor: Colors.accent, marginVertical: 7 },
   tileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
   tileDeleteBtn: { position: 'absolute', top: 5, right: 5 },
+  tileToggleBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 7,
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+  },
 
-  note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center' },
+  note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
 
+  // モーダル
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
@@ -462,23 +508,12 @@ const styles = StyleSheet.create({
   modalBody: { padding: 16, gap: 10, paddingBottom: 40 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 8 },
 
-  // プレビュー
   previewWrap: { alignItems: 'center', paddingVertical: 8 },
   previewTile: {
     width: 110, aspectRatio: 1, overflow: 'hidden',
     backgroundColor: '#2C2C2E', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 14,
   },
-
-  // 背景画像
-  bgImageRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  bgImageThumb: { width: 52, height: 52, borderRadius: 8 },
-  bgImagePicker: {
-    flex: 1, height: 52, borderRadius: 10, borderWidth: 1.5,
-    borderColor: Colors.accent, borderStyle: 'dashed',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-  },
-  bgImagePickerText: { fontSize: 14, color: Colors.accent, fontWeight: '600' },
 
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: {
