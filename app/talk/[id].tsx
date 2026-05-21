@@ -397,6 +397,38 @@ export default function TalkDetailScreen() {
     </Modal>
   )
 
+  // タイルグリッドのJSX（isSelf・非selfで共有）
+  const TilePanel = richMenu && richMenu.buttons.length > 0 ? (
+    <View style={styles.tileContainer}>
+      {richMenu.panel_bg_image && (
+        <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+      )}
+      <View style={styles.panelDimOverlay} />
+      {/* 折りたたみハンドル（上端中央の細いバー） */}
+      <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
+        <View style={styles.tileHandleBar} />
+      </TouchableOpacity>
+      {tileOpen && (
+        <View style={styles.tileGrid}>
+          {richMenu.buttons.map((btn: any) => (
+            <TouchableOpacity
+              key={btn.id}
+              style={styles.tileBtn}
+              onPress={() => Linking.openURL(btn.url)}
+              activeOpacity={0.75}
+            >
+              {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+              {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
+              <Ionicons name={btn.icon ?? 'link-outline'} size={26} color="#FFFFFF" />
+              <View style={styles.tileSeparator} />
+              <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  ) : null
+
   if (isSelf) {
     return (
       <View style={styles.container}>
@@ -409,36 +441,7 @@ export default function TalkDetailScreen() {
         </View>
         {BroadcastList}
         {ReactionPopup}
-        {richMenu && richMenu.buttons.length > 0 && (
-          <View style={styles.tileContainer}>
-            {richMenu.panel_bg_image && (
-              <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-            )}
-            {richMenu.panel_bg_image && <View style={styles.panelDimOverlay} />}
-            {tileOpen && (
-              <View style={styles.tileGrid}>
-                {richMenu.buttons.map((btn: any) => (
-                  <TouchableOpacity
-                    key={btn.id}
-                    style={styles.tileBtn}
-                    onPress={() => Linking.openURL(btn.url)}
-                    activeOpacity={0.75}
-                  >
-                    {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                    {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
-                    <Ionicons name={btn.icon ?? 'link-outline'} size={26} color="#FFFFFF" />
-                    <View style={styles.tileSeparator} />
-                    <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            <TouchableOpacity style={styles.tileToggleBar} onPress={() => setTileOpen(p => !p)}>
-              <Ionicons name="keypad-outline" size={16} color="rgba(255,255,255,0.6)" />
-              <Ionicons name={tileOpen ? 'chevron-down' : 'chevron-up'} size={13} color="rgba(255,255,255,0.6)" />
-            </TouchableOpacity>
-          </View>
-        )}
+        {TilePanel}
       </View>
     )
   }
@@ -469,39 +472,9 @@ export default function TalkDetailScreen() {
 
       {BroadcastList}
       {ReactionPopup}
+      {TilePanel}
 
-      {/* タイル（クリエイターがリッチメニューを設定している場合のみ表示） */}
-      {richMenu && richMenu.buttons.length > 0 && (
-        <View style={styles.tileContainer}>
-          {richMenu.panel_bg_image && (
-            <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-          )}
-          {richMenu.panel_bg_image && <View style={styles.panelDimOverlay} />}
-          {tileOpen && (
-            <View style={styles.tileGrid}>
-              {richMenu.buttons.map((btn: any) => (
-                <TouchableOpacity
-                  key={btn.id}
-                  style={styles.tileBtn}
-                  onPress={() => Linking.openURL(btn.url)}
-                  activeOpacity={0.75}
-                >
-                  {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                  {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
-                  <Ionicons name={btn.icon ?? 'link-outline'} size={20} color="#FFFFFF" />
-                  <Text style={styles.tileBtnLabel} numberOfLines={2}>{btn.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          <TouchableOpacity style={styles.tileToggleBar} onPress={() => setTileOpen(p => !p)}>
-            <Ionicons name="keypad-outline" size={16} color="rgba(255,255,255,0.6)" />
-            <Ionicons name={tileOpen ? 'chevron-down' : 'chevron-up'} size={13} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* DM入力エリア */}
+      {/* DM入力エリア（常に表示） */}
       <View style={styles.inputArea}>
         <View style={styles.inputRow}>
           <TextInput
@@ -635,33 +608,36 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: Colors.textLight },
   tileContainer: {
     backgroundColor: '#1C1C1E', overflow: 'hidden',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
-    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)',
   },
   panelDimOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  tileGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  // 折りたたみハンドル（上端の細いバー）
+  tileHandle: {
+    alignItems: 'center', paddingVertical: 7,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  tileHandleBar: {
+    width: 32, height: 3, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  tileGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.08)',
+  },
+  // aspectRatioを使わず固定heightにしてweb/mobile両方で一貫した表示
   tileBtn: {
-    width: '33.33%', aspectRatio: 1, overflow: 'hidden',
+    width: '33.33%', height: 90, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14,
-    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   tileBtnImgOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
-  tileSeparator: { width: 36, height: 2, backgroundColor: Colors.accent, marginVertical: 7 },
-  tileBtnLabel: {
-    fontSize: 11, fontWeight: '600', textAlign: 'center', color: '#FFFFFF',
-  },
-  tileToggleBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingVertical: 7,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  tileToggleText: { fontSize: 12, color: Colors.textLight },
+  tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
+  tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
 })
