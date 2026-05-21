@@ -773,7 +773,7 @@ export default function ComposeScreen() {
               label="タイル"
               desc="プロフィールにボタンメニューを設置"
               plan="pro"
-              onPress={() => router.push('/(tabs)/talk' as any)}
+              onPress={() => router.push('/rich-menu' as any)}
             />
           </View>
 
