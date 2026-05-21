@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -16,20 +16,11 @@ type Profile = {
   is_official: boolean
 }
 
-type Broadcast = {
-  id: string
-  content: string
-  created_at: string
-  like_count: number
-  read_count: number
-  reply_count: number
-}
 
 export default function CreatorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [myId, setMyId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [followerCount, setFollowerCount] = useState(0)
   const [isFollowing, setIsFollowing] = useState(false)
   const [creatorPlan, setCreatorPlan] = useState<string>('free')
@@ -42,9 +33,8 @@ export default function CreatorScreen() {
     if (!user) return
     setMyId(user.id)
 
-    const [{ data: prof }, { data: bcs }, { data: follows }, { data: myFollow }, { data: menu }] = await Promise.all([
+    const [{ data: prof }, { data: follows }, { data: myFollow }, { data: menu }] = await Promise.all([
       supabase.from('profiles').select('*, plan').eq('id', id).single(),
-      supabase.from('broadcasts').select('id, content, created_at').eq('sender_id', id).eq('status', 'published').order('created_at', { ascending: false }),
       supabase.from('follows').select('follower_id').eq('following_id', id),
       supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle(),
       supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', id).maybeSingle(),
@@ -55,33 +45,6 @@ export default function CreatorScreen() {
     setFollowerCount((follows ?? []).length)
     setIsFollowing(!!myFollow)
     setRichMenu(menu && menu.is_active ? menu : null)
-
-    const bcIds = (bcs ?? []).map((b: any) => b.id)
-    const [{ data: reactions }, { data: reads }, { data: replies }] = await Promise.all([
-      bcIds.length > 0
-        ? supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds)
-        : Promise.resolve({ data: [] }),
-      bcIds.length > 0
-        ? supabase.from('broadcast_reads').select('broadcast_id').in('broadcast_id', bcIds)
-        : Promise.resolve({ data: [] }),
-      bcIds.length > 0
-        ? supabase.from('messages').select('broadcast_id').in('broadcast_id', bcIds)
-        : Promise.resolve({ data: [] }),
-    ])
-
-    const likeMap: Record<string, number> = {}
-    const readMap: Record<string, number> = {}
-    const replyMap: Record<string, number> = {}
-    for (const r of (reactions ?? [])) likeMap[r.broadcast_id] = (likeMap[r.broadcast_id] ?? 0) + 1
-    for (const r of (reads ?? [])) readMap[r.broadcast_id] = (readMap[r.broadcast_id] ?? 0) + 1
-    for (const r of (replies ?? [])) replyMap[r.broadcast_id] = (replyMap[r.broadcast_id] ?? 0) + 1
-
-    setBroadcasts((bcs ?? []).map((b: any) => ({
-      ...b,
-      like_count: likeMap[b.id] ?? 0,
-      read_count: readMap[b.id] ?? 0,
-      reply_count: replyMap[b.id] ?? 0,
-    })))
     setLoading(false)
   }, [id])
 
@@ -132,10 +95,7 @@ export default function CreatorScreen() {
     }
   }
 
-  const formatDate = (iso: string) => {
-    const d = new Date(iso)
-    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-  }
+
 
   if (loading) {
     return (
@@ -158,117 +118,72 @@ export default function CreatorScreen() {
         <View style={{ width: 32 }} />
       </View>
 
-      <FlatList
-        data={broadcasts}
-        keyExtractor={item => item.id}
+      <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
-        ListHeaderComponent={() => (
-          <View style={styles.profileSection}>
-            <View style={styles.avatarWrap}>
-              {profile.avatar_url
-                ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-                : <View style={styles.avatar}><Text style={styles.avatarText}>{profile.display_name[0]}</Text></View>
-              }
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.name}>{profile.display_name}</Text>
-              {profile.is_official && <Ionicons name="checkmark-circle" size={18} color="#1D9BF0" />}
-            </View>
-            {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNum}>{followerCount.toLocaleString()}</Text>
-                <Text style={styles.statLabel}>フォロワー</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statNum}>{broadcasts.length}</Text>
-                <Text style={styles.statLabel}>配信</Text>
-              </View>
-            </View>
-            {!isSelf && (
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.followButton, isFollowing && styles.followingButton]}
-                  onPress={handleFollow}
-                >
-                  {isFollowing
-                    ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
-                    : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
-                  }
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.talkButton}
-                  onPress={() => router.push(`/talk/${id}` as any)}
-                >
-                  <Ionicons name="chatbubbles" size={18} color={Colors.white} />
-                  <Text style={styles.talkButtonText}>メッセージ</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dmButton}
-                  onPress={() => router.push(`/im/${id}` as any)}
-                >
-                  <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
-                  <Text style={styles.dmButtonText}>DM</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            {richMenu && richMenu.buttons.length > 0 && (
-              <View style={styles.richMenuGrid}>
-                {richMenu.buttons.map((btn: any) => (
-                  <TouchableOpacity
-                    key={btn.id}
-                    style={styles.richMenuBtn}
-                    onPress={() => Linking.openURL(btn.url)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name={btn.icon ?? 'link-outline'} size={22} color={Colors.accent} />
-                    <Text style={styles.richMenuBtnLabel} numberOfLines={1}>{btn.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-            <Text style={styles.sectionTitle}>配信一覧</Text>
-          </View>
-        )}
-        ListEmptyComponent={() => (
-          <Text style={styles.empty}>まだ配信がありません</Text>
-        )}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.broadcastCard}
-            activeOpacity={isSelf ? 0.75 : 1}
-            onPress={isSelf ? () => router.push(`/broadcast-thread/${item.id}` as any) : undefined}
-          >
-            <Text style={styles.broadcastContent}>{item.content}</Text>
-            <View style={styles.broadcastMeta}>
-              <Text style={styles.broadcastDate}>{formatDate(item.created_at)}</Text>
-              <View style={styles.metaRight}>
-                {isSelf && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="eye-outline" size={13} color={Colors.accent} />
-                    <Text style={[styles.metaText, { color: Colors.accent }]}>{item.read_count}</Text>
-                  </View>
-                )}
-                <View style={styles.metaItem}>
-                  <Ionicons name="heart" size={13} color="#E53E3E" />
-                  <Text style={styles.metaText}>{item.like_count}</Text>
-                </View>
-                {isSelf && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="chatbubble-outline" size={13} color={Colors.textLight} />
-                    <Text style={styles.metaText}>{item.reply_count}</Text>
-                  </View>
-                )}
-                {isSelf && (
-                  <Ionicons name="chevron-forward" size={13} color={Colors.border} />
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
-        )}
         contentContainerStyle={styles.list}
-      />
+      >
+        <View style={styles.profileSection}>
+          <View style={styles.avatarWrap}>
+            {profile.avatar_url
+              ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
+              : <View style={styles.avatar}><Text style={styles.avatarText}>{profile.display_name[0]}</Text></View>
+            }
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.name}>{profile.display_name}</Text>
+            {profile.is_official && <Ionicons name="checkmark-circle" size={18} color="#1D9BF0" />}
+          </View>
+          {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNum}>{followerCount.toLocaleString()}</Text>
+              <Text style={styles.statLabel}>フォロワー</Text>
+            </View>
+          </View>
+          {!isSelf && (
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[styles.followButton, isFollowing && styles.followingButton]}
+                onPress={handleFollow}
+              >
+                {isFollowing
+                  ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
+                  : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
+                }
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.talkButton}
+                onPress={() => router.push(`/talk/${id}` as any)}
+              >
+                <Ionicons name="chatbubbles" size={18} color={Colors.white} />
+                <Text style={styles.talkButtonText}>メッセージ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.dmButton}
+                onPress={() => router.push(`/im/${id}` as any)}
+              >
+                <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
+                <Text style={styles.dmButtonText}>DM</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          {richMenu && richMenu.buttons.length > 0 && (
+            <View style={styles.richMenuGrid}>
+              {richMenu.buttons.map((btn: any) => (
+                <TouchableOpacity
+                  key={btn.id}
+                  style={styles.richMenuBtn}
+                  onPress={() => Linking.openURL(btn.url)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={btn.icon ?? 'link-outline'} size={22} color={Colors.accent} />
+                  <Text style={styles.richMenuBtnLabel} numberOfLines={1}>{btn.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </View>
   )
 }
