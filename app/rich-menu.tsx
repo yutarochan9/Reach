@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
-  Platform, Image, Animated, StyleSheet as RNStyleSheet,
+  Platform, Image, Animated,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { router, useFocusEffect } from 'expo-router'
@@ -102,7 +102,7 @@ export default function RichMenuScreen() {
       if (data) setMenuId(data.id)
     }
     setSaving(false)
-    Alert.alert('保存しました', 'タイルが更新されました')
+    router.back()
   }
 
   // スロットをタップ → 既存ボタンなら編集、空なら新規
@@ -201,6 +201,7 @@ export default function RichMenuScreen() {
         {/* タイルグリッド（プレビュー兼編集） */}
         <View style={styles.gridCard}>
           <Text style={styles.gridCaption}>タップしてタイルを追加・編集（最大6コマ）</Text>
+          <View style={styles.tilePanel}>
           <View style={styles.tileGrid}>
             {SLOTS.map(i => {
               const btn = buttons[i]
@@ -209,7 +210,7 @@ export default function RichMenuScreen() {
                   <TouchableOpacity key={btn.id} style={styles.tileSlotWrap} onPress={() => openSlot(i)} activeOpacity={0.85}>
                     <View style={[styles.tileSlot, { backgroundColor: btn.bgColor ?? '#2C2C2E' }]}>
                       {btn.bgImage ? (
-                        <Image source={{ uri: btn.bgImage }} style={RNStyleSheet.absoluteFillObject} resizeMode="cover" />
+                        <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                       ) : null}
                       {/* 画像がある場合は暗めのオーバーレイで文字を見やすく */}
                       {btn.bgImage ? <View style={styles.tileImgOverlay} /> : null}
@@ -231,6 +232,7 @@ export default function RichMenuScreen() {
                 </TouchableOpacity>
               )
             })}
+          </View>
           </View>
         </View>
 
@@ -265,7 +267,7 @@ export default function RichMenuScreen() {
               <View style={styles.miniPreviewWrap}>
                 <View style={[styles.miniPreview, { backgroundColor: editingBtn?.bgColor ?? '#2C2C2E' }]}>
                   {editingBtn?.bgImage ? (
-                    <Image source={{ uri: editingBtn.bgImage }} style={RNStyleSheet.absoluteFillObject} resizeMode="cover" />
+                    <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                   ) : null}
                   {editingBtn?.bgImage ? <View style={styles.tileImgOverlay} /> : null}
                   <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={28} color={editingBtn?.textColor ?? '#FFFFFF'} />
@@ -400,18 +402,22 @@ const styles = StyleSheet.create({
     padding: 12, gap: 10,
   },
   gridCaption: { fontSize: 11, color: Colors.textLight, textAlign: 'center' },
-  tileGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  tileSlotWrap: { width: '33.33%', padding: 3 },
+  tilePanel: {
+    backgroundColor: '#1C1C1E', borderRadius: 16, overflow: 'hidden', padding: 4,
+  },
+  tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
+  tileSlotWrap: { width: '33.33%' },
   tileSlot: {
-    aspectRatio: 1.1, borderRadius: 12, overflow: 'hidden',
+    aspectRatio: 1.15, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8,
+    backgroundColor: '#2C2C2E',
   },
   tileSlotEmpty: {
-    backgroundColor: Colors.background,
-    borderWidth: 1.5, borderColor: Colors.border, borderStyle: 'dashed',
+    backgroundColor: '#2C2C2E',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
   tileImgOverlay: {
-    ...RNStyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   tileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
