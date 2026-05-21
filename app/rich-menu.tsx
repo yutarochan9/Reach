@@ -268,49 +268,79 @@ export default function RichMenuScreen() {
           )}
         </View>
 
-        {/* タイルパネル（トーク画面と同じ見た目） */}
+        {/* プレビュー（メッセージ画面と同じ見た目） */}
         <Text style={styles.sectionLabel}>タップして編集（最大6コマ）</Text>
-        <View style={styles.tilePanel}>
-          {panelBgImage && (
-            <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-          )}
-          <View style={styles.panelOverlay} />
-          <View style={styles.tileGrid}>
-            {SLOTS.map(i => {
-              const btn = buttons[i]
-              return (
-                <TouchableOpacity
-                  key={btn ? btn.id : `empty-${i}`}
-                  style={styles.tileSlot}
-                  onPress={() => openSlot(i)}
-                  activeOpacity={0.8}
-                >
-                  {btn ? (
-                    <>
-                      {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                      {btn.bgImage && <View style={styles.tileImgOverlay} />}
-                      <Ionicons name={btn.icon as any} size={26} color="#FFFFFF" />
-                      <View style={styles.tileSeparator} />
-                      <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
-                      <TouchableOpacity
-                        style={styles.tileDeleteBtn}
-                        onPress={() => handleDeleteBtn(btn.id)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <Ionicons name="add" size={28} color="rgba(255,255,255,0.3)" />
-                  )}
-                </TouchableOpacity>
-              )
-            })}
+        <View style={styles.phoneFrame}>
+          {/* ヘッダー */}
+          <View style={styles.phoneHeader}>
+            <View style={styles.phoneAvatar}>
+              <Text style={styles.phoneAvatarText}>R</Text>
+            </View>
+            <Text style={styles.phoneName}>クリエイター名</Text>
           </View>
-          {/* トグルバー（プレビュー用） */}
-          <View style={styles.tileToggleBar}>
-            <Ionicons name="keypad-outline" size={16} color="rgba(255,255,255,0.5)" />
-            <Ionicons name="chevron-down" size={13} color="rgba(255,255,255,0.5)" />
+          {/* チャットエリア */}
+          <View style={styles.phoneChat}>
+            <View style={styles.bubbleRow}>
+              <View style={styles.bubble}>
+                <Text style={styles.bubbleText}>こんにちは！</Text>
+              </View>
+            </View>
+            <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
+              <View style={[styles.bubble, styles.bubbleSelf]}>
+                <Text style={[styles.bubbleText, { color: '#FFFFFF' }]}>よろしくお願いします</Text>
+              </View>
+            </View>
+          </View>
+          {/* タイルパネル */}
+          <View style={styles.tilePanel}>
+            {panelBgImage && (
+              <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            )}
+            <View style={styles.panelOverlay} />
+            <View style={styles.tileHandleArea}>
+              <View style={styles.tileHandleBar} />
+            </View>
+            <View style={styles.tileGrid}>
+              {SLOTS.map(i => {
+                const btn = buttons[i]
+                return (
+                  <TouchableOpacity
+                    key={btn ? btn.id : `empty-${i}`}
+                    style={styles.tileSlot}
+                    onPress={() => openSlot(i)}
+                    activeOpacity={0.8}
+                  >
+                    {btn ? (
+                      <>
+                        {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                        {btn.bgImage && <View style={styles.tileImgOverlay} />}
+                        <Ionicons name={btn.icon as any} size={24} color="#FFFFFF" />
+                        <View style={styles.tileSeparator} />
+                        <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
+                        <TouchableOpacity
+                          style={styles.tileDeleteBtn}
+                          onPress={() => handleDeleteBtn(btn.id)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <Ionicons name="add" size={26} color="rgba(255,255,255,0.3)" />
+                    )}
+                  </TouchableOpacity>
+                )
+              })}
+            </View>
+          </View>
+          {/* DM入力エリア（モック） */}
+          <View style={styles.phoneDmArea}>
+            <View style={styles.phoneDmField}>
+              <Text style={styles.phoneDmPlaceholder}>メッセージ</Text>
+            </View>
+            <View style={styles.phoneDmSend}>
+              <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+            </View>
           </View>
         </View>
 
@@ -483,30 +513,72 @@ const styles = StyleSheet.create({
   // セクションラベル
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
 
-  // タイルパネル（トーク画面と同じ見た目）
-  tilePanel: {
-    backgroundColor: '#1C1C1E', overflow: 'hidden',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
-    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.1)',
+  // プレビュー（電話フレーム）
+  phoneFrame: {
+    marginHorizontal: 16, borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: Colors.border,
   },
+  phoneHeader: {
+    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  phoneAvatar: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
+  },
+  phoneAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  phoneName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  phoneChat: {
+    backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 10, gap: 8,
+  },
+  bubbleRow: { flexDirection: 'row' },
+  bubble: {
+    backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
+  },
+  bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
+  bubbleText: { fontSize: 13, color: Colors.text, lineHeight: 20, paddingHorizontal: 10, paddingVertical: 7 },
+  phoneDmArea: {
+    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  phoneDmField: {
+    flex: 1, height: 36, borderRadius: 18, backgroundColor: Colors.background,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 14, justifyContent: 'center',
+  },
+  phoneDmPlaceholder: { fontSize: 13, color: Colors.textLight },
+  phoneDmSend: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
+  },
+
+  // タイルパネル
+  tilePanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
   panelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  tileGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  tileHandleArea: {
+    alignItems: 'center', paddingVertical: 7,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  tileHandleBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  tileGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
+    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.08)',
+  },
   tileSlot: {
-    width: '33.33%', aspectRatio: 1, overflow: 'hidden',
+    width: '33.33%', height: 90, overflow: 'hidden',
     alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14,
-    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.1)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)',
+    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   tileImgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  tileSeparator: { width: 36, height: 2, backgroundColor: Colors.accent, marginVertical: 7 },
-  tileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
+  tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
+  tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
   tileDeleteBtn: { position: 'absolute', top: 5, right: 5 },
-  tileToggleBar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 4, paddingVertical: 7,
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-  },
 
   note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
 
