@@ -16,10 +16,10 @@ type RichMenuButton = {
   url: string
   icon: string
   bgImage?: string
-  x: number   // グリッド列 (0〜GRID_COLS-1)
-  y: number   // グリッド行 (0〜GRID_ROWS-1)
-  w: number   // 幅（グリッド単位）
-  h: number   // 高さ（グリッド単位）
+  x: number   // 列 (0〜GRID_COLS-1)
+  y: number   // 行 (0〜GRID_ROWS-1)
+  w: number   // 列スパン
+  h: number   // 行スパン
 }
 
 const ICON_OPTIONS = [
@@ -37,21 +37,23 @@ const ICON_OPTIONS = [
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const BUCKET = 'broadcast-images'
-const GRID_COLS = 18
-const GRID_ROWS = 27
+const GRID_COLS = 27   // 横方向（列）
+const GRID_ROWS = 18   // 縦方向（行）
 const genId = () => Math.random().toString(36).slice(2)
 
-// 旧データ（x/y/w/h なし）のデフォルト配置 (3列×2行)
+// 旧データ（x/y/w/h なし）向けデフォルト配置 - 3列×2行
 const DEFAULT_POSITIONS = [
-  { x: 0,  y: 0,  w: 6, h: 14 },
-  { x: 6,  y: 0,  w: 6, h: 14 },
-  { x: 12, y: 0,  w: 6, h: 14 },
-  { x: 0,  y: 14, w: 6, h: 13 },
-  { x: 6,  y: 14, w: 6, h: 13 },
-  { x: 12, y: 14, w: 6, h: 13 },
+  { x: 0,  y: 0, w: 9, h: 9 },
+  { x: 9,  y: 0, w: 9, h: 9 },
+  { x: 18, y: 0, w: 9, h: 9 },
+  { x: 0,  y: 9, w: 9, h: 9 },
+  { x: 9,  y: 9, w: 9, h: 9 },
+  { x: 18, y: 9, w: 9, h: 9 },
 ]
 
-// Native のみ: XHR + FormData でアップロード
+// ── 画像アップロード ──────────────────────────────────────
+
+// Native: XHR + FormData
 async function uploadImageNative(
   userId: string,
   asset: ImagePicker.ImagePickerAsset,
@@ -69,7 +71,7 @@ async function uploadImageNative(
     xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.setRequestHeader('x-upsert', 'true')
     xhr.onload = () => {
-      if (xhr.status === 200 || xhr.status === 201) { resolve(publicUrl) }
+      if (xhr.status === 200 || xhr.status === 201) resolve(publicUrl)
       else { Alert.alert('アップロードエラー', `${xhr.status}: ${xhr.responseText}`); resolve(null) }
     }
     xhr.onerror = () => { Alert.alert('エラー', 'ネットワークエラー'); resolve(null) }
@@ -79,37 +81,54 @@ async function uploadImageNative(
   })
 }
 
-// Web のみ: expo-image-picker の modal 内バグを回避してブラウザ標準 file input を使う
-function pickImageWeb(userId: string, onSuccess: (url: string) => void, setUploading: (v: boolean) => void) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/jpeg,image/png,image/webp,image/gif'
-  input.style.display = 'none'
-  document.body.appendChild(input)
-  input.onchange = async () => {
-    document.body.removeChild(input)
-    const file = input.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
-      const path = `tiles/${userId}/img_${Date.now()}.${ext}`
-      const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
-      if (error) { Alert.alert('アップロードエラー', error.message); return }
-      onSuccess(publicUrl)
-    } catch (e: any) {
-      Alert.alert('エラー', e?.message ?? 'エラーが発生しました')
-    } finally {
-      setUploading(false)
-    }
+// Web: Supabase SDK で File オブジェクトを直接アップロード
+async function uploadFileWeb(
+  userId: string,
+  file: File,
+  onSuccess: (url: string) => void,
+  setUploading: (v: boolean) => void,
+) {
+  setUploading(true)
+  try {
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+    const path = `tiles/${userId}/img_${Date.now()}.${ext}`
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
+    const { error } = await supabase.storage
+      .from(BUCKET)
+      .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
+    if (error) { Alert.alert('アップロードエラー', error.message); return }
+    onSuccess(publicUrl)
+  } catch (e: any) {
+    Alert.alert('エラー', e?.message ?? 'エラーが発生しました')
+  } finally {
+    setUploading(false)
   }
-  input.addEventListener('cancel', () => {
-    if (document.body.contains(input)) document.body.removeChild(input)
-  })
-  input.click()
+}
+
+// ── Web 専用: label+input overlay ────────────────────────────
+// onPress 内から input.click() を呼ぶとブラウザが user gesture と
+// 認識しないためファイルピッカーが開かない。
+// label 要素でラップすることでブラウザネイティブの activation を使う。
+function WebImageOverlay({ onFile }: { onFile: (file: File) => void }) {
+  if (Platform.OS !== 'web') return null
+  return (
+    <label
+      style={{
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+        cursor: 'pointer', zIndex: 10,
+      } as any}
+    >
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        style={{ display: 'none' } as any}
+        onChange={(e: any) => {
+          const file = e.target.files?.[0]
+          if (file) { onFile(file); e.target.value = '' }
+        }}
+      />
+    </label>
+  )
 }
 
 function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -151,9 +170,8 @@ export default function RichMenuScreen() {
       setMenuId(data.id)
       setIsActive(data.is_active)
       const raw: any[] = data.buttons ?? []
-      // 旧データに x/y/w/h がなければデフォルト配置を付与
       const normalized = raw.map((b, i) =>
-        b.x != null ? b : { ...b, ...(DEFAULT_POSITIONS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
+        b.x != null ? b : { ...b, ...(DEFAULT_POSITIONS[i] ?? { x: 0, y: 0, w: 9, h: 9 }) }
       ) as RichMenuButton[]
       setButtons(normalized)
       setPanelBgImage(data.panel_bg_image ?? null)
@@ -166,68 +184,43 @@ export default function RichMenuScreen() {
   const handleSave = async () => {
     if (!userId) return
     setSaving(true)
-    const payload = {
-      buttons, is_active: isActive,
-      panel_bg_image: panelBgImage,
-      updated_at: new Date().toISOString(),
-    }
+    const payload = { buttons, is_active: isActive, panel_bg_image: panelBgImage, updated_at: new Date().toISOString() }
     if (menuId) {
       await supabase.from('rich_menus').update(payload).eq('id', menuId)
     } else {
-      const { data } = await supabase.from('rich_menus')
-        .insert({ creator_id: userId, ...payload })
-        .select().single()
+      const { data } = await supabase.from('rich_menus').insert({ creator_id: userId, ...payload }).select().single()
       if (data) setMenuId(data.id)
     }
     setSaving(false)
     router.back()
   }
 
-  // セルの座標からそのセルを占有するタイルを返す
   const getCellTile = useCallback((col: number, row: number) =>
     buttons.find(b => col >= b.x && col < b.x + b.w && row >= b.y && row < b.y + b.h) ?? null
   , [buttons])
 
-  // グリッドセルタップ時の処理
-  const handleCellPress = (col: number, row: number) => {
+  const handleCellPress = useCallback((col: number, row: number) => {
     const existing = getCellTile(col, row)
     if (existing) {
-      // 既存タイルをタップ → 編集モーダルを開く
       setEditingBtn({ ...existing })
       setSelectionStart(null)
       setModalVisible(true)
       return
     }
     if (!selectionStart) {
-      // 1回目タップ → 開始セルを記録
       setSelectionStart({ x: col, y: row })
       return
     }
-    // 2回目タップ → 矩形を確定して新規タイル作成
     const x = Math.min(selectionStart.x, col)
     const y = Math.min(selectionStart.y, row)
     const w = Math.abs(col - selectionStart.x) + 1
     const h = Math.abs(row - selectionStart.y) + 1
-    const overlap = buttons.some(b =>
-      x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y
-    )
+    const overlap = buttons.some(b => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y)
     setSelectionStart(null)
-    if (overlap) {
-      Alert.alert('重複', '既存のタイルと重なっています')
-      return
-    }
+    if (overlap) { Alert.alert('重複', '既存のタイルと重なっています'); return }
     setEditingBtn({ id: genId(), label: '', url: '', icon: 'link-outline', x, y, w, h })
     setModalVisible(true)
-  }
-
-  // グリッド上のタッチ位置からセル座標を計算してhandleCellPressへ
-  const handleGridTouch = (e: any) => {
-    if (gridSize.width <= 1) return
-    const { locationX, locationY } = e.nativeEvent
-    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((locationX / gridSize.width) * GRID_COLS)))
-    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((locationY / gridSize.height) * GRID_ROWS)))
-    handleCellPress(col, row)
-  }
+  }, [buttons, getCellTile, selectionStart])
 
   const handleSaveBtn = () => {
     if (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) return
@@ -246,12 +239,8 @@ export default function RichMenuScreen() {
     setEditingBtn(null)
   }
 
-  const pickImage = async (onSuccess: (url: string) => void) => {
+  const pickImageNative = async (onSuccess: (url: string) => void) => {
     if (!userId) return
-    if (Platform.OS === 'web') {
-      pickImageWeb(userId, onSuccess, setUploading)
-      return
-    }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') { Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください'); return }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
@@ -275,6 +264,14 @@ export default function RichMenuScreen() {
     )
   }
 
+  // ── グリッドのタップ処理 (TouchableOpacity.onPress で locationX/Y を取得) ──
+  const onGridPress = (e: any) => {
+    const { locationX, locationY } = e.nativeEvent
+    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((locationX / gridSize.width) * GRID_COLS)))
+    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((locationY / gridSize.height) * GRID_ROWS)))
+    handleCellPress(col, row)
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -289,7 +286,6 @@ export default function RichMenuScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* 表示切り替えトグル */}
         <View style={styles.card}>
           <View>
             <Text style={styles.toggleLabel}>メニューを表示</Text>
@@ -298,51 +294,73 @@ export default function RichMenuScreen() {
           <ToggleSwitch value={isActive} onChange={setIsActive} />
         </View>
 
-        {/* 左右二列レイアウト */}
         <View style={styles.twoCol}>
 
           {/* 左：グリッドエディタ */}
           <View style={styles.leftCol}>
-            {/* パネル背景画像 */}
+
+            {/* パネル背景 */}
             <View style={[styles.card, { marginHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
               <Text style={[styles.cardTitle, { marginBottom: 10 }]}>パネル背景</Text>
               {panelBgImage ? (
                 <View style={styles.bgActions}>
                   <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
-                  <TouchableOpacity style={styles.bgBtn} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
-                    {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
-                  </TouchableOpacity>
+                  <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
+                    <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
+                    {Platform.OS === 'web'
+                      ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
+                      : null
+                    }
+                    {Platform.OS !== 'web' && (
+                      <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        onPress={() => pickImageNative(setPanelBgImage)}
+                        disabled={uploading}
+                      />
+                    )}
+                  </View>
                   <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
                     <Text style={styles.bgBtnDelText}>削除</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity style={styles.bgPicker} onPress={() => pickImage(setPanelBgImage)} disabled={uploading}>
+                <View style={[styles.bgPicker, { overflow: 'hidden' }]}>
                   {uploading
                     ? <ActivityIndicator size="small" color={Colors.accent} />
                     : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
                   }
-                </TouchableOpacity>
+                  {Platform.OS === 'web'
+                    ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
+                    : null
+                  }
+                  {Platform.OS !== 'web' && (
+                    <TouchableOpacity
+                      style={StyleSheet.absoluteFillObject}
+                      onPress={() => pickImageNative(setPanelBgImage)}
+                      disabled={uploading}
+                    />
+                  )}
+                </View>
               )}
             </View>
 
             {/* グリッドエディタ */}
             <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>
-              {selectionStart ? '2つ目のセルをタップして範囲を確定' : 'タップでタイル配置・編集'}
+              {selectionStart ? '2つ目のセルをタップして範囲確定' : 'タップでタイル配置・編集'}
             </Text>
+
             <View style={styles.gridWrapper}>
-              {/* 背景画像 */}
               {panelBgImage && (
                 <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
               )}
               <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
 
-              {/* インタラクティブなグリッド領域 */}
-              <View
+              {/* TouchableOpacity で onPress の locationX/Y を取得してセル計算 */}
+              <TouchableOpacity
+                activeOpacity={1}
                 style={styles.gridArea}
-                onLayout={(e) => setGridSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-                onStartShouldSetResponder={() => true}
-                onResponderRelease={handleGridTouch}
+                onLayout={e => setGridSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+                onPress={onGridPress}
               >
                 {/* 縦線 */}
                 {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
@@ -374,11 +392,11 @@ export default function RichMenuScreen() {
                     borderWidth: 1.5, borderColor: Colors.accent,
                     alignItems: 'center', justifyContent: 'center', gap: 2,
                   }}>
-                    <Ionicons name={btn.icon as any} size={11} color="#FFFFFF" />
+                    <Ionicons name={btn.icon as any} size={11} color="#fff" />
                     <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
                   </View>
                 ))}
-                {/* 選択開始セル（黄色ハイライト） */}
+                {/* 選択開始セル */}
                 {selectionStart && (
                   <View pointerEvents="none" style={{
                     position: 'absolute',
@@ -389,7 +407,7 @@ export default function RichMenuScreen() {
                     backgroundColor: 'rgba(255,220,0,0.85)',
                   }} />
                 )}
-              </View>
+              </TouchableOpacity>
             </View>
 
             {selectionStart && (
@@ -408,54 +426,40 @@ export default function RichMenuScreen() {
             <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>プレビュー</Text>
             <View style={[styles.phoneFrame, { marginHorizontal: 0 }]}>
               <View style={styles.phoneHeader}>
-                <View style={styles.phoneAvatar}>
-                  <Text style={styles.phoneAvatarText}>R</Text>
-                </View>
+                <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
                 <Text style={styles.phoneName}>クリエイター名</Text>
               </View>
               <View style={styles.phoneChat}>
                 <View style={styles.bubbleRow}>
-                  <View style={styles.bubble}>
-                    <Text style={styles.bubbleText}>こんにちは！</Text>
-                  </View>
+                  <View style={styles.bubble}><Text style={styles.bubbleText}>こんにちは！</Text></View>
                 </View>
                 <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
                   <View style={[styles.bubble, styles.bubbleSelf]}>
-                    <Text style={[styles.bubbleText, { color: '#FFFFFF' }]}>よろしくお願いします</Text>
+                    <Text style={[styles.bubbleText, { color: '#FFF' }]}>よろしくお願いします</Text>
                   </View>
                 </View>
               </View>
-
-              {/* プレビュータイルパネル */}
               <View style={styles.previewPanel}>
-                {/* ハンドルバー */}
-                <View style={styles.tileHandleArea}>
-                  <View style={styles.tileHandleBar} />
-                </View>
-                {/* タイル表示エリア（18:27比率） */}
+                <View style={styles.tileHandleArea}><View style={styles.tileHandleBar} /></View>
                 <View style={styles.previewTileArea}>
                   {panelBgImage && (
                     <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
                   )}
                   <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-                  {/* グリッド線 */}
                   {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
                     <View key={`pv${i}`} pointerEvents="none" style={{
                       position: 'absolute', top: 0, bottom: 0,
                       left: `${(i / GRID_COLS) * 100}%` as any,
-                      width: StyleSheet.hairlineWidth,
-                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)',
                     }} />
                   ))}
                   {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
                     <View key={`ph${i}`} pointerEvents="none" style={{
                       position: 'absolute', left: 0, right: 0,
                       top: `${(i / GRID_ROWS) * 100}%` as any,
-                      height: StyleSheet.hairlineWidth,
-                      backgroundColor: 'rgba(255,255,255,0.06)',
+                      height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)',
                     }} />
                   ))}
-                  {/* 配置済みタイル */}
                   {buttons.map(btn => (
                     <View key={btn.id} pointerEvents="none" style={{
                       position: 'absolute',
@@ -464,13 +468,13 @@ export default function RichMenuScreen() {
                       width: `${(btn.w / GRID_COLS) * 100}%` as any,
                       height: `${(btn.h / GRID_ROWS) * 100}%` as any,
                       alignItems: 'center', justifyContent: 'center',
-                      borderRightWidth: 0.5, borderBottomWidth: 0.5,
-                      borderColor: 'rgba(255,255,255,0.15)',
+                      borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)',
+                      overflow: 'hidden',
                     }}>
                       {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                      {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none" />}
-                      <Ionicons name={btn.icon as any} size={14} color="#FFFFFF" />
-                      <View style={styles.previewSeparator} />
+                      {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
+                      <Ionicons name={btn.icon as any} size={12} color="#FFF" />
+                      <View style={styles.previewSep} />
                       <Text style={styles.previewLabel} numberOfLines={1}>{btn.label}</Text>
                     </View>
                   ))}
@@ -481,14 +485,9 @@ export default function RichMenuScreen() {
                   )}
                 </View>
               </View>
-
               <View style={styles.phoneDmArea}>
-                <View style={styles.phoneDmField}>
-                  <Text style={styles.phoneDmPlaceholder}>メッセージ</Text>
-                </View>
-                <View style={styles.phoneDmSend}>
-                  <Ionicons name="arrow-up" size={14} color="#FFFFFF" />
-                </View>
+                <View style={styles.phoneDmField}><Text style={styles.phoneDmPlaceholder}>メッセージ</Text></View>
+                <View style={styles.phoneDmSend}><Ionicons name="arrow-up" size={13} color="#FFF" /></View>
               </View>
             </View>
           </View>
@@ -505,25 +504,20 @@ export default function RichMenuScreen() {
                 <Text style={styles.modalCancel}>キャンセル</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>タイル設定</Text>
-              <TouchableOpacity
-                onPress={handleSaveBtn}
-                disabled={!editingBtn?.label?.trim() || !editingBtn?.url?.trim()}
-              >
-                <Text style={[styles.modalSave, (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) && { opacity: 0.4 }]}>
-                  完了
-                </Text>
+              <TouchableOpacity onPress={handleSaveBtn} disabled={!editingBtn?.label?.trim() || !editingBtn?.url?.trim()}>
+                <Text style={[styles.modalSave, (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) && { opacity: 0.4 }]}>完了</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
-              {/* タイルプレビュー */}
+              {/* プレビュー */}
               <View style={styles.previewWrap}>
                 <View style={styles.modalPreviewTile}>
                   {editingBtn?.bgImage && (
                     <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                   )}
                   {editingBtn?.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none" />}
-                  <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={30} color="#FFFFFF" />
+                  <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={30} color="#FFF" />
                   <View style={styles.tileSeparator} />
                   <Text style={styles.tileLabel} numberOfLines={1}>{editingBtn?.label || 'ラベル'}</Text>
                 </View>
@@ -535,31 +529,45 @@ export default function RichMenuScreen() {
                 {editingBtn?.bgImage ? (
                   <>
                     <Image source={{ uri: editingBtn.bgImage }} style={styles.bgThumb} resizeMode="cover" />
-                    <TouchableOpacity
-                      style={styles.bgBtn}
-                      onPress={() => pickImage(url => setEditingBtn(prev => prev ? { ...prev, bgImage: url } : prev))}
-                      disabled={uploading}
-                    >
-                      {uploading ? <ActivityIndicator size="small" color={Colors.accent} /> : <Text style={styles.bgBtnText}>変更</Text>}
-                    </TouchableOpacity>
+                    <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
+                      <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
+                      {Platform.OS === 'web'
+                        ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />
+                        : null
+                      }
+                      {Platform.OS !== 'web' && (
+                        <TouchableOpacity
+                          style={StyleSheet.absoluteFillObject}
+                          onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))}
+                          disabled={uploading}
+                        />
+                      )}
+                    </View>
                     <TouchableOpacity
                       style={[styles.bgBtn, styles.bgBtnDel]}
-                      onPress={() => setEditingBtn(prev => prev ? { ...prev, bgImage: undefined } : prev)}
+                      onPress={() => setEditingBtn(p => p ? { ...p, bgImage: undefined } : p)}
                     >
                       <Text style={styles.bgBtnDelText}>削除</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
-                  <TouchableOpacity
-                    style={styles.bgPicker}
-                    onPress={() => pickImage(url => setEditingBtn(prev => prev ? { ...prev, bgImage: url } : prev))}
-                    disabled={uploading}
-                  >
+                  <View style={[styles.bgPicker, { overflow: 'hidden' }]}>
                     {uploading
                       ? <ActivityIndicator size="small" color={Colors.accent} />
                       : <><Ionicons name="image-outline" size={20} color={Colors.accent} /><Text style={styles.bgPickerText}>画像を選択</Text></>
                     }
-                  </TouchableOpacity>
+                    {Platform.OS === 'web'
+                      ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />
+                      : null
+                    }
+                    {Platform.OS !== 'web' && (
+                      <TouchableOpacity
+                        style={StyleSheet.absoluteFillObject}
+                        onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))}
+                        disabled={uploading}
+                      />
+                    )}
+                  </View>
                 )}
               </View>
 
@@ -570,7 +578,7 @@ export default function RichMenuScreen() {
                   <TouchableOpacity
                     key={opt.name}
                     style={[styles.iconOption, editingBtn?.icon === opt.name && styles.iconOptionActive]}
-                    onPress={() => setEditingBtn(prev => prev ? { ...prev, icon: opt.name } : prev)}
+                    onPress={() => setEditingBtn(p => p ? { ...p, icon: opt.name } : p)}
                   >
                     <Ionicons name={opt.name as any} size={22} color={editingBtn?.icon === opt.name ? '#fff' : Colors.accent} />
                     <Text style={[styles.iconLabel, editingBtn?.icon === opt.name && { color: '#fff' }]}>{opt.label}</Text>
@@ -585,7 +593,7 @@ export default function RichMenuScreen() {
                 placeholder="例: 公式サイト"
                 placeholderTextColor={Colors.textLight}
                 value={editingBtn?.label ?? ''}
-                onChangeText={text => setEditingBtn(prev => prev ? { ...prev, label: text } : prev)}
+                onChangeText={text => setEditingBtn(p => p ? { ...p, label: text } : p)}
                 maxLength={12}
               />
 
@@ -596,21 +604,21 @@ export default function RichMenuScreen() {
                 placeholder="https://example.com"
                 placeholderTextColor={Colors.textLight}
                 value={editingBtn?.url ?? ''}
-                onChangeText={text => setEditingBtn(prev => prev ? { ...prev, url: text } : prev)}
+                onChangeText={text => setEditingBtn(p => p ? { ...p, url: text } : p)}
                 autoCapitalize="none"
                 keyboardType="url"
               />
 
-              {/* 削除ボタン（既存タイルのみ表示） */}
+              {/* 削除 */}
               {editingBtn?.id && buttons.some(b => b.id === editingBtn.id) && (
                 <TouchableOpacity
                   style={styles.deleteBtn}
-                  onPress={() => {
+                  onPress={() =>
                     Alert.alert('削除', 'このタイルを削除しますか？', [
                       { text: 'キャンセル', style: 'cancel' },
                       { text: '削除', style: 'destructive', onPress: () => handleDeleteBtn(editingBtn.id!) },
                     ])
-                  }}
+                  }
                 >
                   <Ionicons name="trash-outline" size={16} color="#E53E3E" />
                   <Text style={styles.deleteBtnText}>このタイルを削除</Text>
@@ -627,8 +635,7 @@ export default function RichMenuScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
@@ -637,123 +644,69 @@ const styles = StyleSheet.create({
   saveButton: { width: 40, alignItems: 'flex-end' },
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   content: { paddingTop: 16, paddingBottom: 40, gap: 12 },
-
   card: {
-    backgroundColor: Colors.white, borderRadius: 16,
-    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
     padding: 16, marginHorizontal: 16,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    gap: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12,
   },
   cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
   toggleLabel: { fontSize: 15, fontWeight: '600', color: Colors.text },
   toggleDesc: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
   toggleThumb: {
-    width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
+    width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
   },
-
   bgActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   bgThumb: { width: 48, height: 48, borderRadius: 8 },
-  bgBtn: {
-    paddingHorizontal: 13, paddingVertical: 7,
-    borderRadius: 8, borderWidth: 1, borderColor: Colors.accent,
-  },
+  bgBtn: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
   bgBtnText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   bgBtnDel: { borderColor: '#E53E3E' },
   bgBtnDelText: { fontSize: 13, color: '#E53E3E', fontWeight: '600' },
   bgPicker: {
-    flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5,
-    borderColor: Colors.accent, borderStyle: 'dashed',
+    flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
-
-  // 二列レイアウト
   twoCol: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, alignItems: 'flex-start' },
   leftCol: { flex: 1, gap: 10 },
   rightCol: { flex: 1 },
-
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
-
-  // グリッドエディタ
-  gridWrapper: {
-    backgroundColor: '#1C1C1E', overflow: 'hidden',
-    borderRadius: 8,
-  },
-  gridArea: {
-    // 18:27 の縦長比率
-    aspectRatio: 18 / 27,
-  },
-  cancelSelBtn: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 8, borderWidth: 1, borderColor: Colors.accent,
-  },
+  gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
+  // 27列×18行 → 横長 (aspectRatio = 27/18 = 1.5)
+  gridArea: { aspectRatio: 27 / 18 },
+  cancelSelBtn: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
   cancelSelText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-
-  // プレビュー（電話フレーム）
-  phoneFrame: {
-    marginHorizontal: 16, borderRadius: 16, overflow: 'hidden',
-    borderWidth: 1, borderColor: Colors.border,
-  },
+  note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
+  phoneFrame: { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
   phoneHeader: {
     backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  phoneAvatar: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
-  },
-  phoneAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+  phoneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  phoneAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
   phoneName: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  phoneChat: {
-    backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 10, gap: 8,
-  },
+  phoneChat: { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
   bubbleRow: { flexDirection: 'row' },
   bubble: {
     backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
   },
   bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
   bubbleText: { fontSize: 11, color: Colors.text, lineHeight: 18, paddingHorizontal: 8, paddingVertical: 5 },
   phoneDmArea: {
     backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 10, paddingVertical: 7,
-    borderTopWidth: 1, borderTopColor: Colors.border,
+    paddingHorizontal: 10, paddingVertical: 7, borderTopWidth: 1, borderTopColor: Colors.border,
   },
-  phoneDmField: {
-    flex: 1, height: 30, borderRadius: 15, backgroundColor: Colors.background,
-    borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: 12, justifyContent: 'center',
-  },
+  phoneDmField: { flex: 1, height: 30, borderRadius: 15, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, justifyContent: 'center' },
   phoneDmPlaceholder: { fontSize: 11, color: Colors.textLight },
-  phoneDmSend: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
-  },
-
-  // プレビュータイルパネル
+  phoneDmSend: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
   previewPanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
-  tileHandleArea: {
-    alignItems: 'center', paddingVertical: 5,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
+  tileHandleArea: { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
-  previewTileArea: {
-    aspectRatio: 18 / 27,
-    overflow: 'hidden',
-  },
-  previewSeparator: { width: 20, height: 1.5, backgroundColor: Colors.accent, marginVertical: 3 },
-  previewLabel: { fontSize: 7, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
-
-  note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
-
-  // モーダル
+  previewTileArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
+  previewSep: { width: 16, height: 1.5, backgroundColor: Colors.accent, marginVertical: 3 },
+  previewLabel: { fontSize: 7, fontWeight: '600', textAlign: 'center', color: '#FFF' },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
@@ -765,16 +718,13 @@ const styles = StyleSheet.create({
   modalSave: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   modalBody: { padding: 16, gap: 10, paddingBottom: 40 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 8 },
-
   previewWrap: { alignItems: 'center', paddingVertical: 8 },
   modalPreviewTile: {
     width: 110, aspectRatio: 1, overflow: 'hidden',
-    backgroundColor: '#2C2C2E', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14, borderRadius: 4,
+    backgroundColor: '#2C2C2E', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 4,
   },
   tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
-  tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
-
+  tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFF' },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: {
     width: '18%', aspectRatio: 1, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
@@ -782,14 +732,7 @@ const styles = StyleSheet.create({
   },
   iconOptionActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   iconLabel: { fontSize: 9, color: Colors.textLight },
-  input: {
-    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
-    padding: 12, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
-  },
-  deleteBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    marginTop: 16, padding: 14, borderRadius: 12,
-    borderWidth: 1, borderColor: '#E53E3E',
-  },
+  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: 10, padding: 12, fontSize: 15, color: Colors.text, backgroundColor: Colors.white },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E53E3E' },
   deleteBtnText: { fontSize: 15, color: '#E53E3E', fontWeight: '600' },
 })

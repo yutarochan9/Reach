@@ -400,11 +400,11 @@ export default function TalkDetailScreen() {
   // タイルグリッドのJSX（isSelf・非selfで共有）
   // 旧形式（x/y/w/h なし）のデフォルト配置
   const DEFAULT_TILE_POS = [
-    { x: 0, y: 0, w: 6, h: 14 }, { x: 6, y: 0, w: 6, h: 14 }, { x: 12, y: 0, w: 6, h: 14 },
-    { x: 0, y: 14, w: 6, h: 13 }, { x: 6, y: 14, w: 6, h: 13 }, { x: 12, y: 14, w: 6, h: 13 },
+    { x: 0, y: 0, w: 9, h: 9 }, { x: 9, y: 0, w: 9, h: 9 }, { x: 18, y: 0, w: 9, h: 9 },
+    { x: 0, y: 9, w: 9, h: 9 }, { x: 9, y: 9, w: 9, h: 9 }, { x: 18, y: 9, w: 9, h: 9 },
   ]
-  const GRID_C = 18
-  const GRID_R = 27
+  const GRID_C = 27
+  const GRID_R = 18
   const normalizedButtons = richMenu?.buttons.map((b: any, i: number) =>
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
   },
   tileHandleBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   // 18:27グリッド比率で絶対配置タイルを並べるエリア
-  tileGridArea: { aspectRatio: 18 / 27, overflow: 'hidden' },
+  tileGridArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
   tileBtnImgOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
   tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
