@@ -1,27 +1,86 @@
-import { Tabs, router } from 'expo-router'
+import { useState, useEffect } from 'react'
+import { Tabs, router, usePathname } from 'expo-router'
 import { Colors } from '../../constants/colors'
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, Platform, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
+import { TalkContext } from '../contexts/TalkContext'
+import TalkDetailPanel from '../components/TalkDetailPanel'
 
+const SIDEBAR_W = 68
+
+// ── デスクトップ用左サイドバー ─────────────────────────────────
+function DesktopSidebar() {
+  const pathname = usePathname()
+
+  const NAV = [
+    { route: '/',       activeIcon: 'home'       as const, icon: 'home-outline'       as const, label: 'ホーム' },
+    { route: '/talk',   activeIcon: 'chatbubble' as const, icon: 'chatbubble-outline' as const, label: 'メッセージ' },
+    { route: '/shop',   activeIcon: 'compass'    as const, icon: 'compass-outline'    as const, label: '発見' },
+    { route: '/mypage', activeIcon: 'person'     as const, icon: 'person-outline'     as const, label: 'マイページ' },
+  ]
+
+  const isActive = (route: string) => {
+    if (route === '/') return pathname === '/' || pathname === ''
+    return pathname.startsWith(route)
+  }
+
+  return (
+    <View style={sidebar.wrap}>
+      {NAV.map(item => {
+        const active = isActive(item.route)
+        return (
+          <TouchableOpacity
+            key={item.route}
+            style={sidebar.item}
+            onPress={() => router.push(item.route as any)}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={active ? item.activeIcon : item.icon}
+              size={22}
+              color={active ? Colors.accent : Colors.textLight}
+            />
+            <Text style={[sidebar.label, { color: active ? Colors.accent : Colors.textLight }]}>
+              {item.label}
+            </Text>
+          </TouchableOpacity>
+        )
+      })}
+
+      <TouchableOpacity
+        style={sidebar.composeBtn}
+        onPress={async () => {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) return
+          const { count } = await supabase
+            .from('broadcasts')
+            .select('id', { count: 'exact', head: true })
+            .eq('sender_id', user.id)
+          router.push((count ?? 0) === 0 ? '/broadcast-intro' : '/compose')
+        }}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={22} color={Colors.white} />
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+// ── モバイル用ボトムタブバー ───────────────────────────────────
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const iconMap: Record<string, { active: React.ComponentProps<typeof Ionicons>['name']; inactive: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
+    index:  { active: 'home',         inactive: 'home-outline',         label: 'ホーム' },
+    talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'メッセージ' },
+    shop:   { active: 'compass',      inactive: 'compass-outline',      label: '発見' },
+    mypage: { active: 'person',       inactive: 'person-outline',       label: 'マイページ' },
+  }
+
   const tabs = state.routes.map((route, index) => {
-    const { options } = descriptors[route.key]
     const focused = state.index === index
-
-    type IoniconsName = React.ComponentProps<typeof Ionicons>['name']
-
-    const iconMap: Record<string, { active: IoniconsName; inactive: IoniconsName; label: string }> = {
-      index:  { active: 'home',         inactive: 'home-outline',         label: 'ホーム' },
-      talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'メッセージ' },
-      shop:   { active: 'compass',      inactive: 'compass-outline',      label: '発見' },
-      mypage: { active: 'person',       inactive: 'person-outline',       label: 'マイページ' },
-    }
-
     const icon = iconMap[route.name]
     if (!icon) return null
-
     return (
       <TouchableOpacity
         key={route.key}
@@ -29,14 +88,8 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         onPress={() => navigation.navigate(route.name)}
         activeOpacity={0.7}
       >
-        <Ionicons
-          name={focused ? icon.active : icon.inactive}
-          size={24}
-          color={focused ? Colors.accent : Colors.textLight}
-        />
-        <Text style={[styles.tabLabel, { color: focused ? Colors.accent : Colors.textLight }]}>
-          {icon.label}
-        </Text>
+        <Ionicons name={focused ? icon.active : icon.inactive} size={24} color={focused ? Colors.accent : Colors.textLight} />
+        <Text style={[styles.tabLabel, { color: focused ? Colors.accent : Colors.textLight }]}>{icon.label}</Text>
       </TouchableOpacity>
     )
   })
@@ -47,7 +100,6 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   return (
     <View style={styles.tabBar}>
       <View style={styles.tabGroup}>{left}</View>
-
       <TouchableOpacity
         style={styles.centerButton}
         onPress={async () => {
@@ -57,35 +109,103 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             .from('broadcasts')
             .select('id', { count: 'exact', head: true })
             .eq('sender_id', user.id)
-          if ((count ?? 0) === 0) {
-            router.push('/broadcast-intro')
-          } else {
-            router.push('/compose')
-          }
+          router.push((count ?? 0) === 0 ? '/broadcast-intro' : '/compose')
         }}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={28} color={Colors.white} />
       </TouchableOpacity>
-
       <View style={styles.tabGroup}>{right}</View>
     </View>
   )
 }
 
+// ── タブレイアウト本体 ─────────────────────────────────────────
 export default function TabLayout() {
+  const { width } = useWindowDimensions()
+  const isDesktop = Platform.OS === 'web' && width >= 900
+  const pathname = usePathname()
+
+  const [selectedTalkId, setSelectedTalkId] = useState<string | null>(null)
+
+  // タブを切り替えたらパネルを閉じる
+  useEffect(() => {
+    if (!pathname.includes('/talk')) {
+      setSelectedTalkId(null)
+    }
+  }, [pathname])
+
+  const showPanel = isDesktop && selectedTalkId !== null
+
   return (
-    <Tabs
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="talk" />
-      <Tabs.Screen name="shop" />
-      <Tabs.Screen name="mypage" />
-    </Tabs>
+    <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, isDesktop }}>
+      <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column' }}>
+
+        {/* 左サイドバー（デスクトップのみ） */}
+        {isDesktop && <DesktopSidebar />}
+
+        {/* タブコンテンツ（リスト列） */}
+        <View style={[{ flex: 1 }, showPanel && { flex: 0, width: 340 }]}>
+          <Tabs
+            tabBar={(props) => isDesktop ? <></> : <CustomTabBar {...props} />}
+            screenOptions={{ headerShown: false }}
+          >
+            <Tabs.Screen name="index" />
+            <Tabs.Screen name="talk" />
+            <Tabs.Screen name="shop" />
+            <Tabs.Screen name="mypage" />
+          </Tabs>
+        </View>
+
+        {/* 右詳細パネル（デスクトップ＆選択時のみ） */}
+        {showPanel && (
+          <View style={{ flex: 1 }}>
+            <TalkDetailPanel
+              creatorId={selectedTalkId!}
+              onClose={() => setSelectedTalkId(null)}
+            />
+          </View>
+        )}
+
+      </View>
+    </TalkContext.Provider>
   )
 }
+
+// ── スタイル ─────────────────────────────────────────────────
+const sidebar = StyleSheet.create({
+  wrap: {
+    width: SIDEBAR_W,
+    backgroundColor: Colors.header,
+    borderRightWidth: 1,
+    borderRightColor: Colors.border,
+    alignItems: 'center',
+    paddingTop: 16,
+    paddingBottom: 16,
+    gap: 4,
+  },
+  item: {
+    width: SIDEBAR_W - 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 10,
+  },
+  label: {
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  composeBtn: {
+    marginTop: 12,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: Colors.accent,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+})
 
 const styles = StyleSheet.create({
   tabBar: {
@@ -98,33 +218,16 @@ const styles = StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 20 : 0,
     paddingHorizontal: 8,
   },
-  tabGroup: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 3,
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  tabGroup: { flex: 1, flexDirection: 'row' },
+  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, gap: 3 },
+  tabLabel: { fontSize: 10, fontWeight: '600' },
   centerButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 56, height: 56, borderRadius: 28,
     backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
     marginHorizontal: 12,
     shadowColor: Colors.accent,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 8,
   },
 })

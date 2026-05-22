@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import { useTalkContext } from '../contexts/TalkContext'
 
 const ACTION_WIDTH = 140
 const isWeb = Platform.OS === 'web'
@@ -134,6 +135,7 @@ function SwipeableDmRow({
 }
 
 export default function TalkScreen() {
+  const { setSelectedTalkId, isDesktop, selectedTalkId } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
   const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number } | null>(null)
   const [followingItems, setFollowingItems] = useState<FollowingItem[]>([])
@@ -408,7 +410,7 @@ export default function TalkScreen() {
         renderItem={({ item }) => {
           if (item.type === 'my') {
             return (
-              <TouchableOpacity style={styles.talkItem} onPress={() => router.push(`/talk/${item.myId}` as any)}>
+              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === item.myId && styles.talkItemSelected]} onPress={() => isDesktop ? setSelectedTalkId(item.myId) : router.push(`/talk/${item.myId}` as any)}>
                 <View style={[styles.avatar, styles.selfAvatar]}>
                   {item.avatar
                     ? <Image source={{ uri: item.avatar }} style={styles.avatarImage} />
@@ -451,7 +453,7 @@ export default function TalkScreen() {
           if (item.type === 'following-item') {
             const d = item.data
             return (
-              <TouchableOpacity style={styles.talkItem} onPress={() => router.push(`/talk/${d.id}` as any)}>
+              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === d.id && styles.talkItemSelected]} onPress={() => isDesktop ? setSelectedTalkId(d.id) : router.push(`/talk/${d.id}` as any)}>
                 <TouchableOpacity
                   onPress={() => router.push(`/creator/${d.id}` as any)}
                   activeOpacity={0.7}
@@ -556,6 +558,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: Colors.white,
     gap: 12,
+  },
+  talkItemSelected: {
+    backgroundColor: `${Colors.accent}18`,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.accent,
   },
   avatar: {
     width: 52, height: 52, borderRadius: 26,
