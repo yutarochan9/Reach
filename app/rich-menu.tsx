@@ -159,7 +159,8 @@ export default function RichMenuScreen() {
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
-  const [gridSize, setGridSize] = useState({ width: 1, height: 1 })
+  const gridRef = useRef<any>(null)
+  const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -264,11 +265,20 @@ export default function RichMenuScreen() {
     )
   }
 
-  // ── グリッドのタップ処理 (TouchableOpacity.onPress で locationX/Y を取得) ──
+  // ── グリッドのタップ処理 ──
+  // locationX/Y は React Native Web では常に 0 付近になるバグがあるため
+  // pageX/pageY（絶対座標）から View.measure() で取得したグリッド位置を引いて計算する
+  const onGridLayout = () => {
+    gridRef.current?.measure((_: any, __: any, w: number, h: number, px: number, py: number) => {
+      gridRectRef.current = { x: px, y: py, w, h }
+    })
+  }
+
   const onGridPress = (e: any) => {
-    const { locationX, locationY } = e.nativeEvent
-    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((locationX / gridSize.width) * GRID_COLS)))
-    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((locationY / gridSize.height) * GRID_ROWS)))
+    const { pageX, pageY } = e.nativeEvent
+    const { x, y, w, h } = gridRectRef.current
+    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((pageX - x) / w) * GRID_COLS)))
+    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((pageY - y) / h) * GRID_ROWS)))
     handleCellPress(col, row)
   }
 
@@ -355,12 +365,11 @@ export default function RichMenuScreen() {
               )}
               <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
 
-              {/* TouchableOpacity で onPress の locationX/Y を取得してセル計算 */}
-              <TouchableOpacity
-                activeOpacity={1}
+              {/* ref を持つ View でサイズ・位置を記録。タップは最前面の absoluteFill TouchableOpacity で受付 */}
+              <View
+                ref={gridRef}
                 style={styles.gridArea}
-                onLayout={e => setGridSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-                onPress={onGridPress}
+                onLayout={onGridLayout}
               >
                 {/* 縦線 */}
                 {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
@@ -407,7 +416,13 @@ export default function RichMenuScreen() {
                     backgroundColor: 'rgba(255,220,0,0.85)',
                   }} />
                 )}
-              </TouchableOpacity>
+                {/* タップ受付レイヤー（最前面・全面。視覚要素は全て pointerEvents="none"） */}
+                <TouchableOpacity
+                  activeOpacity={1}
+                  style={StyleSheet.absoluteFillObject}
+                  onPress={onGridPress}
+                />
+              </View>
             </View>
 
             {selectionStart && (
@@ -686,7 +701,7 @@ const styles = StyleSheet.create({
   phoneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
   phoneAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
   phoneName: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  phoneChat: { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  phoneChat: { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 5, gap: 5 },
   bubbleRow: { flexDirection: 'row' },
   bubble: {
     backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4,
