@@ -158,9 +158,17 @@ export default function RichMenuScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
+  const [draftTile, setDraftTile] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [scrollEnabled, setScrollEnabled] = useState(true)
   const gridRef = useRef<any>(null)
   const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
+  const draftTileRef = useRef(draftTile)
+  draftTileRef.current = draftTile  // レンダーごとに同期
+
+  const updateDraft = (v: typeof draftTile) => {
+    draftTileRef.current = v
+    setDraftTile(v)
+  }
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -203,25 +211,58 @@ export default function RichMenuScreen() {
   const handleCellPress = useCallback((col: number, row: number) => {
     const existing = getCellTile(col, row)
     if (existing) {
+      updateDraft(null)
       setEditingBtn({ ...existing })
-      setSelectionStart(null)
       setModalVisible(true)
       return
     }
-    if (!selectionStart) {
-      setSelectionStart({ x: col, y: row })
-      return
-    }
-    const x = Math.min(selectionStart.x, col)
-    const y = Math.min(selectionStart.y, row)
-    const w = Math.abs(col - selectionStart.x) + 1
-    const h = Math.abs(row - selectionStart.y) + 1
-    const overlap = buttons.some(b => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y)
-    setSelectionStart(null)
+    // 空セルをタップ → 1×1 のドラフトタイルを置く
+    updateDraft({ x: col, y: row, w: 1, h: 1 })
+  }, [getCellTile])
+
+  const confirmDraft = () => {
+    if (!draftTile) return
+    const overlap = buttons.some(b =>
+      draftTile.x < b.x + b.w && draftTile.x + draftTile.w > b.x &&
+      draftTile.y < b.y + b.h && draftTile.y + draftTile.h > b.y
+    )
     if (overlap) { Alert.alert('重複', '既存のタイルと重なっています'); return }
-    setEditingBtn({ id: genId(), label: '', url: '', icon: 'link-outline', x, y, w, h })
+    setEditingBtn({ id: genId(), label: '', url: '', icon: 'link-outline', ...draftTile })
+    updateDraft(null)
     setModalVisible(true)
-  }, [buttons, getCellTile, selectionStart])
+  }
+
+  // コーナーハンドルのレスポンダー（ドラッグでリサイズ）
+  const makeHandleResponders = (corner: 'tl' | 'tr' | 'bl' | 'br') => ({
+    onStartShouldSetResponder: () => true,
+    onMoveShouldSetResponder: () => true,
+    onResponderGrant: () => setScrollEnabled(false),
+    onResponderMove: (e: any) => {
+      const dt = draftTileRef.current
+      if (!dt) return
+      const { pageX, pageY } = e.nativeEvent
+      const { x: gx, y: gy, w: gw, h: gh } = gridRectRef.current
+      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((pageX - gx) / (gw / GRID_COLS))))
+      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((pageY - gy) / (gh / GRID_ROWS))))
+      let { x, y, w, h } = dt
+      if (corner === 'br') {
+        w = Math.max(1, col - x + 1); h = Math.max(1, row - y + 1)
+      } else if (corner === 'tl') {
+        const nx = Math.min(col, x + w - 1); const ny = Math.min(row, y + h - 1)
+        w = x + w - nx; h = y + h - ny; x = nx; y = ny
+      } else if (corner === 'tr') {
+        const ny = Math.min(row, y + h - 1)
+        w = Math.max(1, col - x + 1); h = y + h - ny; y = ny
+      } else {
+        const nx = Math.min(col, x + w - 1)
+        w = x + w - nx; h = Math.max(1, row - y + 1); x = nx
+      }
+      const next = { x, y, w, h }
+      draftTileRef.current = next
+      setDraftTile(next)
+    },
+    onResponderRelease: () => setScrollEnabled(true),
+  })
 
   const handleSaveBtn = () => {
     if (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) return
@@ -294,7 +335,7 @@ export default function RichMenuScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView scrollEnabled={scrollEnabled} contentContainerStyle={styles.content}>
 
         <View style={styles.card}>
           <View>
@@ -356,7 +397,7 @@ export default function RichMenuScreen() {
 
             {/* グリッドエディタ */}
             <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>
-              {selectionStart ? '2つ目のセルをタップして範囲確定' : 'タップでタイル配置・編集'}
+              {draftTile ? 'コーナーをドラッグしてサイズ調整' : 'タップでタイル配置・編集'}
             </Text>
 
             <View style={styles.gridWrapper}>
@@ -405,30 +446,62 @@ export default function RichMenuScreen() {
                     <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
                   </View>
                 ))}
-                {/* 選択開始セル */}
-                {selectionStart && (
+                {/* ドラフトタイル（黄色ハイライト） */}
+                {draftTile && (
                   <View pointerEvents="none" style={{
                     position: 'absolute',
-                    left: `${(selectionStart.x / GRID_COLS) * 100}%` as any,
-                    top: `${(selectionStart.y / GRID_ROWS) * 100}%` as any,
-                    width: `${(1 / GRID_COLS) * 100}%` as any,
-                    height: `${(1 / GRID_ROWS) * 100}%` as any,
-                    backgroundColor: 'rgba(255,220,0,0.85)',
+                    left: `${(draftTile.x / GRID_COLS) * 100}%` as any,
+                    top: `${(draftTile.y / GRID_ROWS) * 100}%` as any,
+                    width: `${(draftTile.w / GRID_COLS) * 100}%` as any,
+                    height: `${(draftTile.h / GRID_ROWS) * 100}%` as any,
+                    backgroundColor: 'rgba(255,220,0,0.3)',
+                    borderWidth: 2, borderColor: '#FFE000',
                   }} />
                 )}
-                {/* タップ受付レイヤー（最前面・全面。視覚要素は全て pointerEvents="none"） */}
+                {/* タップ受付レイヤー（視覚要素は全て pointerEvents="none"） */}
                 <TouchableOpacity
                   activeOpacity={1}
                   style={StyleSheet.absoluteFillObject}
                   onPress={onGridPress}
                 />
+                {/* リサイズハンドル（TouchableOpacity より前面） */}
+                {draftTile && (['tl', 'tr', 'bl', 'br'] as const).map(corner => {
+                  const lPct = (corner === 'tr' || corner === 'br')
+                    ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
+                    : (draftTile.x / GRID_COLS) * 100
+                  const tPct = (corner === 'bl' || corner === 'br')
+                    ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
+                    : (draftTile.y / GRID_ROWS) * 100
+                  return (
+                    <View
+                      key={corner}
+                      style={{
+                        position: 'absolute',
+                        left: `${lPct}%` as any,
+                        top: `${tPct}%` as any,
+                        width: 18, height: 18,
+                        backgroundColor: '#FFE000',
+                        borderWidth: 2, borderColor: '#fff',
+                        borderRadius: 4,
+                        transform: [{ translateX: -9 }, { translateY: -9 }],
+                        zIndex: 30,
+                      }}
+                      {...makeHandleResponders(corner)}
+                    />
+                  )
+                })}
               </View>
             </View>
 
-            {selectionStart && (
-              <TouchableOpacity style={styles.cancelSelBtn} onPress={() => setSelectionStart(null)}>
-                <Text style={styles.cancelSelText}>選択キャンセル</Text>
-              </TouchableOpacity>
+            {draftTile && (
+              <View style={styles.draftActions}>
+                <TouchableOpacity style={styles.cancelSelBtn} onPress={() => updateDraft(null)}>
+                  <Text style={styles.cancelSelText}>キャンセル</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmBtn} onPress={confirmDraft}>
+                  <Text style={styles.confirmBtnText}>確定</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
@@ -690,8 +763,11 @@ const styles = StyleSheet.create({
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   // 27列×18行 → 横長 (aspectRatio = 27/18 = 1.5)
   gridArea: { aspectRatio: 27 / 18 },
-  cancelSelBtn: { alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
+  draftActions: { flexDirection: 'row', gap: 8 },
+  cancelSelBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
   cancelSelText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  confirmBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: Colors.accent },
+  confirmBtnText: { fontSize: 12, color: '#fff', fontWeight: '700' },
   note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
   phoneFrame: { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
   phoneHeader: {
