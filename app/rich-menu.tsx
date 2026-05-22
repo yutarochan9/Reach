@@ -88,17 +88,27 @@ async function uploadFileWeb(
   onSuccess: (url: string) => void,
   setUploading: (v: boolean) => void,
 ) {
+  console.log('[upload] 開始', { name: file.name, type: file.type, size: file.size })
   setUploading(true)
   try {
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
     const path = `tiles/${userId}/img_${Date.now()}.${ext}`
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`
+    console.log('[upload] パス:', path, 'バケット:', BUCKET)
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
-    if (error) { Alert.alert('アップロードエラー', error.message); return }
+    if (error) {
+      console.error('[upload] Supabase エラー:', error)
+      Alert.alert('アップロードエラー', `${error.message}\n(コンソールに詳細あり)`)
+      return
+    }
+    // SDK の getPublicUrl で URL を取得（手動構築より確実）
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
+    const publicUrl = urlData.publicUrl
+    console.log('[upload] 成功 URL:', publicUrl)
     onSuccess(publicUrl)
   } catch (e: any) {
+    console.error('[upload] 例外:', e)
     Alert.alert('エラー', e?.message ?? 'エラーが発生しました')
   } finally {
     setUploading(false)
