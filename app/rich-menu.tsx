@@ -16,6 +16,10 @@ type RichMenuButton = {
   url: string
   icon: string
   bgImage?: string
+  x: number   // グリッド列 (0〜GRID_COLS-1)
+  y: number   // グリッド行 (0〜GRID_ROWS-1)
+  w: number   // 幅（グリッド単位）
+  h: number   // 高さ（グリッド単位）
 }
 
 const ICON_OPTIONS = [
@@ -33,8 +37,19 @@ const ICON_OPTIONS = [
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const BUCKET = 'broadcast-images'
-const SLOTS = [0, 1, 2, 3, 4, 5]
+const GRID_COLS = 18
+const GRID_ROWS = 27
 const genId = () => Math.random().toString(36).slice(2)
+
+// 旧データ（x/y/w/h なし）のデフォルト配置 (3列×2行)
+const DEFAULT_POSITIONS = [
+  { x: 0,  y: 0,  w: 6, h: 14 },
+  { x: 6,  y: 0,  w: 6, h: 14 },
+  { x: 12, y: 0,  w: 6, h: 14 },
+  { x: 0,  y: 14, w: 6, h: 13 },
+  { x: 6,  y: 14, w: 6, h: 13 },
+  { x: 12, y: 14, w: 6, h: 13 },
+]
 
 // Native のみ: XHR + FormData でアップロード
 async function uploadImageNative(
@@ -64,8 +79,7 @@ async function uploadImageNative(
   })
 }
 
-// Web のみ: ブラウザ標準のfile inputを使って File オブジェクトを直接アップロード
-// expo-image-picker の web 実装はモーダル内で canceled:true になる不具合があるため使わない
+// Web のみ: expo-image-picker の modal 内バグを回避してブラウザ標準 file input を使う
 function pickImageWeb(userId: string, onSuccess: (url: string) => void, setUploading: (v: boolean) => void) {
   const input = document.createElement('input')
   input.type = 'file'
@@ -125,6 +139,8 @@ export default function RichMenuScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
+  const [gridSize, setGridSize] = useState({ width: 1, height: 1 })
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -134,7 +150,12 @@ export default function RichMenuScreen() {
     if (data) {
       setMenuId(data.id)
       setIsActive(data.is_active)
-      setButtons(data.buttons ?? [])
+      const raw: any[] = data.buttons ?? []
+      // 旧データに x/y/w/h がなければデフォルト配置を付与
+      const normalized = raw.map((b, i) =>
+        b.x != null ? b : { ...b, ...(DEFAULT_POSITIONS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
+      ) as RichMenuButton[]
+      setButtons(normalized)
       setPanelBgImage(data.panel_bg_image ?? null)
     }
     setLoading(false)
@@ -162,15 +183,50 @@ export default function RichMenuScreen() {
     router.back()
   }
 
-  const openSlot = (index: number) => {
-    const btn = buttons[index]
-    if (btn) {
-      setEditingBtn({ ...btn })
-    } else {
-      if (buttons.length >= 6) return
-      setEditingBtn({ label: '', url: '', icon: 'link-outline', id: genId() })
+  // セルの座標からそのセルを占有するタイルを返す
+  const getCellTile = useCallback((col: number, row: number) =>
+    buttons.find(b => col >= b.x && col < b.x + b.w && row >= b.y && row < b.y + b.h) ?? null
+  , [buttons])
+
+  // グリッドセルタップ時の処理
+  const handleCellPress = (col: number, row: number) => {
+    const existing = getCellTile(col, row)
+    if (existing) {
+      // 既存タイルをタップ → 編集モーダルを開く
+      setEditingBtn({ ...existing })
+      setSelectionStart(null)
+      setModalVisible(true)
+      return
     }
+    if (!selectionStart) {
+      // 1回目タップ → 開始セルを記録
+      setSelectionStart({ x: col, y: row })
+      return
+    }
+    // 2回目タップ → 矩形を確定して新規タイル作成
+    const x = Math.min(selectionStart.x, col)
+    const y = Math.min(selectionStart.y, row)
+    const w = Math.abs(col - selectionStart.x) + 1
+    const h = Math.abs(row - selectionStart.y) + 1
+    const overlap = buttons.some(b =>
+      x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + h > b.y
+    )
+    setSelectionStart(null)
+    if (overlap) {
+      Alert.alert('重複', '既存のタイルと重なっています')
+      return
+    }
+    setEditingBtn({ id: genId(), label: '', url: '', icon: 'link-outline', x, y, w, h })
     setModalVisible(true)
+  }
+
+  // グリッド上のタッチ位置からセル座標を計算してhandleCellPressへ
+  const handleGridTouch = (e: any) => {
+    if (gridSize.width <= 1) return
+    const { locationX, locationY } = e.nativeEvent
+    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((locationX / gridSize.width) * GRID_COLS)))
+    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((locationY / gridSize.height) * GRID_ROWS)))
+    handleCellPress(col, row)
   }
 
   const handleSaveBtn = () => {
@@ -185,20 +241,17 @@ export default function RichMenuScreen() {
   }
 
   const handleDeleteBtn = (id: string) => {
-    Alert.alert('削除', 'このタイルを削除しますか？', [
-      { text: 'キャンセル', style: 'cancel' },
-      { text: '削除', style: 'destructive', onPress: () => setButtons(prev => prev.filter(b => b.id !== id)) },
-    ])
+    setButtons(prev => prev.filter(b => b.id !== id))
+    setModalVisible(false)
+    setEditingBtn(null)
   }
 
   const pickImage = async (onSuccess: (url: string) => void) => {
     if (!userId) return
     if (Platform.OS === 'web') {
-      // Web: expo-image-pickerを使わず、ブラウザのfile inputを直接使う
       pickImageWeb(userId, onSuccess, setUploading)
       return
     }
-    // Native
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') { Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください'); return }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 })
@@ -248,7 +301,7 @@ export default function RichMenuScreen() {
         {/* 左右二列レイアウト */}
         <View style={styles.twoCol}>
 
-          {/* 左：タイル設定 */}
+          {/* 左：グリッドエディタ */}
           <View style={styles.leftCol}>
             {/* パネル背景画像 */}
             <View style={[styles.card, { marginHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
@@ -273,49 +326,77 @@ export default function RichMenuScreen() {
               )}
             </View>
 
-            {/* 編集タイルグリッド */}
-            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>タップして編集</Text>
-            <View style={styles.tilePanel}>
+            {/* グリッドエディタ */}
+            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>
+              {selectionStart ? '2つ目のセルをタップして範囲を確定' : 'タップでタイル配置・編集'}
+            </Text>
+            <View style={styles.gridWrapper}>
+              {/* 背景画像 */}
               {panelBgImage && (
-                <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
               )}
-              <View style={styles.panelOverlay} />
-              <View style={styles.tileHandleArea}>
-                <View style={styles.tileHandleBar} />
-              </View>
-              <View style={styles.tileGrid}>
-                {SLOTS.map(i => {
-                  const btn = buttons[i]
-                  return (
-                    <TouchableOpacity
-                      key={btn ? btn.id : `empty-${i}`}
-                      style={styles.tileSlot}
-                      onPress={() => openSlot(i)}
-                      activeOpacity={0.8}
-                    >
-                      {btn ? (
-                        <>
-                          {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                          {btn.bgImage && <View style={styles.tileImgOverlay} />}
-                          <Ionicons name={btn.icon as any} size={22} color="#FFFFFF" />
-                          <View style={styles.tileSeparator} />
-                          <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
-                          <TouchableOpacity
-                            style={styles.tileDeleteBtn}
-                            onPress={() => handleDeleteBtn(btn.id)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          >
-                            <Ionicons name="close-circle" size={17} color="rgba(255,255,255,0.8)" />
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <Ionicons name="add" size={24} color="rgba(255,255,255,0.3)" />
-                      )}
-                    </TouchableOpacity>
-                  )
-                })}
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+
+              {/* インタラクティブなグリッド領域 */}
+              <View
+                style={styles.gridArea}
+                onLayout={(e) => setGridSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+                onStartShouldSetResponder={() => true}
+                onResponderRelease={handleGridTouch}
+              >
+                {/* 縦線 */}
+                {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
+                  <View key={`v${i}`} pointerEvents="none" style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    left: `${(i / GRID_COLS) * 100}%` as any,
+                    width: StyleSheet.hairlineWidth,
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                  }} />
+                ))}
+                {/* 横線 */}
+                {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
+                  <View key={`h${i}`} pointerEvents="none" style={{
+                    position: 'absolute', left: 0, right: 0,
+                    top: `${(i / GRID_ROWS) * 100}%` as any,
+                    height: StyleSheet.hairlineWidth,
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                  }} />
+                ))}
+                {/* 配置済みタイル */}
+                {buttons.map(btn => (
+                  <View key={btn.id} pointerEvents="none" style={{
+                    position: 'absolute',
+                    left: `${(btn.x / GRID_COLS) * 100}%` as any,
+                    top: `${(btn.y / GRID_ROWS) * 100}%` as any,
+                    width: `${(btn.w / GRID_COLS) * 100}%` as any,
+                    height: `${(btn.h / GRID_ROWS) * 100}%` as any,
+                    backgroundColor: `${Colors.accent}99`,
+                    borderWidth: 1.5, borderColor: Colors.accent,
+                    alignItems: 'center', justifyContent: 'center', gap: 2,
+                  }}>
+                    <Ionicons name={btn.icon as any} size={11} color="#FFFFFF" />
+                    <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
+                  </View>
+                ))}
+                {/* 選択開始セル（黄色ハイライト） */}
+                {selectionStart && (
+                  <View pointerEvents="none" style={{
+                    position: 'absolute',
+                    left: `${(selectionStart.x / GRID_COLS) * 100}%` as any,
+                    top: `${(selectionStart.y / GRID_ROWS) * 100}%` as any,
+                    width: `${(1 / GRID_COLS) * 100}%` as any,
+                    height: `${(1 / GRID_ROWS) * 100}%` as any,
+                    backgroundColor: 'rgba(255,220,0,0.85)',
+                  }} />
+                )}
               </View>
             </View>
+
+            {selectionStart && (
+              <TouchableOpacity style={styles.cancelSelBtn} onPress={() => setSelectionStart(null)}>
+                <Text style={styles.cancelSelText}>選択キャンセル</Text>
+              </TouchableOpacity>
+            )}
 
             <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
               ※ URLには https:// から始まるリンクを入力してください。
@@ -344,35 +425,63 @@ export default function RichMenuScreen() {
                   </View>
                 </View>
               </View>
-              <View style={styles.tilePanel}>
-                {panelBgImage && (
-                  <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                )}
-                <View style={styles.panelOverlay} />
+
+              {/* プレビュータイルパネル */}
+              <View style={styles.previewPanel}>
+                {/* ハンドルバー */}
                 <View style={styles.tileHandleArea}>
                   <View style={styles.tileHandleBar} />
                 </View>
-                <View style={styles.tileGrid}>
-                  {SLOTS.map(i => {
-                    const btn = buttons[i]
-                    return (
-                      <View key={btn ? btn.id : `prev-${i}`} style={styles.tileSlot}>
-                        {btn ? (
-                          <>
-                            {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                            {btn.bgImage && <View style={styles.tileImgOverlay} />}
-                            <Ionicons name={btn.icon as any} size={18} color="#FFFFFF" />
-                            <View style={styles.tileSeparator} />
-                            <Text style={styles.tileLabel} numberOfLines={1}>{btn.label}</Text>
-                          </>
-                        ) : (
-                          <Ionicons name="add" size={18} color="rgba(255,255,255,0.2)" />
-                        )}
-                      </View>
-                    )
-                  })}
+                {/* タイル表示エリア（18:27比率） */}
+                <View style={styles.previewTileArea}>
+                  {panelBgImage && (
+                    <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+                  )}
+                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+                  {/* グリッド線 */}
+                  {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
+                    <View key={`pv${i}`} pointerEvents="none" style={{
+                      position: 'absolute', top: 0, bottom: 0,
+                      left: `${(i / GRID_COLS) * 100}%` as any,
+                      width: StyleSheet.hairlineWidth,
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                    }} />
+                  ))}
+                  {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
+                    <View key={`ph${i}`} pointerEvents="none" style={{
+                      position: 'absolute', left: 0, right: 0,
+                      top: `${(i / GRID_ROWS) * 100}%` as any,
+                      height: StyleSheet.hairlineWidth,
+                      backgroundColor: 'rgba(255,255,255,0.06)',
+                    }} />
+                  ))}
+                  {/* 配置済みタイル */}
+                  {buttons.map(btn => (
+                    <View key={btn.id} pointerEvents="none" style={{
+                      position: 'absolute',
+                      left: `${(btn.x / GRID_COLS) * 100}%` as any,
+                      top: `${(btn.y / GRID_ROWS) * 100}%` as any,
+                      width: `${(btn.w / GRID_COLS) * 100}%` as any,
+                      height: `${(btn.h / GRID_ROWS) * 100}%` as any,
+                      alignItems: 'center', justifyContent: 'center',
+                      borderRightWidth: 0.5, borderBottomWidth: 0.5,
+                      borderColor: 'rgba(255,255,255,0.15)',
+                    }}>
+                      {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                      {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none" />}
+                      <Ionicons name={btn.icon as any} size={14} color="#FFFFFF" />
+                      <View style={styles.previewSeparator} />
+                      <Text style={styles.previewLabel} numberOfLines={1}>{btn.label}</Text>
+                    </View>
+                  ))}
+                  {buttons.length === 0 && (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
+                    </View>
+                  )}
                 </View>
               </View>
+
               <View style={styles.phoneDmArea}>
                 <View style={styles.phoneDmField}>
                   <Text style={styles.phoneDmPlaceholder}>メッセージ</Text>
@@ -409,11 +518,11 @@ export default function RichMenuScreen() {
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
               {/* タイルプレビュー */}
               <View style={styles.previewWrap}>
-                <View style={styles.previewTile}>
+                <View style={styles.modalPreviewTile}>
                   {editingBtn?.bgImage && (
                     <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                   )}
-                  {editingBtn?.bgImage && <View style={styles.tileImgOverlay} />}
+                  {editingBtn?.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none" />}
                   <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={30} color="#FFFFFF" />
                   <View style={styles.tileSeparator} />
                   <Text style={styles.tileLabel} numberOfLines={1}>{editingBtn?.label || 'ラベル'}</Text>
@@ -491,6 +600,22 @@ export default function RichMenuScreen() {
                 autoCapitalize="none"
                 keyboardType="url"
               />
+
+              {/* 削除ボタン（既存タイルのみ表示） */}
+              {editingBtn?.id && buttons.some(b => b.id === editingBtn.id) && (
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => {
+                    Alert.alert('削除', 'このタイルを削除しますか？', [
+                      { text: 'キャンセル', style: 'cancel' },
+                      { text: '削除', style: 'destructive', onPress: () => handleDeleteBtn(editingBtn.id!) },
+                    ])
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#E53E3E" />
+                  <Text style={styles.deleteBtnText}>このタイルを削除</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -513,7 +638,6 @@ const styles = StyleSheet.create({
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   content: { paddingTop: 16, paddingBottom: 40, gap: 12 },
 
-  // カード（トグル・パネル背景）
   card: {
     backgroundColor: Colors.white, borderRadius: 16,
     borderWidth: 1, borderColor: Colors.border,
@@ -521,7 +645,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     gap: 12,
   },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 10 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
   toggleLabel: { fontSize: 15, fontWeight: '600', color: Colors.text },
   toggleDesc: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
@@ -531,7 +655,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
   },
 
-  // パネル背景
   bgActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   bgThumb: { width: 48, height: 48, borderRadius: 8 },
   bgBtn: {
@@ -553,8 +676,23 @@ const styles = StyleSheet.create({
   leftCol: { flex: 1, gap: 10 },
   rightCol: { flex: 1 },
 
-  // セクションラベル
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
+
+  // グリッドエディタ
+  gridWrapper: {
+    backgroundColor: '#1C1C1E', overflow: 'hidden',
+    borderRadius: 8,
+  },
+  gridArea: {
+    // 18:27 の縦長比率
+    aspectRatio: 18 / 27,
+  },
+  cancelSelBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1, borderColor: Colors.accent,
+  },
+  cancelSelText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
 
   // プレビュー（電話フレーム）
   phoneFrame: {
@@ -582,46 +720,36 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
   },
   bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
-  bubbleText: { fontSize: 13, color: Colors.text, lineHeight: 20, paddingHorizontal: 10, paddingVertical: 7 },
+  bubbleText: { fontSize: 11, color: Colors.text, lineHeight: 18, paddingHorizontal: 8, paddingVertical: 5 },
   phoneDmArea: {
     backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 8,
+    paddingHorizontal: 10, paddingVertical: 7,
     borderTopWidth: 1, borderTopColor: Colors.border,
   },
   phoneDmField: {
-    flex: 1, height: 36, borderRadius: 18, backgroundColor: Colors.background,
+    flex: 1, height: 30, borderRadius: 15, backgroundColor: Colors.background,
     borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: 14, justifyContent: 'center',
+    paddingHorizontal: 12, justifyContent: 'center',
   },
-  phoneDmPlaceholder: { fontSize: 13, color: Colors.textLight },
+  phoneDmPlaceholder: { fontSize: 11, color: Colors.textLight },
   phoneDmSend: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 28, height: 28, borderRadius: 14,
     backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
   },
 
-  // タイルパネル
-  tilePanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
-  panelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  // プレビュータイルパネル
+  previewPanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
   tileHandleArea: {
-    alignItems: 'center', paddingVertical: 7,
+    alignItems: 'center', paddingVertical: 5,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  tileHandleBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
-  tileGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.08)',
+  tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  previewTileArea: {
+    aspectRatio: 18 / 27,
+    overflow: 'hidden',
   },
-  tileSlot: {
-    width: '33.33%', aspectRatio: 1, overflow: 'hidden',
-    alignItems: 'center', justifyContent: 'center',
-    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  tileImgOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-  tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
-  tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
-  tileDeleteBtn: { position: 'absolute', top: 5, right: 5 },
+  previewSeparator: { width: 20, height: 1.5, backgroundColor: Colors.accent, marginVertical: 3 },
+  previewLabel: { fontSize: 7, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
 
   note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
 
@@ -639,11 +767,13 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 8 },
 
   previewWrap: { alignItems: 'center', paddingVertical: 8 },
-  previewTile: {
+  modalPreviewTile: {
     width: 110, aspectRatio: 1, overflow: 'hidden',
     backgroundColor: '#2C2C2E', alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 14,
+    paddingVertical: 14, borderRadius: 4,
   },
+  tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
+  tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
 
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: {
@@ -656,4 +786,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
     padding: 12, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
   },
+  deleteBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 16, padding: 14, borderRadius: 12,
+    borderWidth: 1, borderColor: '#E53E3E',
+  },
+  deleteBtnText: { fontSize: 15, color: '#E53E3E', fontWeight: '600' },
 })

@@ -398,22 +398,42 @@ export default function TalkDetailScreen() {
   )
 
   // タイルグリッドのJSX（isSelf・非selfで共有）
-  const TilePanel = richMenu && richMenu.buttons.length > 0 ? (
+  // 旧形式（x/y/w/h なし）のデフォルト配置
+  const DEFAULT_TILE_POS = [
+    { x: 0, y: 0, w: 6, h: 14 }, { x: 6, y: 0, w: 6, h: 14 }, { x: 12, y: 0, w: 6, h: 14 },
+    { x: 0, y: 14, w: 6, h: 13 }, { x: 6, y: 14, w: 6, h: 13 }, { x: 12, y: 14, w: 6, h: 13 },
+  ]
+  const GRID_C = 18
+  const GRID_R = 27
+  const normalizedButtons = richMenu?.buttons.map((b: any, i: number) =>
+    b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
+  ) ?? []
+
+  const TilePanel = richMenu && normalizedButtons.length > 0 ? (
     <View style={styles.tileContainer}>
       {richMenu.panel_bg_image && (
-        <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
       )}
-      <View style={styles.panelDimOverlay} />
-      {/* 折りたたみハンドル（上端中央の細いバー） */}
+      <View style={styles.panelDimOverlay} pointerEvents="none" />
       <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
         <View style={styles.tileHandleBar} />
       </TouchableOpacity>
       {tileOpen && (
-        <View style={styles.tileGrid}>
-          {richMenu.buttons.map((btn: any) => (
+        <View style={styles.tileGridArea}>
+          {normalizedButtons.map((btn: any) => (
             <TouchableOpacity
               key={btn.id}
-              style={styles.tileBtn}
+              style={{
+                position: 'absolute',
+                left: `${(btn.x / GRID_C) * 100}%` as any,
+                top: `${(btn.y / GRID_R) * 100}%` as any,
+                width: `${(btn.w / GRID_C) * 100}%` as any,
+                height: `${(btn.h / GRID_R) * 100}%` as any,
+                alignItems: 'center', justifyContent: 'center',
+                borderRightWidth: 0.5, borderBottomWidth: 0.5,
+                borderColor: 'rgba(255,255,255,0.1)',
+                overflow: 'hidden',
+              }}
               onPress={() => Linking.openURL(btn.url)}
               activeOpacity={0.75}
             >
@@ -606,38 +626,16 @@ const styles = StyleSheet.create({
   sendDisabled: { backgroundColor: '#B0B0B0' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
-  tileContainer: {
-    backgroundColor: '#1C1C1E', overflow: 'hidden',
-  },
-  panelDimOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  // 折りたたみハンドル（上端の細いバー）
+  tileContainer: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
+  panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
   tileHandle: {
     alignItems: 'center', paddingVertical: 7,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  tileHandleBar: {
-    width: 32, height: 3, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  tileGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)',
-    borderLeftWidth: 1, borderLeftColor: 'rgba(255,255,255,0.08)',
-  },
-  // aspectRatioを使わず固定heightにしてweb/mobile両方で一貫した表示
-  tileBtn: {
-    width: '33.33%', height: 90, overflow: 'hidden',
-    alignItems: 'center', justifyContent: 'center',
-    borderRightWidth: 1, borderRightColor: 'rgba(255,255,255,0.08)',
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  tileBtnImgOverlay: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
+  tileHandleBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  // 18:27グリッド比率で絶対配置タイルを並べるエリア
+  tileGridArea: { aspectRatio: 18 / 27, overflow: 'hidden' },
+  tileBtnImgOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
   tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
 })
