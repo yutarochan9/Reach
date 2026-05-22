@@ -519,7 +519,7 @@ export default function TalkDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+  container: { flex: 1, backgroundColor: Colors.background, maxWidth: isWeb ? 680 : undefined, alignSelf: isWeb ? 'center' : undefined, width: '100%' },
   header: {
     backgroundColor: Colors.header,
     paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,

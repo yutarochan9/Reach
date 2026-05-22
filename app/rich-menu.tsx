@@ -711,12 +711,7 @@ export default function RichMenuScreen() {
               {editingBtn?.id && buttons.some(b => b.id === editingBtn.id) && (
                 <TouchableOpacity
                   style={styles.deleteBtn}
-                  onPress={() =>
-                    Alert.alert('削除', 'このタイルを削除しますか？', [
-                      { text: 'キャンセル', style: 'cancel' },
-                      { text: '削除', style: 'destructive', onPress: () => handleDeleteBtn(editingBtn.id!) },
-                    ])
-                  }
+                  onPress={() => handleDeleteBtn(editingBtn.id!)}
                 >
                   <Ionicons name="trash-outline" size={16} color="#E53E3E" />
                   <Text style={styles.deleteBtnText}>このタイルを削除</Text>
