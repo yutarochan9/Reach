@@ -210,6 +210,8 @@ export default function TileScreen() {
   const makeEdgeHandleResponders = (edge: 'top' | 'right' | 'bottom' | 'left') => ({
     onStartShouldSetResponder: () => true,
     onMoveShouldSetResponder: () => true,
+    onStartShouldSetResponderCapture: () => true,
+    onMoveShouldSetResponderCapture: () => true,
     onResponderGrant: () => setScrollEnabled(false),
     onResponderMove: (e: any) => {
       const dt = draftTileRef.current
@@ -495,7 +497,7 @@ export default function TileScreen() {
               )}
               <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFillObject} onPress={onGridPress} />
 
-              {/* 辺ハンドル（カプセル形） */}
+              {/* 辺ハンドル：大きいタッチエリア + 中央にカプセル */}
               {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
                 const isHoriz = edge === 'top' || edge === 'bottom'
                 const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
@@ -504,8 +506,12 @@ export default function TileScreen() {
                 const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
                   : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
                   : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
-                const hw = isHoriz ? 32 : 10
-                const hh = isHoriz ? 10 : 32
+                // 視覚的なカプセルサイズ
+                const capW = isHoriz ? 36 : 12
+                const capH = isHoriz ? 12 : 36
+                // タッチエリアは最低44px確保
+                const touchW = Math.max(capW, 44)
+                const touchH = Math.max(capH, 44)
                 return (
                   <View
                     key={edge}
@@ -513,15 +519,20 @@ export default function TileScreen() {
                       position: 'absolute',
                       left: `${lPct}%` as any,
                       top: `${tPct}%` as any,
-                      width: hw, height: hh,
-                      backgroundColor: '#FFE000',
-                      borderWidth: 2, borderColor: '#fff',
-                      borderRadius: 5,
-                      transform: [{ translateX: -(hw / 2) }, { translateY: -(hh / 2) }],
+                      width: touchW, height: touchH,
+                      transform: [{ translateX: -(touchW / 2) }, { translateY: -(touchH / 2) }],
                       zIndex: 30,
+                      alignItems: 'center', justifyContent: 'center',
                     }}
                     {...makeEdgeHandleResponders(edge)}
-                  />
+                  >
+                    <View style={{
+                      width: capW, height: capH,
+                      backgroundColor: '#FFE000',
+                      borderWidth: 2, borderColor: '#fff',
+                      borderRadius: 6,
+                    }} />
+                  </View>
                 )
               })}
             </View>
