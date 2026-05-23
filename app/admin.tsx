@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, Switch, Platform,
+  TextInput, Alert, ActivityIndicator, Platform,
 } from 'react-native'
+import ToggleSwitch from './components/ToggleSwitch'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -293,12 +294,7 @@ export default function AdminScreen() {
                 <Text style={styles.flagKey}>{item.key}</Text>
                 {item.description && <Text style={styles.flagDesc}>{item.description}</Text>}
               </View>
-              <Switch
-                value={item.enabled}
-                onValueChange={() => toggleFlag(item)}
-                trackColor={{ false: Colors.border, true: Colors.button }}
-                thumbColor={Colors.white}
-              />
+              <ToggleSwitch value={item.enabled} onValueChange={() => toggleFlag(item)} />
             </View>
           )}
         />

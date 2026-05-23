@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
+import ToggleSwitch from './components/ToggleSwitch'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -174,12 +175,7 @@ function ToggleRow({
         <Text style={styles.toggleLabel}>{label}</Text>
         <Text style={styles.toggleDesc}>{desc}</Text>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ false: Colors.border, true: Colors.button }}
-        thumbColor={Colors.white}
-      />
+      <ToggleSwitch value={value} onValueChange={onChange} />
     </View>
   )
 }

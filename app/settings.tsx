@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
+import ToggleSwitch from './components/ToggleSwitch'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
@@ -161,12 +162,10 @@ export default function SettingsScreen() {
                 <Text style={styles.toggleDesc}>いいね・フォローの通知を受け取る</Text>
               </View>
             </View>
-            <Switch
+            <ToggleSwitch
               value={pushEnabled}
               onValueChange={handlePushToggle}
               disabled={savingPush}
-              trackColor={{ false: Colors.border, true: Colors.button }}
-              thumbColor={Colors.white}
             />
           </View>
           <View style={styles.divider} />
