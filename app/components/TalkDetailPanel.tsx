@@ -36,7 +36,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
-  const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
+  const [tileMenu, setTileMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -61,7 +61,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
       setSenderIsOfficial((profile as any)?.is_official ?? false)
-      setRichMenu(menu && menu.is_active ? menu : null)
+      setTileMenu(menu && menu.is_active ? menu : null)
 
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)
@@ -187,14 +187,14 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
   }
 
-  const normalizedButtons = richMenu?.buttons.map((b: any, i: number) =>
+  const normalizedButtons = tileMenu?.buttons.map((b: any, i: number) =>
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
 
-  const TilePanel = richMenu && normalizedButtons.length > 0 ? (
+  const TilePanel = tileMenu && normalizedButtons.length > 0 ? (
     <View style={styles.tileContainer}>
-      {richMenu.panel_bg_image && (
-        <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+      {tileMenu.panel_bg_image && (
+        <Image source={{ uri: tileMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
       )}
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
       <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
@@ -215,13 +215,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                 borderRightWidth: 0.5, borderBottomWidth: 0.5,
                 borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden',
               }}
-              onPress={() => {
-                if (btn.action === 'code' && btn.code) {
-                  sendMessage(btn.code)
-                } else if (btn.url) {
-                  Linking.openURL(btn.url)
-                }
-              }}
+              onPress={() => btn.url && Linking.openURL(btn.url)}
               activeOpacity={0.75}
             >
               {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
