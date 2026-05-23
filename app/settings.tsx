@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator, Platform } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -16,6 +16,7 @@ export default function SettingsScreen() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingPush, setSavingPush] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -24,13 +25,14 @@ export default function SettingsScreen() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('push_enabled, plan, subscription_status')
+      .select('push_enabled, plan, subscription_status, is_admin')
       .eq('id', user.id)
       .single()
 
     setPushEnabled(profile?.push_enabled ?? true)
     setPlan((profile?.plan ?? 'free') as Plan)
     setSubscriptionStatus(profile?.subscription_status ?? null)
+    setIsAdmin(profile?.is_admin ?? false)
     setLoading(false)
   }, [])
 
@@ -60,19 +62,45 @@ export default function SettingsScreen() {
   }
 
   const handleDeleteAccount = () => {
-    Alert.alert(
-      'アカウント削除',
-      'アカウントを削除すると、すべてのデータが失われます。この操作は取り消せません。',
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除する', style: 'destructive',
-          onPress: () => {
-            Alert.alert('アカウント削除', '削除するにはサポートへお問い合わせください。')
-          },
+    if (Platform.OS === 'web') {
+      const ok = window.confirm(
+        'アカウントを削除すると、すべてのデータが失われます。この操作は取り消せません。\n\n本当に削除しますか？'
+      )
+      if (ok) confirmDelete()
+    } else {
+      Alert.alert(
+        'アカウント削除',
+        'アカウントを削除すると、すべてのデータが失われます。この操作は取り消せません。',
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          { text: '削除する', style: 'destructive', onPress: confirmDelete },
+        ]
+      )
+    }
+  }
+
+  const confirmDelete = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    setLoading(true)
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/delete-account`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
         },
-      ]
+      }
     )
+    setLoading(false)
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      Alert.alert('エラー', body.error ?? '削除に失敗しました')
+      return
+    }
+    await supabase.auth.signOut()
+    router.replace('/(auth)/login')
   }
 
   if (loading) {
@@ -141,7 +169,35 @@ export default function SettingsScreen() {
               thumbColor={Colors.white}
             />
           </View>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/notification-settings' as any)}>
+            <Ionicons name="options-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>通知の詳細設定</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
         </View>
+
+        <Text style={styles.sectionLabel}>セキュリティ</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/security' as any)}>
+            <Ionicons name="shield-checkmark-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>二段階認証・端末移行</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+        </View>
+
+        {isAdmin && (
+          <>
+            <Text style={styles.sectionLabel}>運営</Text>
+            <View style={styles.section}>
+              <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/admin' as any)}>
+                <Ionicons name="settings-outline" size={18} color="#8B5CF6" />
+                <Text style={[styles.actionLabel, { color: '#8B5CF6' }]}>管理者画面</Text>
+                <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>その他</Text>
         <View style={styles.section}>

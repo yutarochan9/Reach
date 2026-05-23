@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar'
 import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
+import CookieBanner from './components/CookieBanner'
 
 export default function RootLayout() {
   const navigated = useRef(false)
@@ -57,6 +58,7 @@ export default function RootLayout() {
     <>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }} />
+      <CookieBanner />
     </>
   )
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, SafeAreaView, Image,
+  KeyboardAvoidingView, Platform, Alert, SafeAreaView, Image, ActivityIndicator,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -9,12 +9,16 @@ import { supabase } from '../../lib/supabase'
 import { authFlags } from '../../lib/authState'
 import { Colors } from '../../constants/colors'
 
+type Step = 'credentials' | 'otp' | 'totp'
+
 export default function LoginScreen() {
-  const [step, setStep] = useState<'credentials' | 'otp'>('credentials')
+  const [step, setStep] = useState<Step>('credentials')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [otp, setOtp] = useState('')
+  const [totpCode, setTotpCode] = useState('')
+  const [totpFactorId, setTotpFactorId] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSignIn = async () => {
@@ -34,7 +38,19 @@ export default function LoginScreen() {
       return
     }
 
-    // パスワード確認後はサインアウトしてOTPへ（SIGNED_OUTもスキップ）
+    // TOTPが登録されているか確認
+    const { data: factorsData } = await supabase.auth.mfa.listFactors()
+    const totpFactors = factorsData?.totp ?? []
+    if (totpFactors.length > 0) {
+      // TOTP画面へ（サインアウトしない・AAL1セッションを維持）
+      setTotpFactorId(totpFactors[0].id)
+      setTotpCode('')
+      setLoading(false)
+      setStep('totp')
+      return
+    }
+
+    // TOTP未登録 → メールOTPへ
     authFlags.skipNextSignedOut = true
     await supabase.auth.signOut()
 
@@ -65,6 +81,61 @@ export default function LoginScreen() {
     // 成功時は_layout.tsxのSIGNED_INイベントがタブ画面に遷移
   }
 
+  const handleVerifyTotp = async () => {
+    if (totpCode.length < 6 || !totpFactorId) return
+    setLoading(true)
+    const { error: challengeErr, data: challengeData } = await supabase.auth.mfa.challenge({
+      factorId: totpFactorId,
+    })
+    if (challengeErr) {
+      setLoading(false)
+      Alert.alert('エラー', challengeErr.message)
+      return
+    }
+    const { error: verifyErr } = await supabase.auth.mfa.verify({
+      factorId: totpFactorId,
+      challengeId: challengeData.id,
+      code: totpCode,
+    })
+    setLoading(false)
+    if (verifyErr) {
+      Alert.alert('認証エラー', 'コードが正しくありません。認証アプリを確認してください。')
+      return
+    }
+    // 成功 → _layout.tsxのSIGNED_INイベントが処理、authFlagsをクリア
+    authFlags.skipNextSignedIn = false
+  }
+
+  const handleGoogleLogin = async () => {
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: Platform.OS === 'web'
+          ? `${window.location.origin}/`
+          : 'reach://login',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      },
+    })
+    setLoading(false)
+    if (error) Alert.alert('エラー', error.message)
+    // web: リダイレクトが起きるので以降の処理は不要
+  }
+
+  const handleAppleLogin = async () => {
+    setLoading(true)
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: Platform.OS === 'web'
+          ? `${window.location.origin}/`
+          : 'reach://login',
+      },
+    })
+    setLoading(false)
+    if (error) Alert.alert('エラー', error.message)
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -72,8 +143,21 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.topBar}>
-          {step === 'otp' && (
-            <TouchableOpacity onPress={() => { setStep('credentials'); setOtp('') }} style={styles.backBtn}>
+          {(step === 'otp' || step === 'totp') && (
+            <TouchableOpacity
+              onPress={async () => {
+                if (step === 'totp') {
+                  // TOTP中断 → サインアウト
+                  authFlags.skipNextSignedOut = true
+                  await supabase.auth.signOut()
+                  authFlags.skipNextSignedIn = false
+                }
+                setStep('credentials')
+                setOtp('')
+                setTotpCode('')
+              }}
+              style={styles.backBtn}
+            >
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
           )}
@@ -85,7 +169,7 @@ export default function LoginScreen() {
             <Text style={styles.logoText}>Reach</Text>
           </View>
 
-          {step === 'credentials' ? (
+          {step === 'credentials' && (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>サインイン</Text>
               <Text style={styles.cardSub}>登録済みのメールアドレスとパスワードを入力してください</Text>
@@ -123,7 +207,10 @@ export default function LoginScreen() {
                 onPress={handleSignIn}
                 disabled={!email.trim() || !password || loading}
               >
-                <Text style={styles.buttonText}>{loading ? '確認中...' : 'サインイン'}</Text>
+                {loading
+                  ? <ActivityIndicator color={Colors.white} />
+                  : <Text style={styles.buttonText}>サインイン</Text>
+                }
               </TouchableOpacity>
 
               <View style={styles.dividerRow}>
@@ -132,6 +219,18 @@ export default function LoginScreen() {
                 <View style={styles.dividerLine} />
               </View>
 
+              <TouchableOpacity style={styles.oauthButton} onPress={handleGoogleLogin} disabled={loading}>
+                <Ionicons name="logo-google" size={18} color="#DB4437" />
+                <Text style={styles.oauthButtonText}>Googleでサインイン</Text>
+              </TouchableOpacity>
+
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity style={[styles.oauthButton, { backgroundColor: '#000', borderColor: '#000' }]} onPress={handleAppleLogin} disabled={loading}>
+                  <Ionicons name="logo-apple" size={18} color={Colors.white} />
+                  <Text style={[styles.oauthButtonText, { color: Colors.white }]}>Appleでサインイン</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={styles.secondaryButton}
                 onPress={() => router.push('/(auth)/signup')}
@@ -139,10 +238,12 @@ export default function LoginScreen() {
                 <Text style={styles.secondaryButtonText}>新規サインアップ</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+          )}
+
+          {step === 'otp' && (
             <View style={styles.card}>
               <View style={styles.otpIconWrap}>
-                <Ionicons name="shield-checkmark-outline" size={36} color={Colors.accent} />
+                <Ionicons name="mail-outline" size={36} color={Colors.accent} />
               </View>
               <Text style={styles.cardTitle}>メール認証</Text>
               <Text style={styles.cardSub}>{email}{'\n'}に送信した6桁のコードを入力してください</Text>
@@ -161,10 +262,43 @@ export default function LoginScreen() {
                 onPress={handleVerifyOtp}
                 disabled={otp.length < 6 || loading}
               >
-                <Text style={styles.buttonText}>{loading ? '確認中...' : 'サインイン'}</Text>
+                {loading
+                  ? <ActivityIndicator color={Colors.white} />
+                  : <Text style={styles.buttonText}>サインイン</Text>
+                }
               </TouchableOpacity>
               <TouchableOpacity onPress={handleSignIn} style={styles.resendBtn}>
                 <Text style={styles.resendText}>コードを再送する</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {step === 'totp' && (
+            <View style={styles.card}>
+              <View style={styles.otpIconWrap}>
+                <Ionicons name="shield-checkmark-outline" size={36} color={Colors.accent} />
+              </View>
+              <Text style={styles.cardTitle}>二段階認証</Text>
+              <Text style={styles.cardSub}>認証アプリに表示されている{'\n'}6桁のコードを入力してください</Text>
+              <TextInput
+                style={styles.otpInput}
+                placeholder="------"
+                placeholderTextColor={Colors.border}
+                value={totpCode}
+                onChangeText={setTotpCode}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[styles.button, (totpCode.length < 6 || loading) && styles.buttonDisabled]}
+                onPress={handleVerifyTotp}
+                disabled={totpCode.length < 6 || loading}
+              >
+                {loading
+                  ? <ActivityIndicator color={Colors.white} />
+                  : <Text style={styles.buttonText}>認証する</Text>
+                }
               </TouchableOpacity>
             </View>
           )}
@@ -218,6 +352,18 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: { opacity: 0.45 },
   buttonText: { color: Colors.white, fontWeight: '700', fontSize: 16 },
+  oauthButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  oauthButtonText: { color: Colors.text, fontWeight: '700', fontSize: 15 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
   dividerText: { fontSize: 12, color: Colors.textLight },
