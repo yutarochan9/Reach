@@ -168,13 +168,18 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     }
   }
 
+  const sendMessage = async (text: string) => {
+    if (!text.trim() || !myId) return
+    await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: text.trim() })
+    const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single()
+    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.trim().slice(0, 80))
+  }
+
   const handleSend = async () => {
     if (!imText.trim() || !myId) return
     const text = imText.trim()
     setImText('')
-    await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: text })
-    const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single()
-    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.slice(0, 80))
+    await sendMessage(text)
   }
 
   const formatTime = (iso: string) => {
@@ -210,7 +215,13 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                 borderRightWidth: 0.5, borderBottomWidth: 0.5,
                 borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden',
               }}
-              onPress={() => Linking.openURL(btn.url)}
+              onPress={() => {
+                if (btn.action === 'code' && btn.code) {
+                  sendMessage(btn.code)
+                } else if (btn.url) {
+                  Linking.openURL(btn.url)
+                }
+              }}
               activeOpacity={0.75}
             >
               {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}

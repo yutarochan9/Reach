@@ -13,7 +13,9 @@ import { Colors } from '../constants/colors'
 type RichMenuButton = {
   id: string
   label: string
+  action: 'url' | 'code'
   url: string
+  code: string
   icon: string
   bgImage?: string
   x: number   // 列 (0〜GRID_COLS-1)
@@ -242,8 +244,8 @@ export default function RichMenuScreen() {
     setModalVisible(true)
   }
 
-  // コーナーハンドルのレスポンダー（ドラッグでリサイズ）
-  const makeHandleResponders = (corner: 'tl' | 'tr' | 'bl' | 'br') => ({
+  // 辺ハンドルのレスポンダー（各辺の中央からドラッグでリサイズ）
+  const makeEdgeHandleResponders = (edge: 'top' | 'right' | 'bottom' | 'left') => ({
     onStartShouldSetResponder: () => true,
     onMoveShouldSetResponder: () => true,
     onResponderGrant: () => setScrollEnabled(false),
@@ -255,28 +257,26 @@ export default function RichMenuScreen() {
       const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((pageX - gx) / (gw / GRID_COLS))))
       const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((pageY - gy) / (gh / GRID_ROWS))))
       let { x, y, w, h } = dt
-      if (corner === 'br') {
-        w = Math.max(1, col - x + 1); h = Math.max(1, row - y + 1)
-      } else if (corner === 'tl') {
-        const nx = Math.min(col, x + w - 1); const ny = Math.min(row, y + h - 1)
-        w = x + w - nx; h = y + h - ny; x = nx; y = ny
-      } else if (corner === 'tr') {
-        const ny = Math.min(row, y + h - 1)
-        w = Math.max(1, col - x + 1); h = y + h - ny; y = ny
+      if (edge === 'top') {
+        const ny = Math.min(row, y + h - 1); h = y + h - ny; y = ny
+      } else if (edge === 'bottom') {
+        h = Math.max(1, row - y + 1)
+      } else if (edge === 'left') {
+        const nx = Math.min(col, x + w - 1); w = x + w - nx; x = nx
       } else {
-        const nx = Math.min(col, x + w - 1)
-        w = x + w - nx; h = Math.max(1, row - y + 1); x = nx
+        w = Math.max(1, col - x + 1)
       }
-      const next = { x, y, w, h }
-      draftTileRef.current = next
-      setDraftTile(next)
+      updateDraft({ x, y, w, h })
     },
     onResponderRelease: () => setScrollEnabled(true),
   })
 
   const handleSaveBtn = () => {
-    if (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) return
-    const updated = { ...editingBtn, label: editingBtn.label.trim(), url: editingBtn.url.trim() } as RichMenuButton
+    const action = editingBtn?.action ?? 'url'
+    if (!editingBtn?.label?.trim()) return
+    if (action === 'url' && !editingBtn?.url?.trim()) return
+    if (action === 'code' && !editingBtn?.code?.trim()) return
+    const updated = { ...editingBtn, action, label: editingBtn.label.trim(), url: editingBtn.url?.trim() ?? '', code: editingBtn.code?.trim() ?? '' } as RichMenuButton
     setButtons(prev => {
       const exists = prev.find(b => b.id === updated.id)
       return exists ? prev.map(b => b.id === updated.id ? updated : b) : [...prev, updated]
@@ -474,29 +474,29 @@ export default function RichMenuScreen() {
                   style={StyleSheet.absoluteFillObject}
                   onPress={onGridPress}
                 />
-                {/* リサイズハンドル（TouchableOpacity より前面） */}
-                {draftTile && (['tl', 'tr', 'bl', 'br'] as const).map(corner => {
-                  const lPct = (corner === 'tr' || corner === 'br')
-                    ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
-                    : (draftTile.x / GRID_COLS) * 100
-                  const tPct = (corner === 'bl' || corner === 'br')
-                    ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
-                    : (draftTile.y / GRID_ROWS) * 100
+                {/* リサイズハンドル（辺の中央4点） */}
+                {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
+                  const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
+                    : edge === 'right' ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
+                    : ((draftTile.x + draftTile.w / 2) / GRID_COLS) * 100
+                  const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
+                    : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
+                    : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
                   return (
                     <View
-                      key={corner}
+                      key={edge}
                       style={{
                         position: 'absolute',
                         left: `${lPct}%` as any,
                         top: `${tPct}%` as any,
-                        width: 18, height: 18,
+                        width: 14, height: 14,
                         backgroundColor: '#FFE000',
                         borderWidth: 2, borderColor: '#fff',
-                        borderRadius: 4,
-                        transform: [{ translateX: -9 }, { translateY: -9 }],
+                        borderRadius: 7,
+                        transform: [{ translateX: -7 }, { translateY: -7 }],
                         zIndex: 30,
                       }}
-                      {...makeHandleResponders(corner)}
+                      {...makeEdgeHandleResponders(edge)}
                     />
                   )
                 })}
@@ -602,8 +602,14 @@ export default function RichMenuScreen() {
                 <Text style={styles.modalCancel}>キャンセル</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>タイル設定</Text>
-              <TouchableOpacity onPress={handleSaveBtn} disabled={!editingBtn?.label?.trim() || !editingBtn?.url?.trim()}>
-                <Text style={[styles.modalSave, (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) && { opacity: 0.4 }]}>完了</Text>
+              <TouchableOpacity onPress={handleSaveBtn} disabled={
+                !editingBtn?.label?.trim() ||
+                ((editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim())
+              }>
+                <Text style={[styles.modalSave, (
+                  !editingBtn?.label?.trim() ||
+                  ((editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim())
+                ) && { opacity: 0.4 }]}>完了</Text>
               </TouchableOpacity>
             </View>
 
@@ -695,17 +701,59 @@ export default function RichMenuScreen() {
                 maxLength={12}
               />
 
-              {/* URL */}
-              <Text style={styles.fieldLabel}>リンク先URL</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="https://example.com"
-                placeholderTextColor={Colors.textLight}
-                value={editingBtn?.url ?? ''}
-                onChangeText={text => setEditingBtn(p => p ? { ...p, url: text } : p)}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
+              {/* アクション種別 */}
+              <Text style={styles.fieldLabel}>アクション</Text>
+              <View style={styles.actionTypeRow}>
+                {(['url', 'code'] as const).map(a => {
+                  const isActive = (editingBtn?.action ?? 'url') === a
+                  return (
+                    <TouchableOpacity
+                      key={a}
+                      style={[styles.actionTypeBtn, isActive && styles.actionTypeBtnActive]}
+                      onPress={() => setEditingBtn(p => p ? { ...p, action: a } : p)}
+                    >
+                      <Ionicons
+                        name={a === 'url' ? 'link-outline' : 'code-slash-outline'}
+                        size={16}
+                        color={isActive ? '#fff' : Colors.accent}
+                      />
+                      <Text style={[styles.actionTypeBtnText, isActive && { color: '#fff' }]}>
+                        {a === 'url' ? 'URLを開く' : 'コードを送信'}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
+
+              {(editingBtn?.action ?? 'url') === 'url' ? (
+                <>
+                  <Text style={styles.fieldLabel}>リンク先URL</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="https://example.com"
+                    placeholderTextColor={Colors.textLight}
+                    value={editingBtn?.url ?? ''}
+                    onChangeText={text => setEditingBtn(p => p ? { ...p, url: text } : p)}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.fieldLabel}>送信コード</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="タップ時に自動送信するテキスト（例: #注文 / 予約希望）"
+                    placeholderTextColor={Colors.textLight}
+                    value={editingBtn?.code ?? ''}
+                    onChangeText={text => setEditingBtn(p => p ? { ...p, code: text } : p)}
+                    autoCapitalize="none"
+                  />
+                  <Text style={[styles.fieldLabel, { color: Colors.accent, fontWeight: '500', textTransform: 'none', letterSpacing: 0 }]}>
+                    ユーザーがこのボタンを押すと、コードが自動でDMに送信されます
+                  </Text>
+                </>
+              )}
 
               {/* 削除 */}
               {editingBtn?.id && buttons.some(b => b.id === editingBtn.id) && (
@@ -821,6 +869,13 @@ const styles = StyleSheet.create({
   },
   tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
   tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFF' },
+  actionTypeRow: { flexDirection: 'row', gap: 8 },
+  actionTypeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.accent,
+  },
+  actionTypeBtnActive: { backgroundColor: Colors.accent },
+  actionTypeBtnText: { fontSize: 13, fontWeight: '600', color: Colors.accent },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: {
     width: '18%', aspectRatio: 1, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
