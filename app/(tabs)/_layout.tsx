@@ -120,6 +120,18 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   )
 }
 
+const TALK_LIST_W = 320
+
+// ── トーク未選択時の空状態 ──────────────────────────────────────
+function TalkEmptyPanel() {
+  return (
+    <View style={emptyPanel.wrap}>
+      <Ionicons name="chatbubble-ellipses-outline" size={56} color={Colors.border} />
+      <Text style={emptyPanel.text}>トークを選択してください</Text>
+    </View>
+  )
+}
+
 // ── タブレイアウト本体 ─────────────────────────────────────────
 export default function TabLayout() {
   const { width } = useWindowDimensions()
@@ -128,14 +140,16 @@ export default function TabLayout() {
 
   const [selectedTalkId, setSelectedTalkId] = useState<string | null>(null)
 
-  // タブを切り替えたらパネルを閉じる
+  // トークページ以外に移動したらパネルを閉じる
   useEffect(() => {
-    if (!pathname.includes('/talk')) {
+    if (!pathname.startsWith('/talk')) {
       setSelectedTalkId(null)
     }
   }, [pathname])
 
-  const showPanel = isDesktop && selectedTalkId !== null
+  // デスクトップのトークページでは常に2カラム表示
+  const isTalkPage = pathname.startsWith('/talk') || pathname === '/talk'
+  const showTwoCol = isDesktop && isTalkPage
 
   return (
     <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, isDesktop }}>
@@ -144,8 +158,8 @@ export default function TabLayout() {
         {/* 左サイドバー（デスクトップのみ） */}
         {isDesktop && <DesktopSidebar />}
 
-        {/* タブコンテンツ（リスト列） */}
-        <View style={[{ flex: 1 }, showPanel && { flex: 0, width: 340 }]}>
+        {/* タブコンテンツ（トークページでは固定幅、それ以外はflex:1） */}
+        <View style={showTwoCol ? { width: TALK_LIST_W, borderRightWidth: 1, borderRightColor: Colors.border } : { flex: 1 }}>
           <Tabs
             tabBar={(props) => isDesktop ? <></> : <CustomTabBar {...props} />}
             screenOptions={{ headerShown: false }}
@@ -157,13 +171,16 @@ export default function TabLayout() {
           </Tabs>
         </View>
 
-        {/* 右詳細パネル（デスクトップ＆選択時のみ） */}
-        {showPanel && (
+        {/* 右チャットエリア（デスクトップ＆トークページのみ常時表示） */}
+        {showTwoCol && (
           <View style={{ flex: 1 }}>
-            <TalkDetailPanel
-              creatorId={selectedTalkId!}
-              onClose={() => setSelectedTalkId(null)}
-            />
+            {selectedTalkId
+              ? <TalkDetailPanel
+                  creatorId={selectedTalkId}
+                  onClose={() => setSelectedTalkId(null)}
+                />
+              : <TalkEmptyPanel />
+            }
           </View>
         )}
 
@@ -204,6 +221,21 @@ const sidebar = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.35,
     shadowRadius: 6,
+  },
+})
+
+const emptyPanel = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+  },
+  text: {
+    fontSize: 15,
+    color: Colors.textLight,
+    fontWeight: '500',
   },
 })
 
