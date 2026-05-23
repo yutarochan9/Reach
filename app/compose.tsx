@@ -777,15 +777,6 @@ export default function ComposeScreen() {
             />
           </View>
 
-          <Text style={styles.toolsSectionLabel}>データ</Text>
-          <View style={styles.toolsSection}>
-            <ToolMenuItem
-              icon="bar-chart-outline"
-              label="分析"
-              desc="閲覧数・いいね・配信数を確認"
-              onPress={() => router.push('/analytics' as any)}
-            />
-          </View>
         </ScrollView>
       )}
     </View>

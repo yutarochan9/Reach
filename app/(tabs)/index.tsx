@@ -1,9 +1,14 @@
 import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image } from 'react-native'
+import Svg, { Polyline, Circle, Rect, G } from 'react-native-svg'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+
+type BroadcastStat = { id: string; reads: number; likes: number }
+
+type MyStats = { followerCount: number; totalReads: number; totalLikes: number }
 
 type FollowedCreator = {
   id: string
@@ -21,17 +26,142 @@ type FollowerProfile = {
 }
 
 type HomeRow =
-  | { type: 'my-posts' }
+  | { type: 'analytics' }
   | { type: 'section'; sectionId: 'following' | 'followers'; count: number; open: boolean }
   | { type: 'following-item'; data: FollowedCreator }
   | { type: 'follower-item'; data: FollowerProfile }
 
+// ── 折れ線グラフ ──────────────────────────────────────────
+function LineChart({ data, color, width, height = 72 }: { data: number[]; color: string; width: number; height?: number }) {
+  if (data.length < 2 || width < 10) return null
+  const max = Math.max(...data, 1)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const pX = 8, pY = 8
+  const w = width - pX * 2
+  const h = height - pY * 2
+  const pts = data.map((v, i) =>
+    `${pX + (i / (data.length - 1)) * w},${pY + (1 - (v - min) / range) * h}`
+  ).join(' ')
+  return (
+    <Svg width={width} height={height}>
+      <Polyline points={pts} fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      {data.map((v, i) => {
+        const cx = pX + (i / (data.length - 1)) * w
+        const cy = pY + (1 - (v - min) / range) * h
+        return <Circle key={i} cx={cx} cy={cy} r={3.5} fill={color} />
+      })}
+    </Svg>
+  )
+}
+
+// ── 棒グラフ ──────────────────────────────────────────────
+function BarChart({ data, color, width, height = 72 }: { data: number[]; color: string; width: number; height?: number }) {
+  if (data.length === 0 || width < 10) return null
+  const max = Math.max(...data, 1)
+  const gap = 4
+  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 1)
+  const maxH = height - 4
+  return (
+    <Svg width={width} height={height}>
+      <G>
+        {data.map((v, i) => {
+          const barH = Math.max((v / max) * maxH, 2)
+          const x = i * (barW + gap)
+          const y = height - barH - 2
+          return <Rect key={i} x={x} y={y} width={barW} height={barH} rx={3} fill={color} />
+        })}
+      </G>
+    </Svg>
+  )
+}
+
+// ── 分析カード ────────────────────────────────────────────
+function AnalyticsCard({
+  myUserId,
+  stats,
+  broadcasts,
+}: {
+  myUserId: string | null
+  stats: MyStats | null
+  broadcasts: BroadcastStat[]
+}) {
+  const [chartW, setChartW] = useState(0)
+  const readData = broadcasts.map(b => b.reads)
+  const likeData = broadcasts.map(b => b.likes)
+  const hasData = broadcasts.length >= 2
+
+  return (
+    <View style={styles.analyticsCard}>
+      <TouchableOpacity
+        style={styles.analyticsHeader}
+        onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.myPostsIcon}>
+          <Ionicons name="bar-chart-outline" size={20} color={Colors.white} />
+        </View>
+        <View style={styles.myPostsText}>
+          <Text style={styles.myPostsTitle}>あなたの投稿・分析</Text>
+          <Text style={styles.myPostsSub}>配信パフォーマンスを確認</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+      </TouchableOpacity>
+
+      {stats && (
+        <View style={styles.statsRow}>
+          <View style={styles.statChip}>
+            <Text style={styles.statVal}>{stats.followerCount.toLocaleString()}</Text>
+            <Text style={styles.statLbl}>フォロワー</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statChip}>
+            <Text style={styles.statVal}>{stats.totalReads.toLocaleString()}</Text>
+            <Text style={styles.statLbl}>総閲覧数</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statChip}>
+            <Text style={styles.statVal}>{stats.totalLikes.toLocaleString()}</Text>
+            <Text style={styles.statLbl}>総いいね</Text>
+          </View>
+        </View>
+      )}
+
+      {hasData ? (
+        <View
+          style={styles.chartsWrap}
+          onLayout={e => setChartW(e.nativeEvent.layout.width)}
+        >
+          {chartW > 0 && (
+            <>
+              <Text style={styles.chartLabel}>
+                <Ionicons name="eye-outline" size={11} color={Colors.accent} /> 閲覧数推移（直近{broadcasts.length}配信）
+              </Text>
+              <LineChart data={readData} color={Colors.accent} width={chartW} />
+
+              <Text style={[styles.chartLabel, { marginTop: 12 }]}>
+                <Ionicons name="heart-outline" size={11} color={Colors.button} /> 配信別いいね数
+              </Text>
+              <BarChart data={likeData} color={Colors.button} width={chartW} />
+            </>
+          )}
+        </View>
+      ) : (
+        <Text style={styles.analyticsEmpty}>配信後にグラフが表示されます</Text>
+      )}
+    </View>
+  )
+}
+
+// ── ホーム画面 ────────────────────────────────────────────
 export default function HomeScreen() {
   const [creators, setCreators] = useState<FollowedCreator[]>([])
   const [followers, setFollowers] = useState<FollowerProfile[]>([])
   const [myDisplayName, setMyDisplayName] = useState('')
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [myUserId, setMyUserId] = useState<string | null>(null)
+  const [myStats, setMyStats] = useState<MyStats | null>(null)
+  const [recentBroadcasts, setRecentBroadcasts] = useState<BroadcastStat[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [unreadNotifs, setUnreadNotifs] = useState(0)
@@ -43,11 +173,18 @@ export default function HomeScreen() {
     if (!user) return
     setMyUserId(user.id)
 
-    const [{ data: profile }, { data: followersData }, { data: follows }, { count: notifCount }] = await Promise.all([
+    const [
+      { data: profile },
+      { data: followersData },
+      { data: follows },
+      { count: notifCount },
+      { data: bcs },
+    ] = await Promise.all([
       supabase.from('profiles').select('display_name, avatar_url').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', user.id),
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false),
+      supabase.from('broadcasts').select('id').eq('sender_id', user.id).eq('status', 'published').order('created_at', { ascending: false }).limit(8),
     ])
 
     setMyDisplayName(profile?.display_name ?? '')
@@ -56,8 +193,17 @@ export default function HomeScreen() {
 
     const followingIds = (follows ?? []).map((f: any) => f.following_id)
     const followerIds = (followersData ?? []).map((f: any) => f.follower_id)
+    const followerCount = followersData?.length ?? 0
 
-    const [followingProfiles, followerProfiles] = await Promise.all([
+    const bcIds = (bcs ?? []).map((b: any) => b.id)
+
+    const [{ data: reactions }, { data: reads }, followingProfiles, followerProfiles] = await Promise.all([
+      bcIds.length > 0
+        ? supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds)
+        : Promise.resolve({ data: [] }),
+      bcIds.length > 0
+        ? supabase.from('broadcast_reads').select('broadcast_id').in('broadcast_id', bcIds)
+        : Promise.resolve({ data: [] }),
       followingIds.length > 0
         ? supabase.from('profiles').select('id, display_name, bio, is_official, avatar_url').in('id', followingIds).order('display_name')
         : Promise.resolve({ data: [] }),
@@ -65,6 +211,20 @@ export default function HomeScreen() {
         ? supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followerIds)
         : Promise.resolve({ data: [] }),
     ])
+
+    const likeMap: Record<string, number> = {}
+    const readMap: Record<string, number> = {}
+    for (const r of (reactions ?? [])) likeMap[(r as any).broadcast_id] = (likeMap[(r as any).broadcast_id] ?? 0) + 1
+    for (const r of (reads ?? [])) readMap[(r as any).broadcast_id] = (readMap[(r as any).broadcast_id] ?? 0) + 1
+
+    setMyStats({
+      followerCount,
+      totalReads: Object.values(readMap).reduce((a, b) => a + b, 0),
+      totalLikes: Object.values(likeMap).reduce((a, b) => a + b, 0),
+    })
+    setRecentBroadcasts(
+      bcIds.map(id => ({ id, reads: readMap[id] ?? 0, likes: likeMap[id] ?? 0 })).reverse()
+    )
 
     setCreators((followingProfiles.data ?? []) as FollowedCreator[])
     setFollowers((followerProfiles.data ?? []) as FollowerProfile[])
@@ -88,7 +248,7 @@ export default function HomeScreen() {
   }
 
   const flatData: HomeRow[] = [
-    { type: 'my-posts' },
+    { type: 'analytics' },
     { type: 'section', sectionId: 'following', count: creators.length, open: followingOpen },
     ...(followingOpen ? creators.map(c => ({ type: 'following-item' as const, data: c })) : []),
     { type: 'section', sectionId: 'followers', count: followers.length, open: followersOpen },
@@ -131,7 +291,7 @@ export default function HomeScreen() {
       <FlatList
         data={flatData}
         keyExtractor={(item, index) => {
-          if (item.type === 'my-posts') return 'my-posts'
+          if (item.type === 'analytics') return 'analytics'
           if (item.type === 'section') return `section-${item.sectionId}`
           if (item.type === 'following-item') return `following-${item.data.id}`
           if (item.type === 'follower-item') return `follower-${item.data.id}`
@@ -141,26 +301,17 @@ export default function HomeScreen() {
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={({ leadingItem }) => {
           if (!leadingItem) return null
-          if (leadingItem.type === 'section' || leadingItem.type === 'my-posts') return null
+          if (leadingItem.type === 'section' || leadingItem.type === 'analytics') return null
           return <View style={styles.separator} />
         }}
         renderItem={({ item }) => {
-          if (item.type === 'my-posts') {
+          if (item.type === 'analytics') {
             return (
-              <TouchableOpacity
-                style={styles.myPostsCard}
-                onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.myPostsIcon}>
-                  <Ionicons name="grid-outline" size={20} color={Colors.white} />
-                </View>
-                <View style={styles.myPostsText}>
-                  <Text style={styles.myPostsTitle}>あなたの投稿</Text>
-                  <Text style={styles.myPostsSub}>配信履歴・返信を確認</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
-              </TouchableOpacity>
+              <AnalyticsCard
+                myUserId={myUserId}
+                stats={myStats}
+                broadcasts={recentBroadcasts}
+              />
             )
           }
 
@@ -268,8 +419,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   notifBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
-  profileName: { fontSize: 14, fontWeight: '600', color: Colors.text },
   headerProfile: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerAvatar: {
     width: 36, height: 36, borderRadius: 18,
@@ -278,6 +427,49 @@ const styles = StyleSheet.create({
   headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   headerAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   list: { paddingBottom: 32 },
+
+  // 分析カード
+  analyticsCard: {
+    backgroundColor: Colors.white,
+    marginHorizontal: 16, marginTop: 14, marginBottom: 4,
+    borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  analyticsHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14,
+  },
+  myPostsIcon: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: Colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  myPostsText: { flex: 1 },
+  myPostsTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  myPostsSub: { fontSize: 12, color: Colors.textLight, marginTop: 1 },
+  statsRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    paddingVertical: 12,
+  },
+  statChip: { flex: 1, alignItems: 'center', gap: 2 },
+  statVal: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  statLbl: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
+  statDivider: { width: 1, height: 28, backgroundColor: Colors.border },
+  chartsWrap: {
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    padding: 14, gap: 4,
+  },
+  chartLabel: {
+    fontSize: 11, fontWeight: '700', color: Colors.textLight,
+    textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4,
+  },
+  analyticsEmpty: {
+    textAlign: 'center', color: Colors.textLight, fontSize: 12,
+    paddingVertical: 14, borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+
   sectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
@@ -295,21 +487,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   sectionCountText: { fontSize: 11, color: Colors.textLight, fontWeight: '700' },
-  myPostsCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.white,
-    marginHorizontal: 16, marginTop: 14, marginBottom: 4,
-    borderRadius: 14, padding: 14, gap: 12,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  myPostsIcon: {
-    width: 40, height: 40, borderRadius: 10,
-    backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  myPostsText: { flex: 1 },
-  myPostsTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  myPostsSub: { fontSize: 12, color: Colors.textLight, marginTop: 1 },
   creatorRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 14,
