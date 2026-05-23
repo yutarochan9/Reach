@@ -289,24 +289,29 @@ export default function TileScreen() {
     handleCellPress(col, row)
   }
 
-  // スマホプレビューのタイルグリッド（再利用コンポーネント化）
+  // チャット風フラットプレビュー（compose と同スタイル）
   const PhonePreview = () => (
     <View style={styles.phoneFrame}>
-      {/* ノッチ */}
-      <View style={styles.phoneNotch} />
-      {/* チャットヘッダー */}
-      <View style={styles.phoneMsgHeader}>
+      {/* ヘッダー */}
+      <View style={styles.phoneHeader}>
         <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
-        <Text style={styles.phoneName} numberOfLines={1}>クリエイター</Text>
+        <View>
+          <Text style={styles.phoneHeaderName}>クリエイター名</Text>
+          <Text style={styles.phoneHeaderSub}>トーク画面</Text>
+        </View>
       </View>
       {/* チャットエリア */}
       <View style={styles.phoneChatArea}>
-        <View style={styles.phoneBubbleRow}>
-          <View style={styles.phoneBubble}><Text style={styles.phoneBubbleText}>こんにちは！</Text></View>
+        <View style={styles.dateBadge}>
+          <Text style={styles.dateBadgeText}>{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}</Text>
         </View>
-        <View style={[styles.phoneBubbleRow, { justifyContent: 'flex-end' }]}>
-          <View style={[styles.phoneBubble, styles.phoneBubbleSelf]}>
-            <Text style={[styles.phoneBubbleText, { color: '#FFF' }]}>よろしく</Text>
+        <View style={styles.bubbleRow}>
+          <View style={styles.bubbleAvatar}><Text style={styles.bubbleAvatarText}>R</Text></View>
+          <View style={styles.bubble}><Text style={styles.bubbleText}>こんにちは！</Text></View>
+        </View>
+        <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
+          <View style={[styles.bubble, styles.bubbleSelf]}>
+            <Text style={[styles.bubbleText, { color: '#FFF' }]}>よろしく！</Text>
           </View>
         </View>
       </View>
@@ -347,14 +352,14 @@ export default function TileScreen() {
             }}>
               {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
               {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
-              <Ionicons name={btn.icon as any} size={10} color="#FFF" />
-              <View style={{ width: 12, height: 1, backgroundColor: Colors.accent, marginVertical: 2 }} />
-              <Text style={{ fontSize: 7, fontWeight: '600', color: '#FFF', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
+              <Ionicons name={btn.icon as any} size={14} color="#FFF" />
+              <View style={{ width: 16, height: 1.5, backgroundColor: Colors.accent, marginVertical: 3 }} />
+              <Text style={{ fontSize: 9, fontWeight: '600', color: '#FFF', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
             </View>
           ))}
           {buttons.length === 0 && (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
+              <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
             </View>
           )}
         </View>
@@ -362,10 +367,8 @@ export default function TileScreen() {
       {/* DMエリア */}
       <View style={styles.phoneDmRow}>
         <View style={styles.phoneDmField}><Text style={styles.phoneDmPlaceholder}>DMを送る...</Text></View>
-        <View style={styles.phoneDmSend}><Ionicons name="send" size={9} color="#FFF" /></View>
+        <View style={styles.phoneDmSend}><Ionicons name="send" size={12} color="#FFF" /></View>
       </View>
-      {/* ホームインジケーター */}
-      <View style={styles.phoneHomeBar} />
     </View>
   )
 
@@ -536,10 +539,12 @@ export default function TileScreen() {
           <Text style={styles.note}>※ URLには https:// から始まるリンクを入力してください。</Text>
         </ScrollView>
 
-        {/* 右：スマホ型プレビュー */}
+        {/* 右：フラットプレビュー */}
         <View style={styles.rightPanel}>
           <Text style={styles.previewLabel}>プレビュー</Text>
-          <PhonePreview />
+          <View style={{ flex: 1 }}>
+            <PhonePreview />
+          </View>
         </View>
 
       </View>
@@ -679,77 +684,74 @@ const styles = StyleSheet.create({
   leftPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
   leftContent: { padding: 12, paddingBottom: 40, gap: 10 },
 
-  // 右パネル（スマホ型プレビュー）
+  // 右パネル（フラットプレビュー）
   rightPanel: {
-    width: 172,
+    width: 320,
     backgroundColor: Colors.background,
-    alignItems: 'center',
-    paddingTop: 14,
+    paddingTop: 16,
     paddingBottom: 20,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
     gap: 8,
+    borderLeftWidth: 1,
+    borderLeftColor: Colors.border,
   },
-  previewLabel: { fontSize: 10, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, textTransform: 'uppercase' },
+  previewLabel: { fontSize: 13, fontWeight: '700', color: Colors.textLight },
 
-  // スマホフレーム
+  // compose と同スタイルのフラットフレーム
   phoneFrame: {
-    width: 150,
-    backgroundColor: '#1C1C1E',
-    borderRadius: 28,
-    borderWidth: 3,
-    borderColor: '#3C3C3E',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 10,
+    flex: 1, backgroundColor: '#F0F0F0', borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: Colors.border,
   },
-  phoneNotch: {
-    width: 52, height: 10,
-    backgroundColor: '#3C3C3E',
-    borderRadius: 5,
-    alignSelf: 'center',
-    marginTop: 8, marginBottom: 6,
-  },
-  phoneMsgHeader: {
-    backgroundColor: Colors.white,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 7,
+  phoneHeader: {
+    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  phoneAvatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  phoneAvatarText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
-  phoneName: { fontSize: 11, fontWeight: '700', color: Colors.text, flex: 1 },
-  phoneChatArea: { backgroundColor: Colors.background, paddingHorizontal: 8, paddingVertical: 6, gap: 5 },
-  phoneBubbleRow: { flexDirection: 'row' },
-  phoneBubble: {
-    backgroundColor: Colors.white, borderRadius: 10, borderTopLeftRadius: 3,
-    paddingHorizontal: 7, paddingVertical: 5,
+  phoneAvatar: {
+    width: 34, height: 34, borderRadius: 7,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
   },
-  phoneBubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 10, borderTopRightRadius: 3 },
-  phoneBubbleText: { fontSize: 9, color: Colors.text, lineHeight: 14 },
+  phoneAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  phoneHeaderName: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  phoneHeaderSub: { fontSize: 10, color: Colors.textLight },
+  phoneChatArea: { padding: 12, gap: 8 },
+  dateBadge: { alignItems: 'center', marginVertical: 4 },
+  dateBadgeText: {
+    fontSize: 11, color: Colors.textLight,
+    backgroundColor: 'rgba(0,0,0,0.08)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10,
+  },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  bubbleAvatar: {
+    width: 30, height: 30, borderRadius: 6,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
+  },
+  bubbleAvatarText: { fontSize: 12, fontWeight: '700', color: Colors.white },
+  bubble: {
+    backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
+  },
+  bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
+  bubbleText: { fontSize: 13, color: Colors.text, lineHeight: 20, padding: 10 },
   phoneTilePanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
   phoneTileHandle: {
-    alignItems: 'center', paddingVertical: 4,
+    alignItems: 'center', paddingVertical: 6,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  phoneTileHandleBar: { width: 20, height: 2.5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  phoneTileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   phoneTileGrid: { aspectRatio: 27 / 18, overflow: 'hidden' },
   phoneDmRow: {
     backgroundColor: Colors.white,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 7, paddingVertical: 5,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 10, paddingVertical: 8,
     borderTopWidth: 1, borderTopColor: Colors.border,
   },
   phoneDmField: {
-    flex: 1, height: 22, borderRadius: 11,
+    flex: 1, height: 34, borderRadius: 17,
     backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: 8, justifyContent: 'center',
+    paddingHorizontal: 12, justifyContent: 'center',
   },
-  phoneDmPlaceholder: { fontSize: 8, color: Colors.textLight },
-  phoneDmSend: { width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  phoneHomeBar: { height: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1C1C1E' },
+  phoneDmPlaceholder: { fontSize: 13, color: Colors.textLight },
+  phoneDmSend: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
 
   // 設定カード
   card: {
