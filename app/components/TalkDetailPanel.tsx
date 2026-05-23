@@ -372,7 +372,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, borderLeftWidth: 1, borderLeftColor: Colors.border },
+  container: { flex: 1, backgroundColor: Colors.background, overflow: 'hidden' },
   header: {
     backgroundColor: Colors.header, paddingTop: 14, paddingHorizontal: 12, paddingBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

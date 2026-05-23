@@ -120,7 +120,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   )
 }
 
-const TALK_LIST_W = 320
+const TALK_LIST_W = 400
 
 // ── トーク未選択時の空状態 ──────────────────────────────────────
 function TalkEmptyPanel() {
@@ -171,9 +171,12 @@ export default function TabLayout() {
           </Tabs>
         </View>
 
-        {/* 右チャットエリア（デスクトップ＆トークページのみ常時表示） */}
+        {/* 中央の余白（トークページのみ） */}
+        {showTwoCol && <View style={{ flex: 1 }} />}
+
+        {/* 右チャットエリア：右端に固定幅で配置 */}
         {showTwoCol && (
-          <View style={{ flex: 1, maxWidth: 480 }}>
+          <View style={{ width: 480, borderLeftWidth: 1, borderLeftColor: Colors.border, overflow: 'hidden' }}>
             {selectedTalkId
               ? <TalkDetailPanel
                   creatorId={selectedTalkId}
