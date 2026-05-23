@@ -207,7 +207,6 @@ export default function TileScreen() {
     setModalVisible(true)
   }
 
-  // 辺ハンドルのレスポンダー（カプセル形：各辺の中央）
   const makeEdgeHandleResponders = (edge: 'top' | 'right' | 'bottom' | 'left') => ({
     onStartShouldSetResponder: () => true,
     onMoveShouldSetResponder: () => true,
@@ -290,6 +289,86 @@ export default function TileScreen() {
     handleCellPress(col, row)
   }
 
+  // スマホプレビューのタイルグリッド（再利用コンポーネント化）
+  const PhonePreview = () => (
+    <View style={styles.phoneFrame}>
+      {/* ノッチ */}
+      <View style={styles.phoneNotch} />
+      {/* チャットヘッダー */}
+      <View style={styles.phoneMsgHeader}>
+        <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
+        <Text style={styles.phoneName} numberOfLines={1}>クリエイター</Text>
+      </View>
+      {/* チャットエリア */}
+      <View style={styles.phoneChatArea}>
+        <View style={styles.phoneBubbleRow}>
+          <View style={styles.phoneBubble}><Text style={styles.phoneBubbleText}>こんにちは！</Text></View>
+        </View>
+        <View style={[styles.phoneBubbleRow, { justifyContent: 'flex-end' }]}>
+          <View style={[styles.phoneBubble, styles.phoneBubbleSelf]}>
+            <Text style={[styles.phoneBubbleText, { color: '#FFF' }]}>よろしく</Text>
+          </View>
+        </View>
+      </View>
+      {/* タイルパネル */}
+      <View style={styles.phoneTilePanel}>
+        <View style={styles.phoneTileHandle}>
+          <View style={styles.phoneTileHandleBar} />
+        </View>
+        <View style={styles.phoneTileGrid}>
+          {panelBgImage && (
+            <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+          )}
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+          {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
+            <View key={`pv${i}`} pointerEvents="none" style={{
+              position: 'absolute', top: 0, bottom: 0,
+              left: `${(i / GRID_COLS) * 100}%` as any,
+              width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)',
+            }} />
+          ))}
+          {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
+            <View key={`ph${i}`} pointerEvents="none" style={{
+              position: 'absolute', left: 0, right: 0,
+              top: `${(i / GRID_ROWS) * 100}%` as any,
+              height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)',
+            }} />
+          ))}
+          {buttons.map(btn => (
+            <View key={btn.id} pointerEvents="none" style={{
+              position: 'absolute',
+              left: `${(btn.x / GRID_COLS) * 100}%` as any,
+              top: `${(btn.y / GRID_ROWS) * 100}%` as any,
+              width: `${(btn.w / GRID_COLS) * 100}%` as any,
+              height: `${(btn.h / GRID_ROWS) * 100}%` as any,
+              alignItems: 'center', justifyContent: 'center',
+              borderRightWidth: 0.5, borderBottomWidth: 0.5,
+              borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden',
+            }}>
+              {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+              {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
+              <Ionicons name={btn.icon as any} size={10} color="#FFF" />
+              <View style={{ width: 12, height: 1, backgroundColor: Colors.accent, marginVertical: 2 }} />
+              <Text style={{ fontSize: 7, fontWeight: '600', color: '#FFF', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
+            </View>
+          ))}
+          {buttons.length === 0 && (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 8, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
+            </View>
+          )}
+        </View>
+      </View>
+      {/* DMエリア */}
+      <View style={styles.phoneDmRow}>
+        <View style={styles.phoneDmField}><Text style={styles.phoneDmPlaceholder}>DMを送る...</Text></View>
+        <View style={styles.phoneDmSend}><Ionicons name="send" size={9} color="#FFF" /></View>
+      </View>
+      {/* ホームインジケーター */}
+      <View style={styles.phoneHomeBar} />
+    </View>
+  )
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -302,25 +381,50 @@ export default function TileScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView scrollEnabled={scrollEnabled} contentContainerStyle={styles.content}>
+      {/* 2カラムレイアウト */}
+      <View style={styles.bodyRow}>
 
-        {/* 表示切り替え */}
-        <View style={styles.card}>
-          <View>
-            <Text style={styles.toggleLabel}>メニューを表示</Text>
-            <Text style={styles.toggleDesc}>トーク画面にタイルメニューを表示します</Text>
+        {/* 左：設定エリア */}
+        <ScrollView
+          style={styles.leftPanel}
+          scrollEnabled={scrollEnabled}
+          contentContainerStyle={styles.leftContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 表示切り替え */}
+          <View style={styles.card}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.toggleLabel}>メニューを表示</Text>
+              <Text style={styles.toggleDesc}>トーク画面に表示</Text>
+            </View>
+            <ToggleSwitch value={isActive} onChange={setIsActive} />
           </View>
-          <ToggleSwitch value={isActive} onChange={setIsActive} />
-        </View>
 
-        {/* パネル背景 */}
-        <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch' }]}>
-          <Text style={[styles.cardTitle, { marginBottom: 10 }]}>パネル背景</Text>
-          {panelBgImage ? (
-            <View style={styles.bgActions}>
-              <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
-              <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
-                <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
+          {/* パネル背景 */}
+          <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch' }]}>
+            <Text style={[styles.cardTitle, { marginBottom: 8 }]}>パネル背景</Text>
+            {panelBgImage ? (
+              <View style={styles.bgActions}>
+                <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
+                <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
+                  <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
+                  {Platform.OS === 'web'
+                    ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
+                    : null}
+                  {Platform.OS !== 'web' && (
+                    <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
+                  )}
+                </View>
+                <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
+                  <Text style={styles.bgBtnDelText}>削除</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={[styles.bgPicker, { overflow: 'hidden' }]}>
+                {uploading
+                  ? <ActivityIndicator size="small" color={Colors.accent} />
+                  : <><Ionicons name="image-outline" size={16} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
+                }
                 {Platform.OS === 'web'
                   ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
                   : null}
@@ -328,162 +432,34 @@ export default function TileScreen() {
                   <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
                 )}
               </View>
-              <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
-                <Text style={styles.bgBtnDelText}>削除</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={[styles.bgPicker, { overflow: 'hidden' }]}>
-              {uploading
-                ? <ActivityIndicator size="small" color={Colors.accent} />
-                : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
-              }
-              {Platform.OS === 'web'
-                ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
-                : null}
-              {Platform.OS !== 'web' && (
-                <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
-              )}
-            </View>
-          )}
-        </View>
-
-        {/* グリッドエディタ */}
-        <Text style={styles.sectionLabel}>
-          {draftTile ? '辺のハンドルをドラッグしてサイズ調整' : 'タップでタイル配置・編集'}
-        </Text>
-
-        <View style={styles.gridWrapper}>
-          {panelBgImage && (
-            <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
-          )}
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-
-          <View ref={gridRef} style={styles.gridArea} onLayout={onGridLayout}>
-            {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
-              <View key={`v${i}`} pointerEvents="none" style={{
-                position: 'absolute', top: 0, bottom: 0,
-                left: `${(i / GRID_COLS) * 100}%` as any,
-                width: StyleSheet.hairlineWidth,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-              }} />
-            ))}
-            {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
-              <View key={`h${i}`} pointerEvents="none" style={{
-                position: 'absolute', left: 0, right: 0,
-                top: `${(i / GRID_ROWS) * 100}%` as any,
-                height: StyleSheet.hairlineWidth,
-                backgroundColor: 'rgba(255,255,255,0.12)',
-              }} />
-            ))}
-            {buttons.map(btn => (
-              <View key={btn.id} pointerEvents="none" style={{
-                position: 'absolute',
-                left: `${(btn.x / GRID_COLS) * 100}%` as any,
-                top: `${(btn.y / GRID_ROWS) * 100}%` as any,
-                width: `${(btn.w / GRID_COLS) * 100}%` as any,
-                height: `${(btn.h / GRID_ROWS) * 100}%` as any,
-                backgroundColor: `${Colors.accent}99`,
-                borderWidth: 1.5, borderColor: Colors.accent,
-                alignItems: 'center', justifyContent: 'center', gap: 2,
-              }}>
-                <Ionicons name={btn.icon as any} size={11} color="#fff" />
-                <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
-              </View>
-            ))}
-            {draftTile && (
-              <View pointerEvents="none" style={{
-                position: 'absolute',
-                left: `${(draftTile.x / GRID_COLS) * 100}%` as any,
-                top: `${(draftTile.y / GRID_ROWS) * 100}%` as any,
-                width: `${(draftTile.w / GRID_COLS) * 100}%` as any,
-                height: `${(draftTile.h / GRID_ROWS) * 100}%` as any,
-                backgroundColor: 'rgba(255,220,0,0.3)',
-                borderWidth: 2, borderColor: '#FFE000',
-              }} />
             )}
-            <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFillObject} onPress={onGridPress} />
+          </View>
 
-            {/* 辺ハンドル（カプセル形） */}
-            {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
-              const isHoriz = edge === 'top' || edge === 'bottom'
-              const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
-                : edge === 'right' ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
-                : ((draftTile.x + draftTile.w / 2) / GRID_COLS) * 100
-              const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
-                : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
-                : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
-              const hw = isHoriz ? 32 : 10
-              const hh = isHoriz ? 10 : 32
-              return (
-                <View
-                  key={edge}
-                  style={{
-                    position: 'absolute',
-                    left: `${lPct}%` as any,
-                    top: `${tPct}%` as any,
-                    width: hw, height: hh,
-                    backgroundColor: '#FFE000',
-                    borderWidth: 2, borderColor: '#fff',
-                    borderRadius: 5,
-                    transform: [{ translateX: -(hw / 2) }, { translateY: -(hh / 2) }],
-                    zIndex: 30,
-                  }}
-                  {...makeEdgeHandleResponders(edge)}
-                />
-              )
-            })}
-          </View>
-        </View>
+          {/* グリッドエディタ */}
+          <Text style={styles.sectionLabel}>
+            {draftTile ? '辺をドラッグしてサイズ調整' : 'タップで配置・編集'}
+          </Text>
 
-        {draftTile && (
-          <View style={styles.draftActions}>
-            <TouchableOpacity style={styles.cancelSelBtn} onPress={() => updateDraft(null)}>
-              <Text style={styles.cancelSelText}>キャンセル</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmBtn} onPress={confirmDraft}>
-              <Text style={styles.confirmBtnText}>確定</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* プレビュー（メッセージ画面実寸に近い幅で表示） */}
-        <Text style={styles.sectionLabel}>プレビュー</Text>
-        <View style={styles.previewOuter}>
-          <View style={styles.previewMockHeader}>
-            <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
-            <Text style={styles.phoneName}>クリエイター名</Text>
-          </View>
-          <View style={styles.previewMockChat}>
-            <View style={styles.bubbleRow}>
-              <View style={styles.bubble}><Text style={styles.bubbleText}>こんにちは！</Text></View>
-            </View>
-            <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
-              <View style={[styles.bubble, styles.bubbleSelf]}>
-                <Text style={[styles.bubbleText, { color: '#FFF' }]}>よろしくお願いします</Text>
-              </View>
-            </View>
-          </View>
-          {/* タイルパネル（実際のTalkDetailPanelと同じスタイル） */}
-          <View style={styles.previewTilePanel}>
-            <View style={styles.previewTileHandle}><View style={styles.previewHandleBar} /></View>
-            <View style={styles.previewTileGrid}>
-              {panelBgImage && (
-                <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
-              )}
-              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+          <View style={styles.gridWrapper}>
+            {panelBgImage && (
+              <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+            )}
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+            <View ref={gridRef} style={styles.gridArea} onLayout={onGridLayout}>
               {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
-                <View key={`pv${i}`} pointerEvents="none" style={{
+                <View key={`v${i}`} pointerEvents="none" style={{
                   position: 'absolute', top: 0, bottom: 0,
                   left: `${(i / GRID_COLS) * 100}%` as any,
-                  width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)',
+                  width: StyleSheet.hairlineWidth,
+                  backgroundColor: 'rgba(255,255,255,0.12)',
                 }} />
               ))}
               {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
-                <View key={`ph${i}`} pointerEvents="none" style={{
+                <View key={`h${i}`} pointerEvents="none" style={{
                   position: 'absolute', left: 0, right: 0,
                   top: `${(i / GRID_ROWS) * 100}%` as any,
-                  height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)',
+                  height: StyleSheet.hairlineWidth,
+                  backgroundColor: 'rgba(255,255,255,0.12)',
                 }} />
               ))}
               {buttons.map(btn => (
@@ -493,32 +469,80 @@ export default function TileScreen() {
                   top: `${(btn.y / GRID_ROWS) * 100}%` as any,
                   width: `${(btn.w / GRID_COLS) * 100}%` as any,
                   height: `${(btn.h / GRID_ROWS) * 100}%` as any,
-                  alignItems: 'center', justifyContent: 'center',
-                  borderRightWidth: 0.5, borderBottomWidth: 0.5,
-                  borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden',
+                  backgroundColor: `${Colors.accent}99`,
+                  borderWidth: 1.5, borderColor: Colors.accent,
+                  alignItems: 'center', justifyContent: 'center', gap: 2,
                 }}>
-                  {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                  {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
-                  <Ionicons name={btn.icon as any} size={16} color="#FFF" />
-                  <View style={styles.previewSep} />
-                  <Text style={styles.previewLabel} numberOfLines={1}>{btn.label}</Text>
+                  <Ionicons name={btn.icon as any} size={11} color="#fff" />
+                  <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
                 </View>
               ))}
-              {buttons.length === 0 && (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
-                </View>
+              {draftTile && (
+                <View pointerEvents="none" style={{
+                  position: 'absolute',
+                  left: `${(draftTile.x / GRID_COLS) * 100}%` as any,
+                  top: `${(draftTile.y / GRID_ROWS) * 100}%` as any,
+                  width: `${(draftTile.w / GRID_COLS) * 100}%` as any,
+                  height: `${(draftTile.h / GRID_ROWS) * 100}%` as any,
+                  backgroundColor: 'rgba(255,220,0,0.3)',
+                  borderWidth: 2, borderColor: '#FFE000',
+                }} />
               )}
+              <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFillObject} onPress={onGridPress} />
+
+              {/* 辺ハンドル（カプセル形） */}
+              {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
+                const isHoriz = edge === 'top' || edge === 'bottom'
+                const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
+                  : edge === 'right' ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
+                  : ((draftTile.x + draftTile.w / 2) / GRID_COLS) * 100
+                const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
+                  : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
+                  : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
+                const hw = isHoriz ? 32 : 10
+                const hh = isHoriz ? 10 : 32
+                return (
+                  <View
+                    key={edge}
+                    style={{
+                      position: 'absolute',
+                      left: `${lPct}%` as any,
+                      top: `${tPct}%` as any,
+                      width: hw, height: hh,
+                      backgroundColor: '#FFE000',
+                      borderWidth: 2, borderColor: '#fff',
+                      borderRadius: 5,
+                      transform: [{ translateX: -(hw / 2) }, { translateY: -(hh / 2) }],
+                      zIndex: 30,
+                    }}
+                    {...makeEdgeHandleResponders(edge)}
+                  />
+                )
+              })}
             </View>
           </View>
-          <View style={styles.previewDmRow}>
-            <View style={styles.previewDmField}><Text style={styles.previewDmPlaceholder}>DMを送る...</Text></View>
-            <View style={styles.previewDmSend}><Ionicons name="send" size={14} color="#FFF" /></View>
-          </View>
+
+          {draftTile && (
+            <View style={styles.draftActions}>
+              <TouchableOpacity style={styles.cancelSelBtn} onPress={() => updateDraft(null)}>
+                <Text style={styles.cancelSelText}>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmBtn} onPress={confirmDraft}>
+                <Text style={styles.confirmBtnText}>確定</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <Text style={styles.note}>※ URLには https:// から始まるリンクを入力してください。</Text>
+        </ScrollView>
+
+        {/* 右：スマホ型プレビュー */}
+        <View style={styles.rightPanel}>
+          <Text style={styles.previewLabel}>プレビュー</Text>
+          <PhonePreview />
         </View>
 
-        <Text style={styles.note}>※ URLには https:// から始まるリンクを入力してください。</Text>
-      </ScrollView>
+      </View>
 
       {/* タイル編集モーダル */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
@@ -647,75 +671,121 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   saveButton: { width: 40, alignItems: 'flex-end' },
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
-  content: { padding: 16, paddingBottom: 40, gap: 12 },
-  card: {
-    backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
-    padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+
+  // 2カラム
+  bodyRow: { flex: 1, flexDirection: 'row' },
+
+  // 左パネル
+  leftPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
+  leftContent: { padding: 12, paddingBottom: 40, gap: 10 },
+
+  // 右パネル（スマホ型プレビュー）
+  rightPanel: {
+    width: 172,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    paddingTop: 14,
+    paddingBottom: 20,
+    paddingHorizontal: 8,
+    gap: 8,
   },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  toggleLabel: { fontSize: 15, fontWeight: '600', color: Colors.text },
-  toggleDesc: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  previewLabel: { fontSize: 10, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, textTransform: 'uppercase' },
+
+  // スマホフレーム
+  phoneFrame: {
+    width: 150,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: '#3C3C3E',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  phoneNotch: {
+    width: 52, height: 10,
+    backgroundColor: '#3C3C3E',
+    borderRadius: 5,
+    alignSelf: 'center',
+    marginTop: 8, marginBottom: 6,
+  },
+  phoneMsgHeader: {
+    backgroundColor: Colors.white,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 10, paddingVertical: 7,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  phoneAvatar: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  phoneAvatarText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
+  phoneName: { fontSize: 11, fontWeight: '700', color: Colors.text, flex: 1 },
+  phoneChatArea: { backgroundColor: Colors.background, paddingHorizontal: 8, paddingVertical: 6, gap: 5 },
+  phoneBubbleRow: { flexDirection: 'row' },
+  phoneBubble: {
+    backgroundColor: Colors.white, borderRadius: 10, borderTopLeftRadius: 3,
+    paddingHorizontal: 7, paddingVertical: 5,
+  },
+  phoneBubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 10, borderTopRightRadius: 3 },
+  phoneBubbleText: { fontSize: 9, color: Colors.text, lineHeight: 14 },
+  phoneTilePanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
+  phoneTileHandle: {
+    alignItems: 'center', paddingVertical: 4,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  phoneTileHandleBar: { width: 20, height: 2.5, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  phoneTileGrid: { aspectRatio: 27 / 18, overflow: 'hidden' },
+  phoneDmRow: {
+    backgroundColor: Colors.white,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 7, paddingVertical: 5,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  phoneDmField: {
+    flex: 1, height: 22, borderRadius: 11,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 8, justifyContent: 'center',
+  },
+  phoneDmPlaceholder: { fontSize: 8, color: Colors.textLight },
+  phoneDmSend: { width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  phoneHomeBar: { height: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1C1C1E' },
+
+  // 設定カード
+  card: {
+    backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+  },
+  cardTitle: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  toggleLabel: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  toggleDesc: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
   toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
   toggleThumb: {
     width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
   },
-  bgActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  bgThumb: { width: 48, height: 48, borderRadius: 8 },
-  bgBtn: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
-  bgBtnText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
+  bgActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bgThumb: { width: 40, height: 40, borderRadius: 6 },
+  bgBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
+  bgBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
   bgBtnDel: { borderColor: '#E53E3E' },
-  bgBtnDelText: { fontSize: 13, color: '#E53E3E', fontWeight: '600' },
+  bgBtnDelText: { fontSize: 12, color: '#E53E3E', fontWeight: '600' },
   bgPicker: {
-    flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 38, borderRadius: 8, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
-  sectionLabel: { fontSize: 11, color: Colors.textLight },
+  bgPickerText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  sectionLabel: { fontSize: 10, color: Colors.textLight },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   gridArea: { aspectRatio: 27 / 18 },
   draftActions: { flexDirection: 'row', gap: 8 },
-  cancelSelBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
+  cancelSelBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
   cancelSelText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  confirmBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: Colors.accent },
+  confirmBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.accent },
   confirmBtnText: { fontSize: 12, color: '#fff', fontWeight: '700' },
-  note: { fontSize: 11, color: Colors.textLight, lineHeight: 18 },
+  note: { fontSize: 10, color: Colors.textLight, lineHeight: 16 },
 
-  // プレビュー（フル幅・実際のメッセージ画面に近いスタイル）
-  previewOuter: {
-    backgroundColor: Colors.background,
-    borderRadius: 14, borderWidth: 1, borderColor: Colors.border,
-    overflow: 'hidden',
-  },
-  previewMockHeader: {
-    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  phoneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  phoneAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-  phoneName: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  previewMockChat: { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
-  bubbleRow: { flexDirection: 'row' },
-  bubble: {
-    backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
-  },
-  bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
-  bubbleText: { fontSize: 13, color: Colors.text, lineHeight: 20, paddingHorizontal: 10, paddingVertical: 7 },
-  previewTilePanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
-  previewTileHandle: { alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
-  previewHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
-  previewTileGrid: { aspectRatio: 27 / 18, overflow: 'hidden' },
-  previewSep: { width: 20, height: 1.5, backgroundColor: Colors.accent, marginVertical: 4 },
-  previewLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFF' },
-  previewDmRow: {
-    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: Colors.border,
-  },
-  previewDmField: { flex: 1, height: 34, borderRadius: 17, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, justifyContent: 'center' },
-  previewDmPlaceholder: { fontSize: 13, color: Colors.textLight },
-  previewDmSend: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-
+  // モーダル
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
