@@ -158,8 +158,8 @@ export default function TabLayout() {
         {/* 左サイドバー（デスクトップのみ） */}
         {isDesktop && <DesktopSidebar />}
 
-        {/* タブコンテンツ（トークページでは固定幅、それ以外はflex:1） */}
-        <View style={showTwoCol ? { width: TALK_LIST_W, borderRightWidth: 1, borderRightColor: Colors.border } : { flex: 1 }}>
+        {/* タブコンテンツ（常にflex:1で残り全幅を使用） */}
+        <View style={{ flex: 1, borderRightWidth: showTwoCol ? 1 : 0, borderRightColor: Colors.border }}>
           <Tabs
             tabBar={(props) => isDesktop ? <></> : <CustomTabBar {...props} />}
             screenOptions={{ headerShown: false }}
@@ -170,9 +170,6 @@ export default function TabLayout() {
             <Tabs.Screen name="mypage" />
           </Tabs>
         </View>
-
-        {/* 中央の余白（トークページのみ） */}
-        {showTwoCol && <View style={{ flex: 1 }} />}
 
         {/* 右チャットエリア：右端に固定幅で配置 */}
         {showTwoCol && (
