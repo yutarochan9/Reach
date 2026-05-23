@@ -153,7 +153,7 @@ export default function TabLayout() {
 
   return (
     <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, isDesktop }}>
-      <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column' }}>
+      <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column', backgroundColor: Colors.background }}>
 
         {/* 左サイドバー（デスクトップのみ） */}
         {isDesktop && <DesktopSidebar />}
@@ -173,7 +173,7 @@ export default function TabLayout() {
 
         {/* 右チャットエリア（デスクトップ＆トークページのみ常時表示） */}
         {showTwoCol && (
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, maxWidth: 480 }}>
             {selectedTalkId
               ? <TalkDetailPanel
                   creatorId={selectedTalkId}

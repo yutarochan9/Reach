@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
   moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 1 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 },
   emptyText: { fontSize: 13, color: Colors.textLight },
-  tileContainer: { backgroundColor: '#1C1C1E', overflow: 'hidden', maxWidth: 460, alignSelf: 'stretch' },
+  tileContainer: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
   tileHandle: { alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   tileGridArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
