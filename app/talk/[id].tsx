@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background, maxWidth: isWeb ? 680 : undefined, alignSelf: isWeb ? 'center' : undefined, width: '100%' },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12,
+    paddingTop: isWeb ? 12 : 56, paddingHorizontal: 16, paddingBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
   },
   broadcastAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   broadcastAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
-  blocksWrap: { flex: 1 },
+  blocksWrap: { maxWidth: '80%', flexShrink: 1 },
   senderNameLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 3, fontWeight: '600' },
   broadcastBubble: {
     backgroundColor: Colors.white, borderRadius: 16, borderTopLeftRadius: 4,

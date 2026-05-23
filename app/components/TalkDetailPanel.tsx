@@ -291,7 +291,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                       : <Text style={styles.broadcastAvatarText}>{senderName[0]}</Text>
                     }
                   </View>
-                  <View style={{ flex: 1 }}>
+                  <View style={{ maxWidth: '80%', flexShrink: 1 }}>
                     <Text style={styles.senderNameLabel}>{senderName}</Text>
                     {group.blocks.map((block, idx) => (
                       <View key={block.id} style={[styles.broadcastBubble, idx > 0 && { marginTop: 4 }]}>
@@ -346,9 +346,8 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
 
       {TilePanel}
 
-      {!isSelf && (
-        <View style={styles.inputArea}>
-          <View style={styles.inputRow}>
+      <View style={styles.inputArea}>
+        <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
               placeholder="DMを送る..."
@@ -366,13 +365,12 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
             </TouchableOpacity>
           </View>
         </View>
-      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header, paddingTop: 14, paddingHorizontal: 12, paddingBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
