@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
+import Svg, { Polyline, Circle, Rect, G, Line, Text as SvgText } from 'react-native-svg'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -26,10 +27,91 @@ type Stats = {
 
 const FREE_LIMIT = 50
 
+// ── 折れ線グラフ ──────────────────────────────────────────
+function LineChart({
+  data, color, width, height = 90,
+}: { data: number[]; color: string; width: number; height?: number }) {
+  if (data.length < 2 || width < 10) return null
+  const max = Math.max(...data, 1)
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const pX = 8, pY = 10
+  const w = width - pX * 2
+  const h = height - pY * 2 - 20 // space for x labels
+  const pts = data.map((v, i) =>
+    `${pX + (i / (data.length - 1)) * w},${pY + (1 - (v - min) / range) * h}`
+  ).join(' ')
+  return (
+    <Svg width={width} height={height}>
+      {/* Y axis grid lines */}
+      {[0, 0.5, 1].map((t, i) => (
+        <Line
+          key={i}
+          x1={pX} y1={pY + (1 - t) * h}
+          x2={width - pX} y2={pY + (1 - t) * h}
+          stroke={Colors.border} strokeWidth={1}
+          strokeDasharray="3,3"
+        />
+      ))}
+      <Polyline
+        points={pts}
+        fill="none"
+        stroke={color}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {data.map((v, i) => {
+        const cx = pX + (i / (data.length - 1)) * w
+        const cy = pY + (1 - (v - min) / range) * h
+        return (
+          <G key={i}>
+            <Circle cx={cx} cy={cy} r={4} fill={Colors.white} stroke={color} strokeWidth={2} />
+          </G>
+        )
+      })}
+    </Svg>
+  )
+}
+
+// ── 棒グラフ ──────────────────────────────────────────────
+function BarChart({
+  data, color, width, height = 90,
+}: { data: number[]; color: string; width: number; height?: number }) {
+  if (data.length === 0 || width < 10) return null
+  const max = Math.max(...data, 1)
+  const gap = 6
+  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 2)
+  const maxH = height - 8
+  return (
+    <Svg width={width} height={height}>
+      {/* baseline */}
+      <Line x1={0} y1={height - 4} x2={width} y2={height - 4} stroke={Colors.border} strokeWidth={1} />
+      <G>
+        {data.map((v, i) => {
+          const barH = Math.max((v / max) * maxH, 2)
+          const x = i * (barW + gap)
+          const y = height - barH - 4
+          return (
+            <Rect
+              key={i}
+              x={x} y={y}
+              width={barW} height={barH}
+              rx={3} fill={color}
+              opacity={v === 0 ? 0.25 : 0.9}
+            />
+          )
+        })}
+      </G>
+    </Svg>
+  )
+}
+
 export default function AnalyticsScreen() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [loading, setLoading] = useState(true)
+  const [chartW, setChartW] = useState(0)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -105,7 +187,7 @@ export default function AnalyticsScreen() {
 
   const formatDate = (iso: string) => {
     const d = new Date(iso)
-    return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+    return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
   const truncate = (text: string, len = 40) =>
@@ -122,6 +204,11 @@ export default function AnalyticsScreen() {
   const isFree = stats?.plan === 'free'
   const monthlyPct = isFree ? Math.min(((stats?.monthlyBroadcasts ?? 0) / FREE_LIMIT) * 100, 100) : 100
   const monthlyNearLimit = isFree && (stats?.monthlyBroadcasts ?? 0) >= FREE_LIMIT * 0.8
+
+  // グラフ用データ（古い順に最大10件）
+  const chartData = [...broadcasts].reverse().slice(-10)
+  const readSeries = chartData.map(b => b.read_count)
+  const likeSeries = chartData.map(b => b.like_count)
 
   return (
     <View style={styles.container}>
@@ -141,9 +228,7 @@ export default function AnalyticsScreen() {
             <Ionicons name="people-outline" size={20} color={Colors.accent} />
             <Text style={styles.statValue}>{stats?.followerCount.toLocaleString()}</Text>
             <Text style={styles.statLabel}>フォロワー</Text>
-            {isFree && (
-              <Text style={styles.statSub}>上限500人</Text>
-            )}
+            {isFree && <Text style={styles.statSub}>上限500人</Text>}
           </View>
           <View style={[styles.statCard, { flex: 1 }]}>
             <Ionicons name="person-add-outline" size={20} color={Colors.accent} />
@@ -170,6 +255,38 @@ export default function AnalyticsScreen() {
             <Text style={styles.statLabel}>累計いいね</Text>
           </View>
         </View>
+
+        {/* グラフセクション */}
+        {chartData.length >= 2 && (
+          <View
+            style={styles.section}
+            onLayout={e => setChartW(e.nativeEvent.layout.width - 32)}
+          >
+            <Text style={styles.sectionTitle}>閲覧数推移（直近{chartData.length}配信）</Text>
+            <View style={styles.chartLabel}>
+              <Ionicons name="eye-outline" size={12} color={Colors.accent} />
+              <Text style={styles.chartLabelText}>閲覧数</Text>
+            </View>
+            {chartW > 0 && (
+              <LineChart data={readSeries} color={Colors.accent} width={chartW} />
+            )}
+
+            <View style={[styles.chartLabel, { marginTop: 16 }]}>
+              <Ionicons name="heart-outline" size={12} color={Colors.button} />
+              <Text style={[styles.chartLabelText, { color: Colors.button }]}>いいね数</Text>
+            </View>
+            {chartW > 0 && (
+              <BarChart data={likeSeries} color={Colors.button} width={chartW} />
+            )}
+
+            {/* X軸ラベル（配信日付） */}
+            <View style={styles.xLabels}>
+              {chartData.map((b, i) => (
+                <Text key={i} style={styles.xLabel}>{formatDate(b.created_at)}</Text>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* 今月の配信（無料プランのみ進捗バー） */}
         {isFree && (
@@ -217,7 +334,7 @@ export default function AnalyticsScreen() {
               >
                 <View style={styles.bcMain}>
                   <Text style={styles.bcContent}>{truncate(bc.content)}</Text>
-                  <Text style={styles.bcDate}>{formatDate(bc.created_at)}</Text>
+                  <Text style={styles.bcDate}>{new Date(bc.created_at).toLocaleString('ja-JP')}</Text>
                 </View>
                 <View style={styles.bcStats}>
                   <View style={styles.bcStat}>
@@ -277,19 +394,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     padding: 16,
-    gap: 12,
+    gap: 8,
   },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  sectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 4 },
+
+  chartLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  chartLabelText: { fontSize: 11, fontWeight: '700', color: Colors.accent, textTransform: 'uppercase', letterSpacing: 0.4 },
+
+  xLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  xLabel: { fontSize: 9, color: Colors.textLight, flex: 1, textAlign: 'center' },
+
   monthlyCount: { fontSize: 13, fontWeight: '700', color: Colors.accent },
   monthlyCountWarn: { color: '#E53E3E' },
-
-  progressBg: {
-    height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden',
-  },
-  progressFill: {
-    height: 8, backgroundColor: Colors.button, borderRadius: 4,
-  },
+  progressBg: { height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: 8, backgroundColor: Colors.button, borderRadius: 4 },
   upgradeHint: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.background, borderRadius: 8, padding: 10,
