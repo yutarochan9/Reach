@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform
 } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
@@ -15,6 +15,25 @@ type StepMessage = {
   sort_order: number
 }
 
+const DAY_OPTIONS = [0, 1, 3, 7, 14, 30]
+
+function dayLabel(offset: number) {
+  return offset === 0 ? 'フォロー直後' : `${offset}日後`
+}
+
+function groupByDay(msgs: StepMessage[]): { day: number; items: StepMessage[] }[] {
+  const map = new Map<number, StepMessage[]>()
+  for (const m of msgs) {
+    if (!map.has(m.day_offset)) map.set(m.day_offset, [])
+    map.get(m.day_offset)!.push(m)
+  }
+  const days = [...map.keys()].sort((a, b) => a - b)
+  return days.map(day => ({
+    day,
+    items: map.get(day)!.sort((a, b) => a.sort_order - b.sort_order),
+  }))
+}
+
 export default function StepSequenceEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [name, setName] = useState('')
@@ -23,6 +42,8 @@ export default function StepSequenceEditScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingMsg, setEditingMsg] = useState<Partial<StepMessage> | null>(null)
   const [saving, setSaving] = useState(false)
+  // 時点追加モーダル
+  const [dayPickerVisible, setDayPickerVisible] = useState(false)
 
   const load = useCallback(async () => {
     const [{ data: seq }, { data: msgs }] = await Promise.all([
@@ -36,8 +57,8 @@ export default function StepSequenceEditScreen() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
-  const openNew = () => {
-    setEditingMsg({ day_offset: 0, content: '' })
+  const openNew = (day: number) => {
+    setEditingMsg({ day_offset: day, content: '' })
     setModalVisible(true)
   }
 
@@ -51,18 +72,21 @@ export default function StepSequenceEditScreen() {
     setSaving(true)
 
     if (editingMsg.id) {
-      // 更新
       await supabase.from('step_messages').update({
         day_offset: editingMsg.day_offset,
         content: editingMsg.content.trim(),
       }).eq('id', editingMsg.id)
     } else {
-      // 新規
+      // sort_order は同日内の最大値 + 1
+      const sameDayMsgs = messages.filter(m => m.day_offset === editingMsg.day_offset)
+      const nextOrder = sameDayMsgs.length > 0
+        ? Math.max(...sameDayMsgs.map(m => m.sort_order)) + 1
+        : 0
       await supabase.from('step_messages').insert({
         sequence_id: id,
         day_offset: editingMsg.day_offset ?? 0,
         content: editingMsg.content?.trim(),
-        sort_order: messages.length,
+        sort_order: nextOrder,
       })
     }
 
@@ -85,10 +109,34 @@ export default function StepSequenceEditScreen() {
     ])
   }
 
-  const dayLabel = (offset: number) => {
-    if (offset === 0) return 'フォロー直後'
-    return `フォロー後 ${offset}日目`
+  // 同日内の順番を上下に入れ替え
+  const moveMessage = async (msg: StepMessage, dir: 'up' | 'down') => {
+    const sameDayMsgs = messages
+      .filter(m => m.day_offset === msg.day_offset)
+      .sort((a, b) => a.sort_order - b.sort_order)
+    const idx = sameDayMsgs.findIndex(m => m.id === msg.id)
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= sameDayMsgs.length) return
+
+    const target = sameDayMsgs[swapIdx]
+    const newOrderA = target.sort_order
+    const newOrderB = msg.sort_order
+
+    await Promise.all([
+      supabase.from('step_messages').update({ sort_order: newOrderA }).eq('id', msg.id),
+      supabase.from('step_messages').update({ sort_order: newOrderB }).eq('id', target.id),
+    ])
+
+    setMessages(prev => prev.map(m => {
+      if (m.id === msg.id) return { ...m, sort_order: newOrderA }
+      if (m.id === target.id) return { ...m, sort_order: newOrderB }
+      return m
+    }))
   }
+
+  // まだ使っていない日を返す（時点追加用）
+  const usedDays = new Set(messages.map(m => m.day_offset))
+  const availableDays = DAY_OPTIONS.filter(d => !usedDays.has(d))
 
   if (loading) {
     return (
@@ -98,6 +146,142 @@ export default function StepSequenceEditScreen() {
     )
   }
 
+  const grouped = groupByDay(messages)
+
+  // ── プレビュー用チャット ────────────────────────────────
+  const Preview = (
+    <View style={styles.previewPanel}>
+      <Text style={styles.previewTitle}>プレビュー</Text>
+      <View style={styles.phoneFrame}>
+        <View style={styles.phoneHeader}>
+          <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
+          <View>
+            <Text style={styles.phoneHeaderName}>クリエイター名</Text>
+            <Text style={styles.phoneHeaderSub}>配信アカウント</Text>
+          </View>
+        </View>
+        <ScrollView style={styles.phoneChat} contentContainerStyle={styles.phoneChatContent}>
+          {grouped.length === 0 ? (
+            <View style={styles.emptyPreview}>
+              <Text style={styles.emptyPreviewText}>メッセージを追加すると{'\n'}ここに表示されます</Text>
+            </View>
+          ) : grouped.map((group, gi) => (
+            <View key={group.day}>
+              <View style={styles.dateBadge}>
+                <Text style={styles.dateBadgeText}>{dayLabel(group.day)}</Text>
+              </View>
+              {group.items.map((msg, mi) => (
+                <View key={msg.id} style={styles.bubbleRow}>
+                  {mi === 0 && (
+                    <View style={styles.bubbleAvatar}><Text style={styles.bubbleAvatarText}>R</Text></View>
+                  )}
+                  {mi > 0 && <View style={{ width: 30 }} />}
+                  <View style={styles.bubbleWrap}>
+                    <View style={styles.bubble}>
+                      <Text style={styles.bubbleText}>{msg.content}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
+  )
+
+  // ── タイムラインエディタ ─────────────────────────────────
+  const Editor = (
+    <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorContent}>
+      {grouped.length === 0 ? (
+        <View style={styles.emptyEditor}>
+          <Ionicons name="git-branch-outline" size={40} color={Colors.border} />
+          <Text style={styles.emptyTitle}>メッセージがありません</Text>
+          <Text style={styles.emptyDesc}>フォロー後のタイミングを設定して{'\n'}自動メッセージを追加してください</Text>
+          <TouchableOpacity style={styles.addFirstBtn} onPress={() => openNew(0)}>
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.addFirstBtnText}>フォロー直後のメッセージを追加</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          {grouped.map((group, gi) => (
+            <View key={group.day} style={styles.dayGroup}>
+              {/* タイムライン縦線 */}
+              {gi > 0 && <View style={styles.timelineLine} />}
+
+              {/* 日ラベル */}
+              <View style={styles.dayHeader}>
+                <View style={styles.dayDot} />
+                <View style={styles.dayBadge}>
+                  <Ionicons name="time-outline" size={13} color={Colors.accent} />
+                  <Text style={styles.dayBadgeText}>{dayLabel(group.day)}</Text>
+                </View>
+              </View>
+
+              {/* メッセージカード */}
+              <View style={styles.msgList}>
+                {group.items.map((msg, mi) => (
+                  <View key={msg.id} style={styles.msgRow}>
+                    {/* 順番バッジ */}
+                    <View style={styles.orderBadge}>
+                      <Text style={styles.orderNum}>{mi + 1}</Text>
+                    </View>
+                    {/* カード */}
+                    <TouchableOpacity
+                      style={styles.msgCard}
+                      onPress={() => openEdit(msg)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.msgContent} numberOfLines={3}>{msg.content}</Text>
+                    </TouchableOpacity>
+                    {/* 操作ボタン */}
+                    <View style={styles.msgActions}>
+                      <TouchableOpacity
+                        onPress={() => moveMessage(msg, 'up')}
+                        disabled={mi === 0}
+                        style={[styles.moveBtn, mi === 0 && { opacity: 0.25 }]}
+                      >
+                        <Ionicons name="chevron-up" size={16} color={Colors.textLight} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => moveMessage(msg, 'down')}
+                        disabled={mi === group.items.length - 1}
+                        style={[styles.moveBtn, mi === group.items.length - 1 && { opacity: 0.25 }]}
+                      >
+                        <Ionicons name="chevron-down" size={16} color={Colors.textLight} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleDelete(msg)} style={styles.deleteBtn}>
+                        <Ionicons name="trash-outline" size={15} color="#E53E3E" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+
+                {/* この時点にメッセージを追加 */}
+                <TouchableOpacity style={styles.addMsgBtn} onPress={() => openNew(group.day)}>
+                  <Ionicons name="add" size={15} color={Colors.accent} />
+                  <Text style={styles.addMsgText}>このタイミングにメッセージを追加</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+
+          {/* 新しい時点を追加 */}
+          {availableDays.length > 0 && (
+            <TouchableOpacity
+              style={styles.addDayBtn}
+              onPress={() => setDayPickerVisible(true)}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+              <Text style={styles.addDayText}>新しいタイミングを追加</Text>
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+    </ScrollView>
+  )
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -105,52 +289,20 @@ export default function StepSequenceEditScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{name}</Text>
-        <TouchableOpacity onPress={openNew} style={styles.addButton}>
+        <TouchableOpacity
+          onPress={() => availableDays.length > 0 ? setDayPickerVisible(true) : openNew(0)}
+          style={styles.addButton}
+        >
           <Ionicons name="add" size={24} color={Colors.accent} />
         </TouchableOpacity>
       </View>
 
-      {messages.length === 0 ? (
-        <View style={styles.empty}>
-          <Ionicons name="chatbubble-outline" size={48} color={Colors.border} />
-          <Text style={styles.emptyText}>メッセージを追加してください</Text>
-          <Text style={styles.emptySubText}>フォロー後のタイミングを指定して{'\n'}メッセージを自動送信できます</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={openNew}>
-            <Text style={styles.emptyBtnText}>追加する</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={messages}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item, index }) => (
-            <View style={styles.stepRow}>
-              <View style={styles.stepLeft}>
-                <View style={styles.stepDot} />
-                {index < messages.length - 1 && <View style={styles.stepLine} />}
-              </View>
-              <TouchableOpacity
-                style={styles.stepCard}
-                onPress={() => openEdit(item)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.stepCardHeader}>
-                  <View style={styles.dayBadge}>
-                    <Ionicons name="time-outline" size={12} color={Colors.accent} />
-                    <Text style={styles.dayText}>{dayLabel(item.day_offset)}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="trash-outline" size={16} color="#E53E3E" />
-                  </TouchableOpacity>
-                </View>
-                <Text style={styles.stepContent} numberOfLines={3}>{item.content}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-      )}
+      <View style={styles.bodyRow}>
+        {Editor}
+        {Preview}
+      </View>
 
+      {/* メッセージ編集モーダル */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modal}>
@@ -168,11 +320,10 @@ export default function StepSequenceEditScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-
             <View style={styles.modalBody}>
               <Text style={styles.fieldLabel}>送信タイミング</Text>
               <View style={styles.daySelector}>
-                {[0, 1, 3, 7, 14, 30].map(d => (
+                {DAY_OPTIONS.map(d => (
                   <TouchableOpacity
                     key={d}
                     style={[styles.dayChip, editingMsg?.day_offset === d && styles.dayChipActive]}
@@ -184,7 +335,6 @@ export default function StepSequenceEditScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-
               <Text style={styles.fieldLabel}>メッセージ内容</Text>
               <TextInput
                 style={styles.textarea}
@@ -193,12 +343,35 @@ export default function StepSequenceEditScreen() {
                 value={editingMsg?.content ?? ''}
                 onChangeText={text => setEditingMsg(prev => ({ ...prev, content: text }))}
                 multiline
-                numberOfLines={8}
                 textAlignVertical="top"
+                autoFocus={!editingMsg?.id}
               />
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 時点選択モーダル */}
+      <Modal visible={dayPickerVisible} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setDayPickerVisible(false)}
+        >
+          <View style={styles.dayPickerBox}>
+            <Text style={styles.dayPickerTitle}>追加するタイミングを選択</Text>
+            {availableDays.map(d => (
+              <TouchableOpacity
+                key={d}
+                style={styles.dayPickerItem}
+                onPress={() => { setDayPickerVisible(false); openNew(d) }}
+              >
+                <Ionicons name="time-outline" size={18} color={Colors.accent} />
+                <Text style={styles.dayPickerItemText}>{dayLabel(d)}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   )
@@ -215,27 +388,109 @@ const styles = StyleSheet.create({
   backButton: { padding: 4, width: 32 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.text, textAlign: 'center' },
   addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
-  list: { padding: 16, paddingBottom: 40 },
-  stepRow: { flexDirection: 'row', gap: 12, minHeight: 80 },
-  stepLeft: { alignItems: 'center', paddingTop: 16, width: 16 },
-  stepDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: Colors.accent },
-  stepLine: { flex: 1, width: 2, backgroundColor: Colors.border, marginTop: 4 },
-  stepCard: {
-    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, padding: 14, marginBottom: 12, gap: 8,
+
+  bodyRow: { flex: 1, flexDirection: 'row' },
+
+  // ── エディタ（左） ─────────────────────────────────────
+  editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
+  editorContent: { padding: 16, paddingBottom: 40 },
+
+  emptyEditor: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  emptyDesc: { fontSize: 13, color: Colors.textLight, textAlign: 'center', lineHeight: 20 },
+  addFirstBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8,
+    backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 12,
   },
-  stepCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  addFirstBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  // タイムライングループ
+  dayGroup: { marginBottom: 4 },
+  timelineLine: { width: 2, height: 20, backgroundColor: Colors.border, marginLeft: 16, marginBottom: 0 },
+  dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  dayDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.accent, marginLeft: 10 },
   dayBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.background, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: Colors.accent + '18', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 5,
   },
-  dayText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
-  stepContent: { fontSize: 13, color: Colors.text, lineHeight: 19 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 32 },
-  emptyText: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  emptySubText: { fontSize: 13, color: Colors.textLight, textAlign: 'center', lineHeight: 20 },
-  emptyBtn: { backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 4 },
-  emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  dayBadgeText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+
+  msgList: { paddingLeft: 34, gap: 8, marginBottom: 8 },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  orderBadge: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: Colors.border, alignItems: 'center', justifyContent: 'center', marginTop: 10,
+  },
+  orderNum: { fontSize: 11, fontWeight: '800', color: Colors.textLight },
+  msgCard: {
+    flex: 1, backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, padding: 12,
+  },
+  msgContent: { fontSize: 13, color: Colors.text, lineHeight: 19 },
+  msgActions: { gap: 2, paddingTop: 6 },
+  moveBtn: { padding: 3 },
+  deleteBtn: { padding: 3, marginTop: 2 },
+
+  addMsgBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.accent, borderStyle: 'dashed',
+    alignSelf: 'flex-start',
+  },
+  addMsgText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  addDayBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    padding: 14, borderRadius: 12, marginTop: 12,
+    borderWidth: 1.5, borderColor: Colors.border, borderStyle: 'dashed',
+    justifyContent: 'center',
+  },
+  addDayText: { fontSize: 14, color: Colors.accent, fontWeight: '600' },
+
+  // ── プレビュー（右） ────────────────────────────────────
+  previewPanel: { width: 300, padding: 16, gap: 8 },
+  previewTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight },
+  phoneFrame: {
+    flex: 1, backgroundColor: '#F0F0F0', borderRadius: 16, overflow: 'hidden',
+    borderWidth: 1, borderColor: Colors.border, minHeight: 400,
+  },
+  phoneHeader: {
+    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  phoneAvatar: {
+    width: 34, height: 34, borderRadius: 7,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
+  },
+  phoneAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  phoneHeaderName: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  phoneHeaderSub: { fontSize: 10, color: Colors.textLight },
+  phoneChat: { flex: 1 },
+  phoneChatContent: { padding: 12, gap: 4 },
+  dateBadge: { alignItems: 'center', marginVertical: 8 },
+  dateBadgeText: {
+    fontSize: 11, color: Colors.textLight,
+    backgroundColor: 'rgba(0,0,0,0.08)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10,
+  },
+  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, marginBottom: 4 },
+  bubbleAvatar: {
+    width: 28, height: 28, borderRadius: 6,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
+    marginBottom: 2,
+  },
+  bubbleAvatarText: { fontSize: 11, fontWeight: '700', color: Colors.white },
+  bubbleWrap: { flex: 1 },
+  bubble: {
+    backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4, overflow: 'hidden',
+    alignSelf: 'flex-start', maxWidth: '90%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
+  },
+  bubbleText: { fontSize: 13, color: Colors.text, lineHeight: 19, padding: 10 },
+  emptyPreview: { paddingTop: 40, alignItems: 'center' },
+  emptyPreviewText: { fontSize: 12, color: Colors.textLight, textAlign: 'center', lineHeight: 20 },
+
+  // ── モーダル ───────────────────────────────────────────
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
@@ -260,4 +515,14 @@ const styles = StyleSheet.create({
     padding: 14, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
     minHeight: 160,
   },
+
+  // 時点選択
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 32 },
+  dayPickerBox: { backgroundColor: Colors.white, borderRadius: 18, padding: 20, gap: 4 },
+  dayPickerTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginBottom: 8 },
+  dayPickerItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  dayPickerItemText: { fontSize: 15, color: Colors.text, fontWeight: '600' },
 })
