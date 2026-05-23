@@ -300,7 +300,7 @@ export default function TileScreen() {
           <Text style={styles.phoneHeaderSub}>トーク画面</Text>
         </View>
       </View>
-      {/* チャットエリア */}
+      {/* チャットエリア（flex:1 でタイルを下に押し出す） */}
       <View style={styles.phoneChatArea}>
         <View style={styles.dateBadge}>
           <Text style={styles.dateBadgeText}>{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}</Text>
@@ -315,6 +315,8 @@ export default function TileScreen() {
           </View>
         </View>
       </View>
+      {/* スペーサー：タイルパネルを下に固定 */}
+      <View style={{ flex: 1 }} />
       {/* タイルパネル */}
       <View style={styles.phoneTilePanel}>
         <View style={styles.phoneTileHandle}>

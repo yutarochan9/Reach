@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, TextInput, Modal, Image
+  ActivityIndicator, TextInput, Modal, Image, ScrollView
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -16,12 +16,46 @@ type Follower = {
   tags: string[]
 }
 
+type Segment =
+  | { key: 'all' }
+  | { key: 'week' }
+  | { key: 'month' }
+  | { key: 'veteran' }
+  | { key: 'notag' }
+  | { key: 'tag'; tag: string }
+
+const now = new Date()
+const daysAgo = (n: number) => new Date(now.getTime() - n * 86400000)
+
+function filterFollowers(followers: Follower[], seg: Segment): Follower[] {
+  switch (seg.key) {
+    case 'all': return followers
+    case 'week': return followers.filter(f => new Date(f.followed_at) >= daysAgo(7))
+    case 'month': return followers.filter(f => new Date(f.followed_at) >= daysAgo(30))
+    case 'veteran': return followers.filter(f => new Date(f.followed_at) < daysAgo(90))
+    case 'notag': return followers.filter(f => f.tags.length === 0)
+    case 'tag': return followers.filter(f => f.tags.includes(seg.tag))
+  }
+}
+
+function segmentLabel(seg: Segment): string {
+  switch (seg.key) {
+    case 'all': return '全員'
+    case 'week': return '新規（7日以内）'
+    case 'month': return '今月（30日以内）'
+    case 'veteran': return '常連（90日以上）'
+    case 'notag': return 'タグなし'
+    case 'tag': return `# ${seg.tag}`
+  }
+}
+
 export default function FollowersScreen() {
   const [followers, setFollowers] = useState<Follower[]>([])
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null)
   const [tagModalVisible, setTagModalVisible] = useState(false)
-  const [selectedFollower, setSelectedFollower] = useState<Follower | null>(null)
+  const [editingFollower, setEditingFollower] = useState<Follower | null>(null)
   const [newTag, setNewTag] = useState('')
   const [savingTag, setSavingTag] = useState(false)
 
@@ -67,46 +101,48 @@ export default function FollowersScreen() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  // タグ一覧を集計
+  const allTags = [...new Set(followers.flatMap(f => f.tags))]
+
   const openTagModal = (follower: Follower) => {
-    setSelectedFollower(follower)
+    setEditingFollower(follower)
     setNewTag('')
     setTagModalVisible(true)
   }
 
   const handleAddTag = async () => {
-    if (!newTag.trim() || !userId || !selectedFollower) return
+    if (!newTag.trim() || !userId || !editingFollower) return
     setSavingTag(true)
     await supabase.from('follower_tags').upsert({
       creator_id: userId,
-      follower_id: selectedFollower.id,
+      follower_id: editingFollower.id,
       tag: newTag.trim(),
     })
+    const tag = newTag.trim()
     setFollowers(prev => prev.map(f =>
-      f.id === selectedFollower.id
-        ? { ...f, tags: [...new Set([...f.tags, newTag.trim()])] }
-        : f
+      f.id === editingFollower.id ? { ...f, tags: [...new Set([...f.tags, tag])] } : f
     ))
-    setSelectedFollower(prev => prev ? { ...prev, tags: [...new Set([...prev.tags, newTag.trim()])] } : prev)
+    setEditingFollower(prev => prev ? { ...prev, tags: [...new Set([...prev.tags, tag])] } : prev)
     setNewTag('')
     setSavingTag(false)
   }
 
   const handleRemoveTag = async (tag: string) => {
-    if (!userId || !selectedFollower) return
+    if (!userId || !editingFollower) return
     await supabase.from('follower_tags')
       .delete()
       .eq('creator_id', userId)
-      .eq('follower_id', selectedFollower.id)
+      .eq('follower_id', editingFollower.id)
       .eq('tag', tag)
     setFollowers(prev => prev.map(f =>
-      f.id === selectedFollower.id ? { ...f, tags: f.tags.filter(t => t !== tag) } : f
+      f.id === editingFollower.id ? { ...f, tags: f.tags.filter(t => t !== tag) } : f
     ))
-    setSelectedFollower(prev => prev ? { ...prev, tags: prev.tags.filter(t => t !== tag) } : prev)
+    setEditingFollower(prev => prev ? { ...prev, tags: prev.tags.filter(t => t !== tag) } : prev)
   }
 
   const formatDate = (iso: string) => {
     const d = new Date(iso)
-    return `${d.getMonth() + 1}/${d.getDate()} フォロー`
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} フォロー`
   }
 
   if (loading) {
@@ -117,24 +153,116 @@ export default function FollowersScreen() {
     )
   }
 
+  // ── セグメント一覧画面 ─────────────────────────────────
+  if (!selectedSegment) {
+    const segmentCards: { seg: Segment; icon: string; desc: string; color: string }[] = [
+      { seg: { key: 'all' }, icon: 'people', desc: 'フォロワー全員', color: Colors.accent },
+      { seg: { key: 'week' }, icon: 'flash', desc: '直近7日以内にフォロー', color: '#22C55E' },
+      { seg: { key: 'month' }, icon: 'calendar', desc: '直近30日以内にフォロー', color: '#3B82F6' },
+      { seg: { key: 'veteran' }, icon: 'star', desc: '90日以上前からのフォロワー', color: '#F59E0B' },
+      { seg: { key: 'notag' }, icon: 'pricetag-outline', desc: 'タグが未設定', color: '#8B5CF6' },
+    ]
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color={Colors.accent} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>フォロワー管理</Text>
+          <View style={{ width: 32 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={styles.segmentList}>
+          <Text style={styles.sectionLabel}>時期・条件</Text>
+          {segmentCards.map(({ seg, icon, desc, color }) => {
+            const count = filterFollowers(followers, seg).length
+            return (
+              <TouchableOpacity
+                key={seg.key}
+                style={styles.segCard}
+                onPress={() => setSelectedSegment(seg)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.segIcon, { backgroundColor: color + '22' }]}>
+                  <Ionicons name={icon as any} size={22} color={color} />
+                </View>
+                <View style={styles.segInfo}>
+                  <Text style={styles.segLabel}>{segmentLabel(seg)}</Text>
+                  <Text style={styles.segDesc}>{desc}</Text>
+                </View>
+                <View style={styles.segCount}>
+                  <Text style={styles.segCountNum}>{count}</Text>
+                  <Text style={styles.segCountUnit}>人</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+              </TouchableOpacity>
+            )
+          })}
+
+          {allTags.length > 0 && (
+            <>
+              <Text style={[styles.sectionLabel, { marginTop: 8 }]}>タグ別</Text>
+              {allTags.map(tag => {
+                const seg: Segment = { key: 'tag', tag }
+                const count = filterFollowers(followers, seg).length
+                return (
+                  <TouchableOpacity
+                    key={tag}
+                    style={styles.segCard}
+                    onPress={() => setSelectedSegment(seg)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.segIcon, { backgroundColor: Colors.accent + '22' }]}>
+                      <Ionicons name="pricetag" size={20} color={Colors.accent} />
+                    </View>
+                    <View style={styles.segInfo}>
+                      <Text style={styles.segLabel}># {tag}</Text>
+                      <Text style={styles.segDesc}>このタグのフォロワー</Text>
+                    </View>
+                    <View style={styles.segCount}>
+                      <Text style={styles.segCountNum}>{count}</Text>
+                      <Text style={styles.segCountUnit}>人</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+                  </TouchableOpacity>
+                )
+              })}
+            </>
+          )}
+
+          {followers.length === 0 && (
+            <View style={styles.empty}>
+              <Ionicons name="people-outline" size={48} color={Colors.border} />
+              <Text style={styles.emptyText}>フォロワーがいません</Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    )
+  }
+
+  // ── セグメント内フォロワー一覧 ─────────────────────────
+  const filtered = filterFollowers(followers, selectedSegment)
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => setSelectedSegment(null)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>フォロワー管理 ({followers.length}人)</Text>
+        <Text style={styles.headerTitle}>{segmentLabel(selectedSegment)}（{filtered.length}人）</Text>
         <View style={{ width: 32 }} />
       </View>
 
-      {followers.length === 0 ? (
+      {filtered.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="people-outline" size={48} color={Colors.border} />
-          <Text style={styles.emptyText}>フォロワーがいません</Text>
+          <Text style={styles.emptyText}>該当するフォロワーがいません</Text>
         </View>
       ) : (
         <FlatList
-          data={followers}
+          data={filtered}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
@@ -173,21 +301,22 @@ export default function FollowersScreen() {
         />
       )}
 
+      {/* タグ編集モーダル */}
       <Modal visible={tagModalVisible} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => setTagModalVisible(false)}>
               <Text style={styles.modalClose}>完了</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{selectedFollower?.display_name} のタグ</Text>
+            <Text style={styles.modalTitle}>{editingFollower?.display_name} のタグ</Text>
             <View style={{ width: 40 }} />
           </View>
           <View style={styles.modalBody}>
             <View style={styles.currentTags}>
-              {(selectedFollower?.tags ?? []).length === 0 ? (
+              {(editingFollower?.tags ?? []).length === 0 ? (
                 <Text style={styles.noTagText}>タグがまだありません</Text>
               ) : (
-                (selectedFollower?.tags ?? []).map(tag => (
+                (editingFollower?.tags ?? []).map(tag => (
                   <View key={tag} style={styles.tagChipLarge}>
                     <Text style={styles.tagTextLarge}>{tag}</Text>
                     <TouchableOpacity onPress={() => handleRemoveTag(tag)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -234,6 +363,24 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+
+  // セグメント一覧
+  segmentList: { padding: 16, gap: 10, paddingBottom: 40 },
+  sectionLabel: { fontSize: 11, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5 },
+  segCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12,
+  },
+  segIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  segInfo: { flex: 1 },
+  segLabel: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  segDesc: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  segCount: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+  segCountNum: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  segCountUnit: { fontSize: 11, color: Colors.textLight },
+
+  // フォロワーリスト
   list: { padding: 16, gap: 10 },
   card: {
     backgroundColor: Colors.white, borderRadius: 14,
@@ -260,6 +407,8 @@ const styles = StyleSheet.create({
   tagBtn: { padding: 8 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
   emptyText: { fontSize: 14, color: Colors.textLight },
+
+  // モーダル
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
