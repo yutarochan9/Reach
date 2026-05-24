@@ -138,6 +138,10 @@ export default function TileScreen() {
   const [uploading, setUploading] = useState(false)
   const [draftTile, setDraftTile] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [scrollEnabled, setScrollEnabled] = useState(true)
+  const [colFrom, setColFrom] = useState('1')
+  const [colTo, setColTo]     = useState('9')
+  const [rowFrom, setRowFrom] = useState('1')
+  const [rowTo, setRowTo]     = useState('9')
   const gridRef = useRef<any>(null)
   const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
   const draftTileRef = useRef(draftTile)
@@ -146,6 +150,28 @@ export default function TileScreen() {
   const updateDraft = (v: typeof draftTile) => {
     draftTileRef.current = v
     setDraftTile(v)
+    if (v) {
+      setColFrom(String(v.x + 1))
+      setColTo(String(v.x + v.w))
+      setRowFrom(String(v.y + 1))
+      setRowTo(String(v.y + v.h))
+    }
+  }
+
+  const applyNumberInput = (cf: string, ct: string, rf: string, rt: string) => {
+    const c1 = Math.max(1, Math.min(GRID_COLS, parseInt(cf) || 1))
+    const c2 = Math.max(c1, Math.min(GRID_COLS, parseInt(ct) || c1))
+    const r1 = Math.max(1, Math.min(GRID_ROWS, parseInt(rf) || 1))
+    const r2 = Math.max(r1, Math.min(GRID_ROWS, parseInt(rt) || r1))
+    const next = { x: c1 - 1, y: r1 - 1, w: c2 - c1 + 1, h: r2 - r1 + 1 }
+    draftTileRef.current = next
+    setDraftTile(next)
+  }
+
+  const startMobileDraft = () => {
+    const x = 0, y = 0, w = 9, h = 9
+    setColFrom('1'); setColTo('9'); setRowFrom('1'); setRowTo('9')
+    updateDraft({ x, y, w, h })
   }
 
   const load = useCallback(async () => {
@@ -446,8 +472,32 @@ export default function TileScreen() {
 
           {/* グリッドエディタ */}
           <Text style={styles.sectionLabel}>
-            {draftTile ? '辺をドラッグしてサイズ調整' : 'タップで配置・編集'}
+            {draftTile ? (isMobile ? '範囲を数字で指定' : '辺をドラッグしてサイズ調整') : 'タップで配置・編集'}
           </Text>
+
+          {/* モバイル：数字入力で範囲指定 */}
+          {isMobile && draftTile && (
+            <View style={styles.numInputCard}>
+              <View style={styles.numInputRow}>
+                <Text style={styles.numInputLabel}>列（左→右）</Text>
+                <TextInput style={styles.numInput} keyboardType="number-pad" value={colFrom}
+                  onChangeText={v => { setColFrom(v); applyNumberInput(v, colTo, rowFrom, rowTo) }} />
+                <Text style={styles.numInputSep}>〜</Text>
+                <TextInput style={styles.numInput} keyboardType="number-pad" value={colTo}
+                  onChangeText={v => { setColTo(v); applyNumberInput(colFrom, v, rowFrom, rowTo) }} />
+                <Text style={styles.numInputRange}>/ {GRID_COLS}</Text>
+              </View>
+              <View style={styles.numInputRow}>
+                <Text style={styles.numInputLabel}>行（上→下）</Text>
+                <TextInput style={styles.numInput} keyboardType="number-pad" value={rowFrom}
+                  onChangeText={v => { setRowFrom(v); applyNumberInput(colFrom, colTo, v, rowTo) }} />
+                <Text style={styles.numInputSep}>〜</Text>
+                <TextInput style={styles.numInput} keyboardType="number-pad" value={rowTo}
+                  onChangeText={v => { setRowTo(v); applyNumberInput(colFrom, colTo, rowFrom, v) }} />
+                <Text style={styles.numInputRange}>/ {GRID_ROWS}</Text>
+              </View>
+            </View>
+          )}
 
           <View style={styles.gridWrapper}>
             {panelBgImage && (
@@ -499,8 +549,8 @@ export default function TileScreen() {
               )}
               <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFillObject} onPress={onGridPress} />
 
-              {/* 辺ハンドル：大きいタッチエリア + 中央にカプセル */}
-              {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
+              {/* 辺ハンドル：デスクトップのみ */}
+              {!isMobile && draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
                 const isHoriz = edge === 'top' || edge === 'bottom'
                 const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
                   : edge === 'right' ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
@@ -551,7 +601,23 @@ export default function TileScreen() {
             </View>
           )}
 
+          {/* モバイル：新規タイル追加ボタン */}
+          {isMobile && !draftTile && (
+            <TouchableOpacity style={styles.addTileBtn} onPress={startMobileDraft}>
+              <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+              <Text style={styles.addTileBtnText}>タイルを追加</Text>
+            </TouchableOpacity>
+          )}
+
           <Text style={styles.note}>※ URLには https:// から始まるリンクを入力してください。</Text>
+
+          {/* モバイル：プレビューをScrollView内に（スクロールで見える） */}
+          {isMobile && (
+            <View style={styles.mobilePreviewInner}>
+              <Text style={styles.previewLabel}>プレビュー</Text>
+              <PhonePreview />
+            </View>
+          )}
         </ScrollView>
 
         {/* デスクトップのみ右パネルにプレビュー */}
@@ -564,12 +630,6 @@ export default function TileScreen() {
           </View>
         )}
 
-        {/* モバイル：プレビューを下に */}
-        {isMobile && (
-          <View style={styles.mobilePreview}>
-            <PhonePreview />
-          </View>
-        )}
 
       </View>
 
@@ -702,7 +762,28 @@ const styles = StyleSheet.create({
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
 
   bodyRow: { flex: 1, flexDirection: 'row' },
-  mobilePreview: { height: 280, borderBottomWidth: 1, borderBottomColor: Colors.border, padding: 12, backgroundColor: Colors.background },
+  mobilePreviewInner: { marginTop: 8, height: 320 },
+  addTileBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: Colors.accent, borderRadius: 10,
+    paddingVertical: 12, marginTop: 4,
+  },
+  addTileBtnText: { fontSize: 14, fontWeight: '700', color: Colors.accent },
+  numInputCard: {
+    backgroundColor: Colors.white, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: 12, gap: 10,
+  },
+  numInputRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  numInputLabel: { fontSize: 12, color: Colors.textLight, fontWeight: '600', width: 80 },
+  numInput: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
+    width: 44, paddingVertical: 6, paddingHorizontal: 8,
+    fontSize: 15, color: Colors.text, textAlign: 'center',
+    backgroundColor: Colors.background,
+  },
+  numInputSep: { fontSize: 14, color: Colors.textLight },
+  numInputRange: { fontSize: 11, color: Colors.textLight, marginLeft: 2 },
 
   // 左パネル
   leftPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
