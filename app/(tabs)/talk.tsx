@@ -362,7 +362,7 @@ export default function TalkScreen() {
 
   // ポーリング：3秒おきにDMリストを自動更新（Realtimeが機能しない環境への対策）
   useEffect(() => {
-    const timer = setInterval(() => { load() }, 3000)
+    const timer = setInterval(() => { load() }, 1500)
     return () => clearInterval(timer)
   }, [load])
 
