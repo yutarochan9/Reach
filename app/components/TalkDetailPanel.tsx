@@ -170,9 +170,34 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || !myId) return
-    await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: text.trim() })
+    const content = text.trim()
+    await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content })
     const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single()
-    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.trim().slice(0, 80))
+    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', content.slice(0, 80))
+
+    // 自動応答チェック（keywords配列対応）
+    const { data: autoRules } = await supabase
+      .from('auto_responses')
+      .select('id, keyword, keywords, response_text, match_count')
+      .eq('creator_id', senderId)
+      .eq('is_active', true)
+    const lc = content.toLowerCase()
+    const matched = (autoRules ?? []).find((rule: any) => {
+      const kws: string[] = (rule.keywords && rule.keywords.length > 0)
+        ? rule.keywords
+        : (rule.keyword ? [rule.keyword] : [])
+      return kws.some((kw: string) => lc.includes(kw.toLowerCase()))
+    })
+    if (matched) {
+      setTimeout(async () => {
+        await supabase.from('messages').insert({
+          sender_id: senderId, receiver_id: myId, content: matched.response_text,
+        })
+        await supabase.from('auto_responses')
+          .update({ match_count: matched.match_count + 1 })
+          .eq('id', matched.id)
+      }, 1200)
+    }
   }
 
   const handleSend = async () => {

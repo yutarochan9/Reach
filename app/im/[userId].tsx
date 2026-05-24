@@ -117,12 +117,16 @@ export default function IMScreen() {
 
     const { data: autoRules } = await supabase
       .from('auto_responses')
-      .select('keyword, response_text, match_count')
+      .select('id, keyword, keywords, response_text, match_count')
       .eq('creator_id', partnerId)
       .eq('is_active', true)
-    const matched = (autoRules ?? []).find((rule: any) =>
-      content.toLowerCase().includes(rule.keyword.toLowerCase())
-    )
+    const lc = content.toLowerCase()
+    const matched = (autoRules ?? []).find((rule: any) => {
+      const kws: string[] = (rule.keywords && rule.keywords.length > 0)
+        ? rule.keywords
+        : (rule.keyword ? [rule.keyword] : [])
+      return kws.some((kw: string) => lc.includes(kw.toLowerCase()))
+    })
     if (matched) {
       setTimeout(async () => {
         const { data: autoReply } = await supabase.from('messages').insert({
@@ -134,7 +138,7 @@ export default function IMScreen() {
         }
         await supabase.from('auto_responses')
           .update({ match_count: matched.match_count + 1 })
-          .eq('creator_id', partnerId).eq('keyword', matched.keyword)
+          .eq('id', matched.id)
       }, 1200)
     }
   }
