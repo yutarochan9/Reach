@@ -536,7 +536,7 @@ export default function TalkScreen() {
                     setSelectedTalkId(null)
                     setSelectedDmId(item.data.otherId)
                   } else {
-                    router.push(`/im/${item.data.otherId}` as any)
+                    router.push({ pathname: '/im/[userId]' as any, params: { userId: item.data.otherId } })
                   }
                 }}
                 onHide={() => handleHideDm(item.data.otherId)}

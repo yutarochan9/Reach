@@ -10,7 +10,7 @@ export default function Root({ children }: PropsWithChildren) {
         {/* viewport-fit=cover でノッチ・Dynamic Island までコンテンツを拡張 */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"
         />
         {/* ブラウザのアドレスバー色をアプリのヘッダー色に合わせる */}
         <meta name="theme-color" content="#E0D4C4" />

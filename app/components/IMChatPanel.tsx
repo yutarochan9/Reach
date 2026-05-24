@@ -436,7 +436,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: Colors.white,
     borderRadius: 22, borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 14, color: Colors.text, maxHeight: 100,
+    fontSize: 16, color: Colors.text, maxHeight: 100,
   },
   sendBtn: {
     width: 40, height: 40, borderRadius: 20,

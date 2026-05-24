@@ -199,7 +199,7 @@ export default function CreatorScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.dmButton}
-                onPress={() => router.push(`/im/${id}` as any)}
+                onPress={() => router.push({ pathname: '/im/[userId]' as any, params: { userId: id } })}
               >
                 <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
                 <Text style={styles.dmButtonText}>DM</Text>
