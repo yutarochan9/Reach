@@ -337,7 +337,7 @@ export default function ComposeScreen() {
   // ─── エディタ（新規配信タブ） ─────────────────────────────
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.toolbar}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbarScroll} contentContainerStyle={styles.toolbar}>
         <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(true); setShowSchedule(false) }}>
           <Ionicons name="people-outline" size={15} color={showTarget ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showTarget && styles.toolBtnTextActive]}>{targetLabel}</Text>
@@ -374,7 +374,7 @@ export default function ComposeScreen() {
             {visibleToNew ? '新規にも表示' : '新規には非表示'}
           </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
       {showTarget && (
         <View style={styles.optionCard}>
@@ -847,7 +847,8 @@ const styles = StyleSheet.create({
   editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
   editorPanelContent: { padding: 20, gap: 14 },
 
-  toolbar: { flexDirection: 'row', gap: 8 },
+  toolbarScroll: { flexGrow: 0 },
+  toolbar: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
   toolBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.white, borderRadius: 8,
