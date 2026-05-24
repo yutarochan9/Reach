@@ -200,6 +200,15 @@ export default function SettingsScreen() {
           </>
         )}
 
+        <Text style={styles.sectionLabel}>サポート</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/contact' as any)}>
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>お問い合わせ</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.sectionLabel}>その他</Text>
         <View style={styles.section}>
           <TouchableOpacity style={styles.actionRow} onPress={handleLogout}>

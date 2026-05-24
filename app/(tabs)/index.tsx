@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
+type Announcement = { id: string; title: string; body: string }
+
 type FollowedCreator = {
   id: string
   display_name: string
@@ -38,6 +40,8 @@ export default function HomeScreen() {
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [followingOpen, setFollowingOpen] = useState(true)
   const [followersOpen, setFollowersOpen] = useState(true)
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -69,6 +73,12 @@ export default function HomeScreen() {
 
     setCreators((followingProfiles.data ?? []) as FollowedCreator[])
     setFollowers((followerProfiles.data ?? []) as FollowerProfile[])
+
+    const { data: annData } = await supabase
+      .from('announcements').select('id, title, body')
+      .order('created_at', { ascending: false }).limit(3)
+    setAnnouncements((annData ?? []) as Announcement[])
+
     setLoading(false)
   }, [])
 
@@ -128,6 +138,19 @@ export default function HomeScreen() {
           </View>
         </View>
       </View>
+
+      {announcements.filter(a => !dismissedIds.has(a.id)).map(a => (
+        <View key={a.id} style={styles.annBanner}>
+          <Ionicons name="megaphone-outline" size={16} color="#92400E" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.annBannerTitle}>{a.title}</Text>
+            <Text style={styles.annBannerBody} numberOfLines={2}>{a.body}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setDismissedIds(prev => new Set([...prev, a.id]))}>
+            <Ionicons name="close" size={18} color="#92400E" />
+          </TouchableOpacity>
+        </View>
+      ))}
 
       <FlatList
         data={flatData}
@@ -269,6 +292,13 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   notifBadgeText: { color: Colors.white, fontSize: 10, fontWeight: '700' },
+  annBanner: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: '#FEF3C7', borderBottomWidth: 1, borderBottomColor: '#FDE68A',
+    paddingHorizontal: 16, paddingVertical: 12,
+  },
+  annBannerTitle: { fontSize: 13, fontWeight: '700', color: '#92400E' },
+  annBannerBody: { fontSize: 12, color: '#92400E', lineHeight: 17, marginTop: 2 },
   headerProfile: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerAvatar: {
     width: 36, height: 36, borderRadius: 18,

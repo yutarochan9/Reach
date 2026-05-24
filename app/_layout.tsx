@@ -1,10 +1,17 @@
 import { useEffect, useRef } from 'react'
 import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import * as Sentry from '@sentry/react-native'
 import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
 import CookieBanner from './components/CookieBanner'
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  enabled: process.env.NODE_ENV === 'production',
+  tracesSampleRate: 0.2,
+})
 
 export default function RootLayout() {
   const navigated = useRef(false)
