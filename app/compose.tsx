@@ -60,6 +60,8 @@ export default function ComposeScreen() {
   const [scheduledAt, setScheduledAt] = useState('')
   const [showSchedule, setShowSchedule] = useState(false)
   const [showTarget, setShowTarget] = useState(false)
+  const [showReaction, setShowReaction] = useState(false)
+  const [showArchive, setShowArchive] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [publicReactions, setPublicReactions] = useState(false)
   const [visibleToNew, setVisibleToNew] = useState(true)
@@ -338,39 +340,31 @@ export default function ComposeScreen() {
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(true); setShowSchedule(false) }}>
+        <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(v => !v); setShowSchedule(false); setShowReaction(false); setShowArchive(false) }}>
           <Ionicons name="people-outline" size={15} color={showTarget ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showTarget && styles.toolBtnTextActive]} numberOfLines={1}>{targetLabel}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(true); setShowTarget(false) }}>
+        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowTarget(false); setShowReaction(false); setShowArchive(false) }}>
           <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
-            style={[styles.toolBtn, publicReactions && styles.toolBtnActive]}
-            onPress={() => setPublicReactions(v => !v)}
+            style={[styles.toolBtn, showReaction && styles.toolBtnActive]}
+            onPress={() => { setShowReaction(v => !v); setShowTarget(false); setShowSchedule(false); setShowArchive(false) }}
           >
-            <Ionicons
-              name={publicReactions ? 'heart' : 'heart-outline'}
-              size={15}
-              color={publicReactions ? Colors.white : Colors.accent}
-            />
-            <Text style={[styles.toolBtnText, publicReactions && styles.toolBtnTextActive]} numberOfLines={1}>
+            <Ionicons name="heart-outline" size={15} color={showReaction ? Colors.white : Colors.accent} />
+            <Text style={[styles.toolBtnText, showReaction && styles.toolBtnTextActive]} numberOfLines={1}>
               {publicReactions ? '公開' : '非公開'}
             </Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[styles.toolBtn, !visibleToNew && styles.toolBtnActive]}
-          onPress={() => setVisibleToNew(v => !v)}
+          style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
+          onPress={() => { setShowArchive(v => !v); setShowTarget(false); setShowSchedule(false); setShowReaction(false) }}
         >
-          <Ionicons
-            name={visibleToNew ? 'archive-outline' : 'archive'}
-            size={15}
-            color={!visibleToNew ? Colors.white : Colors.accent}
-          />
-          <Text style={[styles.toolBtnText, !visibleToNew && styles.toolBtnTextActive]} numberOfLines={1}>
+          <Ionicons name="archive-outline" size={15} color={showArchive ? Colors.white : Colors.accent} />
+          <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
             {visibleToNew ? '全期間' : '新規から'}
           </Text>
         </TouchableOpacity>
@@ -412,6 +406,44 @@ export default function ComposeScreen() {
               )}
             </>
           )}
+        </View>
+      )}
+
+      {showReaction && (
+        <View style={styles.optionCard}>
+          <Text style={styles.optionTitle}>リアクション表示</Text>
+          {[
+            { value: true,  label: '公開',   desc: 'いいねなどのリアクションを全員に表示する' },
+            { value: false, label: '非公開', desc: 'リアクションを自分だけに表示する' },
+          ].map(opt => (
+            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, publicReactions === opt.value && styles.optionRowActive]}
+              onPress={() => { setPublicReactions(opt.value); setShowReaction(false) }}>
+              <View style={styles.optionLeft}>
+                <Text style={[styles.optionLabel, publicReactions === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                <Text style={styles.optionDesc}>{opt.desc}</Text>
+              </View>
+              {publicReactions === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {showArchive && (
+        <View style={styles.optionCard}>
+          <Text style={styles.optionTitle}>過去配信の公開範囲</Text>
+          {[
+            { value: true,  label: '全期間',   desc: '新規フォロワーもフォロー前の配信を遡れる' },
+            { value: false, label: '新規から', desc: 'フォローした日以降の配信のみ表示する' },
+          ].map(opt => (
+            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, visibleToNew === opt.value && styles.optionRowActive]}
+              onPress={() => { setVisibleToNew(opt.value); setShowArchive(false) }}>
+              <View style={styles.optionLeft}>
+                <Text style={[styles.optionLabel, visibleToNew === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                <Text style={styles.optionDesc}>{opt.desc}</Text>
+              </View>
+              {visibleToNew === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
