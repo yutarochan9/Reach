@@ -15,6 +15,18 @@ type AutoResponse = {
   response_text: string
   is_active: boolean
   match_count: number
+  match_type: 'contains' | 'exact'
+  priority: number
+  time_from: string | null
+  time_to: string | null
+}
+
+type EditState = Partial<AutoResponse> & {
+  keywords: string[]
+  match_type: 'contains' | 'exact'
+  use_time: boolean
+  time_from: string
+  time_to: string
 }
 
 function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -33,12 +45,33 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
   )
 }
 
+function SegmentControl({
+  options, value, onChange,
+}: { options: { label: string; value: string }[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <View style={seg.wrap}>
+      {options.map(opt => (
+        <TouchableOpacity
+          key={opt.value}
+          style={[seg.item, value === opt.value && seg.itemActive]}
+          onPress={() => onChange(opt.value)}
+          activeOpacity={0.7}
+        >
+          <Text style={[seg.label, value === opt.value && seg.labelActive]}>{opt.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  )
+}
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+
 export default function AutoResponsesScreen() {
   const [rules, setRules] = useState<AutoResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [modalVisible, setModalVisible] = useState(false)
-  const [editing, setEditing] = useState<Partial<AutoResponse> & { keywords: string[] } | null>(null)
+  const [editing, setEditing] = useState<EditState | null>(null)
   const [keywordInput, setKeywordInput] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -50,11 +83,14 @@ export default function AutoResponsesScreen() {
       .from('auto_responses')
       .select('*')
       .eq('creator_id', user.id)
-      .order('created_at', { ascending: false })
-    // keywords列がない場合はkeywordから補完
+      .order('priority', { ascending: true })
     const normalized = (data ?? []).map((r: any) => ({
       ...r,
       keywords: (r.keywords && r.keywords.length > 0) ? r.keywords : (r.keyword ? [r.keyword] : []),
+      match_type: r.match_type ?? 'contains',
+      priority: r.priority ?? 0,
+      time_from: r.time_from ? r.time_from.slice(0, 5) : null,
+      time_to: r.time_to ? r.time_to.slice(0, 5) : null,
     }))
     setRules(normalized)
     setLoading(false)
@@ -63,13 +99,23 @@ export default function AutoResponsesScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const openNew = () => {
-    setEditing({ keywords: [], response_text: '', is_active: true })
+    setEditing({
+      keywords: [], response_text: '', is_active: true,
+      match_type: 'contains', use_time: false, time_from: '09:00', time_to: '18:00',
+    })
     setKeywordInput('')
     setModalVisible(true)
   }
 
   const openEdit = (rule: AutoResponse) => {
-    setEditing({ ...rule, keywords: [...rule.keywords] })
+    setEditing({
+      ...rule,
+      keywords: [...rule.keywords],
+      match_type: rule.match_type ?? 'contains',
+      use_time: !!(rule.time_from && rule.time_to),
+      time_from: rule.time_from ?? '09:00',
+      time_to: rule.time_to ?? '18:00',
+    })
     setKeywordInput('')
     setModalVisible(true)
   }
@@ -88,19 +134,29 @@ export default function AutoResponsesScreen() {
 
   const handleSave = async () => {
     if (!editing?.keywords.length || !editing?.response_text?.trim() || !userId) return
+    if (editing.use_time && (!TIME_RE.test(editing.time_from) || !TIME_RE.test(editing.time_to))) {
+      Alert.alert('エラー', '時刻はHH:MM形式（例: 09:00）で入力してください')
+      return
+    }
     setSaving(true)
 
-    const payload = {
+    const payload: Record<string, any> = {
       keywords: editing.keywords,
-      keyword: editing.keywords[0],   // 後方互換
+      keyword: editing.keywords[0],
       response_text: editing.response_text.trim(),
       is_active: editing.is_active ?? true,
+      match_type: editing.match_type,
+      time_from: editing.use_time ? editing.time_from : null,
+      time_to: editing.use_time ? editing.time_to : null,
     }
 
     if (editing.id) {
       await supabase.from('auto_responses').update(payload).eq('id', editing.id)
     } else {
-      await supabase.from('auto_responses').insert({ creator_id: userId, ...payload, match_count: 0 })
+      payload.creator_id = userId
+      payload.match_count = 0
+      payload.priority = rules.length
+      await supabase.from('auto_responses').insert(payload)
     }
 
     setSaving(false)
@@ -122,10 +178,25 @@ export default function AutoResponsesScreen() {
         text: '削除', style: 'destructive',
         onPress: async () => {
           await supabase.from('auto_responses').delete().eq('id', rule.id)
-          setRules(prev => prev.filter(r => r.id !== rule.id))
+          const updated = rules.filter(r => r.id !== rule.id)
+          await Promise.all(updated.map((r, i) =>
+            supabase.from('auto_responses').update({ priority: i }).eq('id', r.id)
+          ))
+          setRules(updated.map((r, i) => ({ ...r, priority: i })))
         },
       },
     ])
+  }
+
+  const handleMove = async (index: number, dir: -1 | 1) => {
+    const next = index + dir
+    if (next < 0 || next >= rules.length) return
+    const newRules = [...rules]
+    ;[newRules[index], newRules[next]] = [newRules[next], newRules[index]]
+    await Promise.all(newRules.map((r, i) =>
+      supabase.from('auto_responses').update({ priority: i }).eq('id', r.id)
+    ))
+    setRules(newRules.map((r, i) => ({ ...r, priority: i })))
   }
 
   if (loading) {
@@ -151,7 +222,7 @@ export default function AutoResponsesScreen() {
       <View style={styles.infoBox}>
         <Ionicons name="information-circle-outline" size={16} color={Colors.textLight} />
         <Text style={styles.infoText}>
-          フォロワーからのDMにキーワードが含まれると自動返信します。1つのルールに複数のキーワードを設定できます。
+          キーワードを含むDMが届くと自動返信します。優先度は上が高く、最初にマッチしたルールが使われます。
         </Text>
       </View>
 
@@ -168,9 +239,29 @@ export default function AutoResponsesScreen() {
           data={rules}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.card} onPress={() => openEdit(item)} activeOpacity={0.7}>
-              <View style={styles.cardBody}>
+          renderItem={({ item, index }) => (
+            <View style={styles.card}>
+              {/* 優先度ボタン */}
+              <View style={styles.orderCol}>
+                <TouchableOpacity
+                  onPress={() => handleMove(index, -1)}
+                  disabled={index === 0}
+                  style={[styles.orderBtn, index === 0 && { opacity: 0.2 }]}
+                >
+                  <Ionicons name="chevron-up" size={16} color={Colors.textLight} />
+                </TouchableOpacity>
+                <Text style={styles.orderNum}>{index + 1}</Text>
+                <TouchableOpacity
+                  onPress={() => handleMove(index, 1)}
+                  disabled={index === rules.length - 1}
+                  style={[styles.orderBtn, index === rules.length - 1 && { opacity: 0.2 }]}
+                >
+                  <Ionicons name="chevron-down" size={16} color={Colors.textLight} />
+                </TouchableOpacity>
+              </View>
+
+              {/* カード本体 */}
+              <TouchableOpacity style={styles.cardBody} onPress={() => openEdit(item)} activeOpacity={0.7}>
                 <View style={styles.keywordRow}>
                   <View style={styles.keywordChips}>
                     {item.keywords.map(kw => (
@@ -183,14 +274,29 @@ export default function AutoResponsesScreen() {
                   <Text style={styles.matchCount}>{item.match_count}回</Text>
                 </View>
                 <Text style={styles.responsePreview} numberOfLines={2}>{item.response_text}</Text>
-              </View>
+                <View style={styles.tagRow}>
+                  <View style={styles.tag}>
+                    <Text style={styles.tagText}>
+                      {item.match_type === 'exact' ? '完全一致' : '部分一致'}
+                    </Text>
+                  </View>
+                  {item.time_from && item.time_to && (
+                    <View style={styles.tag}>
+                      <Ionicons name="time-outline" size={11} color={Colors.textLight} />
+                      <Text style={styles.tagText}>{item.time_from}〜{item.time_to}</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* アクション */}
               <View style={styles.cardActions}>
                 <ToggleSwitch value={item.is_active} onChange={() => handleToggle(item)} />
                 <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                   <Ionicons name="trash-outline" size={18} color="#E53E3E" />
                 </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
           )}
         />
       )}
@@ -212,9 +318,11 @@ export default function AutoResponsesScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+
+              {/* キーワード */}
               <Text style={styles.fieldLabel}>キーワード（複数設定可）</Text>
-              {/* 追加済みキーワードチップ */}
               {(editing?.keywords ?? []).length > 0 && (
                 <View style={styles.chipRow}>
                   {(editing?.keywords ?? []).map(kw => (
@@ -227,7 +335,6 @@ export default function AutoResponsesScreen() {
                   ))}
                 </View>
               )}
-              {/* キーワード入力 */}
               <View style={styles.kwInputRow}>
                 <TextInput
                   style={styles.kwInput}
@@ -246,8 +353,24 @@ export default function AutoResponsesScreen() {
                   <Text style={styles.kwAddText}>追加</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.fieldHint}>いずれかのキーワードを含むDMが届いたら自動返信します</Text>
 
+              {/* 一致方法 */}
+              <Text style={styles.fieldLabel}>一致方法</Text>
+              <SegmentControl
+                options={[
+                  { label: '部分一致（含む）', value: 'contains' },
+                  { label: '完全一致', value: 'exact' },
+                ]}
+                value={editing?.match_type ?? 'contains'}
+                onChange={v => setEditing(prev => prev ? { ...prev, match_type: v as any } : prev)}
+              />
+              <Text style={styles.fieldHint}>
+                {editing?.match_type === 'exact'
+                  ? 'キーワードと完全に一致するDMにのみ返信します'
+                  : 'キーワードを含むDMに返信します（LINEと同じ）'}
+              </Text>
+
+              {/* 返信内容 */}
               <Text style={styles.fieldLabel}>返信内容</Text>
               <TextInput
                 style={styles.textarea}
@@ -259,6 +382,50 @@ export default function AutoResponsesScreen() {
                 numberOfLines={6}
                 textAlignVertical="top"
               />
+
+              {/* 時間帯設定 */}
+              <Text style={styles.fieldLabel}>応答時間帯</Text>
+              <SegmentControl
+                options={[
+                  { label: '常時', value: 'always' },
+                  { label: '時間帯を指定', value: 'custom' },
+                ]}
+                value={editing?.use_time ? 'custom' : 'always'}
+                onChange={v => setEditing(prev => prev ? { ...prev, use_time: v === 'custom' } : prev)}
+              />
+              {editing?.use_time && (
+                <View style={styles.timeRow}>
+                  <View style={styles.timeField}>
+                    <Text style={styles.timeLabel}>開始</Text>
+                    <TextInput
+                      style={styles.timeInput}
+                      value={editing.time_from}
+                      onChangeText={t => setEditing(prev => prev ? { ...prev, time_from: t } : prev)}
+                      placeholder="09:00"
+                      placeholderTextColor={Colors.textLight}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                    />
+                  </View>
+                  <Text style={styles.timeSep}>〜</Text>
+                  <View style={styles.timeField}>
+                    <Text style={styles.timeLabel}>終了</Text>
+                    <TextInput
+                      style={styles.timeInput}
+                      value={editing.time_to}
+                      onChangeText={t => setEditing(prev => prev ? { ...prev, time_to: t } : prev)}
+                      placeholder="18:00"
+                      placeholderTextColor={Colors.textLight}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                    />
+                  </View>
+                </View>
+              )}
+              {editing?.use_time && (
+                <Text style={styles.fieldHint}>HH:MM形式で入力（例: 09:00）。日本時間で判定します。</Text>
+              )}
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -266,6 +433,17 @@ export default function AutoResponsesScreen() {
     </View>
   )
 }
+
+const seg = StyleSheet.create({
+  wrap: {
+    flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.background, overflow: 'hidden',
+  },
+  item: { flex: 1, paddingVertical: 9, alignItems: 'center' },
+  itemActive: { backgroundColor: Colors.accent },
+  label: { fontSize: 13, fontWeight: '600', color: Colors.textLight },
+  labelActive: { color: '#fff' },
+})
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
@@ -288,8 +466,11 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.white, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10,
   },
+  orderCol: { alignItems: 'center', gap: 2, width: 24 },
+  orderBtn: { padding: 2 },
+  orderNum: { fontSize: 11, fontWeight: '700', color: Colors.textLight },
   cardBody: { flex: 1, gap: 6 },
   keywordRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   keywordChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, flex: 1 },
@@ -301,6 +482,13 @@ const styles = StyleSheet.create({
   keywordText: { fontSize: 11, fontWeight: '700', color: Colors.accent },
   matchCount: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
   responsePreview: { fontSize: 13, color: Colors.textLight, lineHeight: 18 },
+  tagRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  tag: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.background, borderRadius: 5,
+    paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: Colors.border,
+  },
+  tagText: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
   cardActions: { flexDirection: 'column', alignItems: 'center', gap: 8 },
   deleteBtn: { padding: 4 },
   toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
@@ -346,4 +534,12 @@ const styles = StyleSheet.create({
     padding: 14, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
     minHeight: 140,
   },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
+  timeField: { flex: 1, gap: 4 },
+  timeLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
+  timeInput: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    padding: 12, fontSize: 16, color: Colors.text, backgroundColor: Colors.white, textAlign: 'center',
+  },
+  timeSep: { fontSize: 16, color: Colors.textLight, marginTop: 18 },
 })
