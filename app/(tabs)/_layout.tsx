@@ -3,6 +3,7 @@ import { Tabs, router, usePathname } from 'expo-router'
 import { Colors } from '../../constants/colors'
 import { View, Text, StyleSheet, TouchableOpacity, Platform, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { TalkContext } from '../contexts/TalkContext'
@@ -150,12 +151,10 @@ export default function TabLayout() {
       setSelectedTalkId(null)
       setSelectedDmId(null)
     }
-    // タブを記憶（webのみ）
-    if (Platform.OS === 'web') {
-      const tabRoutes = ['/(tabs)/', '/(tabs)/talk', '/(tabs)/shop', '/(tabs)/mypage']
-      const match = tabRoutes.find(r => r === pathname || (r !== '/(tabs)/' && pathname.startsWith(r)))
-      if (match) try { localStorage.setItem('reach_last_tab', match) } catch {}
-    }
+    // タブを記憶（全プラットフォーム）
+    const tabRoutes = ['/(tabs)/', '/(tabs)/talk', '/(tabs)/shop', '/(tabs)/mypage']
+    const match = tabRoutes.find(r => r === pathname || (r !== '/(tabs)/' && pathname.startsWith(r)))
+    if (match) AsyncStorage.setItem('reach_last_tab', match).catch(() => {})
   }, [pathname])
 
   // デスクトップのトークページでは常に2カラム表示

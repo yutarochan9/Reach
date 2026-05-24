@@ -3,6 +3,7 @@ import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as Sentry from '@sentry/react-native'
 import { Platform } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
@@ -27,18 +28,18 @@ export default function RootLayout() {
   const navigated = useRef(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (navigated.current) return
       navigated.current = true
       if (!session) {
         router.replace('/(auth)/login')
       } else {
         registerPushToken().catch(() => {})
-        supabase.from('profiles').select('display_name').eq('id', session.user.id).single().then(({ data: prof }) => {
+        supabase.from('profiles').select('display_name').eq('id', session.user.id).single().then(async ({ data: prof }) => {
           if (!prof?.display_name || prof.display_name.includes('@')) {
             router.replace('/onboarding')
           } else {
-            const savedTab = Platform.OS === 'web' ? (() => { try { return localStorage.getItem('reach_last_tab') } catch { return null } })() : null
+            const savedTab = await AsyncStorage.getItem('reach_last_tab').catch(() => null)
             router.replace((savedTab ?? '/(tabs)/') as any)
           }
         }).catch(() => {
@@ -57,11 +58,11 @@ export default function RootLayout() {
       if (event === 'SIGNED_IN') {
         if (authFlags.skipNextSignedIn) { authFlags.skipNextSignedIn = false; return }
         registerPushToken().catch(() => {})
-        supabase.from('profiles').select('display_name').eq('id', session!.user.id).single().then(({ data: prof }) => {
+        supabase.from('profiles').select('display_name').eq('id', session!.user.id).single().then(async ({ data: prof }) => {
           if (!prof?.display_name || prof.display_name.includes('@')) {
             router.replace('/onboarding')
           } else {
-            const savedTab = Platform.OS === 'web' ? (() => { try { return localStorage.getItem('reach_last_tab') } catch { return null } })() : null
+            const savedTab = await AsyncStorage.getItem('reach_last_tab').catch(() => null)
             router.replace((savedTab ?? '/(tabs)/') as any)
           }
         }).catch(() => {

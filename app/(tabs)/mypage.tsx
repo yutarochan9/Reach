@@ -6,12 +6,31 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
-const CROP_SIZE = 240
+const CROP_CONTAINER = 300
+const CROP_CIRCLE = 220
+const CROP_OUTPUT = 400
+const CROP_INSET = (CROP_CONTAINER - CROP_CIRCLE) / 2
 
-function WebCropModal({ uri, onConfirm, onCancel }: { uri: string; onConfirm: (dx: number, dy: number) => void; onCancel: () => void }) {
+function WebCropModal({ uri, onConfirm, onCancel }: {
+  uri: string
+  onConfirm: (base64: string) => void
+  onCancel: () => void
+}) {
   const [dx, setDx] = useState(0)
   const [dy, setDy] = useState(0)
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null)
   const base = useRef({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const img = new (window as any).Image()
+    img.onload = () => setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight })
+    img.src = uri
+  }, [uri])
+
+  const scale = naturalSize ? CROP_CONTAINER / naturalSize.w : 1
+  const displayH = naturalSize ? naturalSize.h * scale : CROP_CONTAINER
+  const initialY = (CROP_CONTAINER - displayH) / 2
+
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -19,24 +38,67 @@ function WebCropModal({ uri, onConfirm, onCancel }: { uri: string; onConfirm: (d
     onPanResponderRelease: (_, gs) => { base.current = { x: base.current.x + gs.dx, y: base.current.y + gs.dy } },
   })).current
 
+  const handleConfirm = async () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = CROP_OUTPUT
+    canvas.height = CROP_OUTPUT
+    const ctx = canvas.getContext('2d')!
+    const img = new (window as any).Image()
+    await new Promise<void>(resolve => { img.onload = resolve; img.src = uri })
+
+    const sc = CROP_CONTAINER / img.naturalWidth
+    const dh = img.naturalHeight * sc
+    const iy = (CROP_CONTAINER - dh) / 2
+
+    const srcCX = (CROP_CONTAINER / 2 - dx) / sc
+    const srcCY = (CROP_CONTAINER / 2 - (iy + dy)) / sc
+    const srcR = (CROP_CIRCLE / 2) / sc
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(CROP_OUTPUT / 2, CROP_OUTPUT / 2, CROP_OUTPUT / 2, 0, Math.PI * 2)
+    ctx.clip()
+    ctx.drawImage(img, srcCX - srcR, srcCY - srcR, srcR * 2, srcR * 2, 0, 0, CROP_OUTPUT, CROP_OUTPUT)
+    ctx.restore()
+
+    onConfirm(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
+  }
+
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
       <View style={cropStyles.overlay}>
         <View style={cropStyles.card}>
           <Text style={cropStyles.title}>切り取り位置を調整</Text>
-          <Text style={cropStyles.hint}>ドラッグして位置を調整</Text>
-          <View style={cropStyles.cropFrame} {...panResponder.panHandlers}>
-            <Image
-              source={{ uri }}
-              style={[cropStyles.cropImage, { transform: [{ translateX: dx }, { translateY: dy }] }]}
-              resizeMode="cover"
+          <Text style={cropStyles.hint}>ドラッグして丸の範囲を決める</Text>
+
+          <View style={cropStyles.container} {...panResponder.panHandlers}>
+            {naturalSize && (
+              <Image
+                source={{ uri }}
+                style={{
+                  position: 'absolute',
+                  width: CROP_CONTAINER,
+                  height: displayH,
+                  top: initialY + dy,
+                  left: dx,
+                }}
+                resizeMode="cover"
+              />
+            )}
+            <View
+              pointerEvents="none"
+              style={[
+                cropStyles.circleOverlay,
+                { boxShadow: `0 0 0 ${CROP_CONTAINER * 2}px rgba(0,0,0,0.6)` } as any,
+              ]}
             />
           </View>
+
           <View style={cropStyles.btns}>
             <TouchableOpacity style={cropStyles.cancelBtn} onPress={onCancel}>
               <Text style={cropStyles.cancelText}>キャンセル</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={cropStyles.confirmBtn} onPress={() => onConfirm(dx, dy)}>
+            <TouchableOpacity style={cropStyles.confirmBtn} onPress={handleConfirm}>
               <Text style={cropStyles.confirmText}>この位置で確定</Text>
             </TouchableOpacity>
           </View>
@@ -143,26 +205,12 @@ const openEdit = () => {
     if (updated) setProfile(updated)
   }
 
-  const handleWebCropConfirm = async (dx: number, dy: number) => {
+  const handleWebCropConfirm = async (base64: string) => {
     if (!cropUri) return
     setCropVisible(false)
     setUploadingAvatar(true)
     try {
-      const canvas = document.createElement('canvas')
-      canvas.width = CROP_SIZE
-      canvas.height = CROP_SIZE
-      const ctx = canvas.getContext('2d')!
-      const img = new (window as any).Image()
-      await new Promise<void>(resolve => {
-        img.onload = resolve
-        img.src = cropUri
-      })
-      const scale = Math.max(CROP_SIZE / img.naturalWidth, CROP_SIZE / img.naturalHeight)
-      const sw = img.naturalWidth * scale
-      const sh = img.naturalHeight * scale
-      ctx.drawImage(img, (CROP_SIZE - sw) / 2 + dx, (CROP_SIZE - sh) / 2 + dy, sw, sh)
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
-      await uploadAvatarBase64(dataUrl.split(',')[1], 'jpg')
+      await uploadAvatarBase64(base64, 'jpg')
     } finally {
       setUploadingAvatar(false)
       if (cropUri.startsWith('blob:')) URL.revokeObjectURL(cropUri)
@@ -487,16 +535,22 @@ const styles = StyleSheet.create({
 })
 
 const cropStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  card: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, alignItems: 'center', gap: 12, width: '100%', maxWidth: 320 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, alignItems: 'center', gap: 12, width: '100%', maxWidth: 340 },
   title: { fontSize: 16, fontWeight: '700', color: Colors.text },
   hint: { fontSize: 12, color: Colors.textLight },
-  cropFrame: {
-    width: CROP_SIZE, height: CROP_SIZE, borderRadius: CROP_SIZE / 2,
-    overflow: 'hidden', borderWidth: 2, borderColor: Colors.accent,
-    backgroundColor: Colors.border,
+  container: {
+    width: CROP_CONTAINER, height: CROP_CONTAINER,
+    overflow: 'hidden', borderRadius: 8,
+    backgroundColor: '#000',
   },
-  cropImage: { width: CROP_SIZE, height: CROP_SIZE },
+  circleOverlay: {
+    position: 'absolute',
+    top: CROP_INSET, left: CROP_INSET,
+    width: CROP_CIRCLE, height: CROP_CIRCLE,
+    borderRadius: CROP_CIRCLE / 2,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)',
+  },
   btns: { flexDirection: 'row', gap: 10, width: '100%' },
   cancelBtn: {
     flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
