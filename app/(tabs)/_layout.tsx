@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { TalkContext } from '../contexts/TalkContext'
 import TalkDetailPanel from '../components/TalkDetailPanel'
+import IMChatPanel from '../components/IMChatPanel'
 
 const SIDEBAR_W = 68
 
@@ -139,11 +140,13 @@ export default function TabLayout() {
   const pathname = usePathname()
 
   const [selectedTalkId, setSelectedTalkId] = useState<string | null>(null)
+  const [selectedDmId, setSelectedDmId] = useState<string | null>(null)
 
   // トークページ以外に移動したらパネルを閉じる
   useEffect(() => {
     if (!pathname.startsWith('/talk')) {
       setSelectedTalkId(null)
+      setSelectedDmId(null)
     }
   }, [pathname])
 
@@ -152,7 +155,7 @@ export default function TabLayout() {
   const showTwoCol = isDesktop && isTalkPage
 
   return (
-    <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, isDesktop }}>
+    <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, selectedDmId, setSelectedDmId, isDesktop }}>
       <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column', backgroundColor: Colors.background }}>
 
         {/* 左サイドバー（デスクトップのみ） */}
@@ -174,7 +177,13 @@ export default function TabLayout() {
         {/* 右チャットエリア：右端に固定幅で配置 */}
         {showTwoCol && (
           <View style={{ width: 480, borderLeftWidth: 1, borderLeftColor: Colors.border, overflow: 'hidden' }}>
-            {selectedTalkId
+            {selectedDmId
+              ? <IMChatPanel
+                  partnerId={selectedDmId}
+                  isPanel
+                  onClose={() => setSelectedDmId(null)}
+                />
+              : selectedTalkId
               ? <TalkDetailPanel
                   creatorId={selectedTalkId}
                   onClose={() => setSelectedTalkId(null)}

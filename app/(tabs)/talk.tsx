@@ -43,12 +43,14 @@ function SwipeableDmRow({
   onHide,
   onDelete,
   formatTime,
+  selected,
 }: {
   data: DmItem
   onPress: () => void
   onHide: () => void
   onDelete: () => void
   formatTime: (iso: string) => string
+  selected?: boolean
 }) {
   const translateX = useRef(new Animated.Value(0)).current
   const isOpen = useRef(false)
@@ -108,7 +110,7 @@ function SwipeableDmRow({
         {...panResponder.panHandlers}
       >
         <TouchableOpacity
-          style={styles.talkItem}
+          style={[styles.talkItem, selected && styles.talkItemSelected]}
           onPress={() => { if (isOpen.current) { close() } else { onPress() } }}
           activeOpacity={0.8}
         >
@@ -135,7 +137,7 @@ function SwipeableDmRow({
 }
 
 export default function TalkScreen() {
-  const { setSelectedTalkId, isDesktop, selectedTalkId } = useTalkContext()
+  const { setSelectedTalkId, setSelectedDmId, isDesktop, selectedTalkId, selectedDmId } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
   const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number } | null>(null)
   const [followingItems, setFollowingItems] = useState<FollowingItem[]>([])
@@ -492,7 +494,15 @@ export default function TalkScreen() {
             return (
               <SwipeableDmRow
                 data={item.data}
-                onPress={() => router.push(`/im/${item.data.otherId}` as any)}
+                selected={isDesktop && selectedDmId === item.data.otherId}
+                onPress={() => {
+                  if (isDesktop) {
+                    setSelectedTalkId(null)
+                    setSelectedDmId(item.data.otherId)
+                  } else {
+                    router.push(`/im/${item.data.otherId}` as any)
+                  }
+                }}
                 onHide={() => handleHideDm(item.data.otherId)}
                 onDelete={() => handleDeleteDm(item.data.otherId)}
                 formatTime={formatTime}
