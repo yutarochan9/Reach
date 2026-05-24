@@ -19,7 +19,6 @@ const CATEGORIES = [
 export default function ContactScreen() {
   const [category, setCategory] = useState<string | null>(null)
   const [body, setBody] = useState('')
-  const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -32,7 +31,6 @@ export default function ContactScreen() {
 
     await supabase.from('contact_messages').insert({
       user_id: user?.id ?? null,
-      reply_email: email.trim() || null,
       category,
       body: body.trim(),
     }).then(({ error }) => {
@@ -107,18 +105,6 @@ export default function ContactScreen() {
           textAlignVertical="top"
         />
 
-        <Text style={styles.fieldLabel}>返信用メールアドレス（任意）</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="返信不要の場合は空欄でOK"
-          placeholderTextColor={Colors.textLight}
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <Text style={styles.fieldHint}>登録済みメールアドレスへの返信を希望する場合は空欄のままで構いません</Text>
-
         <TouchableOpacity
           style={[styles.sendBtn, (!category || !body.trim() || sending) && styles.btnDisabled]}
           onPress={handleSend}
@@ -165,10 +151,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
     padding: 14, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
     minHeight: 140,
-  },
-  input: {
-    borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
-    padding: 14, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
   },
   sendBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
