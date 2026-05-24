@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native'
+import { router } from 'expo-router'
 import { Colors } from '../../constants/colors'
 import { getConsent, setConsent } from '../../lib/cookieConsent'
 
@@ -28,7 +29,7 @@ export default function CookieBanner() {
       <View style={styles.banner}>
         <Text style={styles.text}>
           Reachはサービス向上のため、必要なCookieを使用しています。詳細は
-          <Text style={styles.link}> プライバシーポリシー </Text>
+          <Text style={styles.link} onPress={() => router.push('/privacy' as any)}> プライバシーポリシー </Text>
           をご覧ください。
         </Text>
         <View style={styles.btns}>

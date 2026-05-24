@@ -209,6 +209,21 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={styles.sectionLabel}>法的情報</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/terms' as any)}>
+            <Ionicons name="document-text-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>利用規約</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/privacy' as any)}>
+            <Ionicons name="shield-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>プライバシーポリシー</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.sectionLabel}>その他</Text>
         <View style={styles.section}>
           <TouchableOpacity style={styles.actionRow} onPress={handleLogout}>
