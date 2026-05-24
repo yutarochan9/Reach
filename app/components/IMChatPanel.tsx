@@ -19,6 +19,7 @@ type IMMessage = {
   created_at: string
   reply_to_id: string | null
   reply_preview?: string | null
+  is_auto?: boolean
 }
 
 interface Props {
@@ -61,7 +62,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
 
     const { data: msgs } = await supabase
       .from('messages')
-      .select('id, content, sender_id, created_at, reply_to_id')
+      .select('id, content, sender_id, created_at, reply_to_id, is_auto')
       .or(
         `and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`
       )
@@ -97,7 +98,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       if (!myIdRef.current) return
       const { data: msgs } = await supabase
         .from('messages')
-        .select('id, content, sender_id, created_at, reply_to_id')
+        .select('id, content, sender_id, created_at, reply_to_id, is_auto')
         .or(
           `and(sender_id.eq.${myIdRef.current},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${myIdRef.current})`
         )
@@ -254,6 +255,12 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
                     <Text style={[styles.bubbleText, isOwn && styles.bubbleTextOwn]}>{item.content}</Text>
                   </View>
                   <View style={[styles.msgFooter, isOwn && styles.msgFooterOwn]}>
+                    {item.is_auto && (
+                      <View style={styles.autoBadge}>
+                        <Ionicons name="flash-outline" size={9} color="#888" />
+                        <Text style={styles.autoBadgeText}>自動応答</Text>
+                      </View>
+                    )}
                     <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
                     {isWeb && hoveredMsgId === item.id && (
                       <TouchableOpacity
@@ -383,6 +390,12 @@ const styles = StyleSheet.create({
   msgFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   msgFooterOwn: { flexDirection: 'row-reverse' },
   msgTime: { fontSize: 10, color: Colors.textLight },
+  autoBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: '#F0F0F0', borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  autoBadgeText: { fontSize: 9, color: '#888', fontWeight: '600' },
   moreBtn: {
     paddingHorizontal: 8, paddingVertical: 2,
     backgroundColor: Colors.white, borderRadius: 12,

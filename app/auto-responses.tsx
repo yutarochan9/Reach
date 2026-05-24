@@ -367,7 +367,7 @@ export default function AutoResponsesScreen() {
               <Text style={styles.fieldHint}>
                 {editing?.match_type === 'exact'
                   ? 'キーワードと完全に一致するDMにのみ返信します'
-                  : 'キーワードを含むDMに返信します（LINEと同じ）'}
+                  : 'キーワードを含むDMに返信します'}
               </Text>
 
               {/* 返信内容 */}
