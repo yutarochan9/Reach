@@ -118,10 +118,11 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   }, [partnerId, triggerDmReload])
 
   const handleSend = async () => {
-    if (!text.trim() || !myIdRef.current) return
+    if (!text.trim() || !myIdRef.current || !partnerId) return
     const content = text.trim()
+    const senderId = myIdRef.current
     setText('')
-    const insertData: any = { sender_id: myIdRef.current, receiver_id: partnerId, content }
+    const insertData: any = { sender_id: senderId, receiver_id: partnerId, content }
     if (replyTo) insertData.reply_to_id = replyTo.id
     const { data } = await supabase.from('messages').insert(insertData).select().single()
     if (data) {
@@ -129,16 +130,16 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
     }
     setReplyTo(null)
-    triggerDmReload() // 送信直後にDMリストを更新
+    triggerDmReload()
 
     const { data: myProfile } = await supabase
-      .from('profiles').select('display_name').eq('id', myIdRef.current).single()
+      .from('profiles').select('display_name').eq('id', senderId).single()
     sendPushToUsers([partnerId], myProfile?.display_name ?? 'IM', content.slice(0, 80))
 
     setTimeout(async () => {
       await supabase.rpc('check_and_send_auto_response', {
         p_creator_id: partnerId,
-        p_receiver_id: myIdRef.current,
+        p_receiver_id: senderId,
         p_message: content,
       })
     }, 1200)

@@ -107,11 +107,11 @@ function SwipeableDmRow({
       {/* スライドする行 */}
       <Animated.View
         style={[swipeStyles.row, { transform: [{ translateX }] }]}
-        {...panResponder.panHandlers}
+        {...(isWeb ? {} : panResponder.panHandlers)}
       >
         <TouchableOpacity
           style={[styles.talkItem, selected && styles.talkItemSelected]}
-          onPress={() => { if (isOpen.current) { close() } else { onPress() } }}
+          onPress={() => { if (!isWeb && isOpen.current) { close() } else { onPress() } }}
           activeOpacity={0.8}
         >
           <View style={styles.avatar}>
