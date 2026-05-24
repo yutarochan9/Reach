@@ -393,13 +393,6 @@ export default function TileScreen() {
       {/* レイアウト：デスクトップは2カラム、モバイルは縦積み */}
       <View style={[styles.bodyRow, isMobile && { flexDirection: 'column' }]}>
 
-        {/* モバイル：プレビューを上に */}
-        {isMobile && (
-          <View style={styles.mobilePreview}>
-            <PhonePreview />
-          </View>
-        )}
-
         {/* 設定エリア */}
         <ScrollView
           style={[styles.leftPanel, isMobile && { borderRightWidth: 0 }]}
@@ -515,9 +508,9 @@ export default function TileScreen() {
                 const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
                   : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
                   : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
-                // 視覚的なカプセルサイズ
-                const capW = isHoriz ? 36 : 12
-                const capH = isHoriz ? 12 : 36
+                // 視覚的なカプセルサイズ（小さめに）
+                const capW = isHoriz ? 20 : 6
+                const capH = isHoriz ? 6 : 20
                 // タッチエリアは最低44px確保
                 const touchW = Math.max(capW, 44)
                 const touchH = Math.max(capH, 44)
@@ -568,6 +561,13 @@ export default function TileScreen() {
             <View style={{ flex: 1 }}>
               <PhonePreview />
             </View>
+          </View>
+        )}
+
+        {/* モバイル：プレビューを下に */}
+        {isMobile && (
+          <View style={styles.mobilePreview}>
+            <PhonePreview />
           </View>
         )}
 
