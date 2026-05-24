@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking, Modal, TextInput, Platform } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -27,6 +27,10 @@ export default function CreatorScreen() {
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [reportModalVisible, setReportModalVisible] = useState(false)
+  const [reportReason, setReportReason] = useState<string | null>(null)
+  const [reportDetails, setReportDetails] = useState('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -97,6 +101,35 @@ export default function CreatorScreen() {
 
 
 
+  const REPORT_REASONS = [
+    { key: 'spam', label: 'スパム' },
+    { key: 'inappropriate', label: '不適切なコンテンツ' },
+    { key: 'harassment', label: 'ハラスメント' },
+    { key: 'fraud', label: '詐欺・偽アカウント' },
+    { key: 'other', label: 'その他' },
+  ]
+
+  const handleSubmitReport = async () => {
+    if (!reportReason || !myId) return
+    setReportSubmitting(true)
+    await supabase.from('reports').insert({
+      reporter_id: myId,
+      reported_user_id: id,
+      reason: reportReason,
+      details: reportDetails.trim() || null,
+      status: 'pending',
+    })
+    setReportSubmitting(false)
+    setReportModalVisible(false)
+    setReportReason(null)
+    setReportDetails('')
+    if (Platform.OS === 'web') {
+      window.alert('報告を受け付けました。ご協力ありがとうございます。')
+    } else {
+      Alert.alert('報告完了', '報告を受け付けました。ご協力ありがとうございます。')
+    }
+  }
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -115,7 +148,13 @@ export default function CreatorScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <View style={{ width: 32 }} />
+        {!isSelf && profile ? (
+          <TouchableOpacity style={styles.backButton} onPress={() => setReportModalVisible(true)} activeOpacity={0.6}>
+            <Ionicons name="flag-outline" size={22} color={Colors.textLight} />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 32 }} />
+        )}
       </View>
 
       <ScrollView
@@ -184,6 +223,52 @@ export default function CreatorScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setReportModalVisible(false)}>
+          <TouchableOpacity style={styles.modalCard} activeOpacity={1} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>ユーザーを報告</Text>
+              <TouchableOpacity onPress={() => setReportModalVisible(false)}>
+                <Ionicons name="close" size={22} color={Colors.textLight} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSub}>報告の種類を選択してください</Text>
+            <View style={styles.reasonGrid}>
+              {REPORT_REASONS.map(r => (
+                <TouchableOpacity
+                  key={r.key}
+                  style={[styles.reasonItem, reportReason === r.key && styles.reasonItemActive]}
+                  onPress={() => setReportReason(r.key)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.reasonLabel, reportReason === r.key && styles.reasonLabelActive]}>{r.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TextInput
+              style={styles.reportTextarea}
+              placeholder="詳細（任意）"
+              placeholderTextColor={Colors.textLight}
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={[styles.reportSubmitBtn, (!reportReason || reportSubmitting) && styles.btnDisabled]}
+              onPress={handleSubmitReport}
+              disabled={!reportReason || reportSubmitting}
+            >
+              {reportSubmitting
+                ? <ActivityIndicator color={Colors.white} />
+                : <Text style={styles.reportSubmitText}>報告する</Text>
+              }
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   )
 }
@@ -252,6 +337,31 @@ const styles = StyleSheet.create({
     padding: 12, alignItems: 'center', gap: 6,
   },
   richMenuBtnLabel: { fontSize: 11, color: Colors.text, fontWeight: '600', textAlign: 'center' },
+  reportBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 20, padding: 4, opacity: 0.6 },
+  reportBtnText: { fontSize: 11, color: Colors.textLight },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 },
+  modalCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, gap: 12 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  modalSub: { fontSize: 12, color: Colors.textLight },
+  reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reasonItem: {
+    borderWidth: 1.5, borderColor: Colors.border, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8, backgroundColor: Colors.background,
+  },
+  reasonItemActive: { borderColor: '#E53E3E', backgroundColor: '#FFF5F5' },
+  reasonLabel: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  reasonLabelActive: { color: '#E53E3E' },
+  reportTextarea: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    padding: 12, fontSize: 14, color: Colors.text, backgroundColor: Colors.white, minHeight: 72,
+  },
+  reportSubmitBtn: {
+    backgroundColor: '#E53E3E', borderRadius: 10, paddingVertical: 13,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reportSubmitText: { color: Colors.white, fontWeight: '700', fontSize: 15 },
+  btnDisabled: { opacity: 0.45 },
   broadcastCard: {
     backgroundColor: Colors.white,
     marginHorizontal: 16, marginBottom: 10,
