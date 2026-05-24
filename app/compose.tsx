@@ -879,15 +879,15 @@ const styles = StyleSheet.create({
   editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
   editorPanelContent: { padding: 20, gap: 14 },
 
-  toolbar: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
+  toolbar: { flexDirection: 'row', gap: 5, paddingVertical: 2 },
   toolBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
     backgroundColor: Colors.white, borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 7,
+    paddingHorizontal: 6, paddingVertical: 7,
     borderWidth: 1, borderColor: Colors.border,
   },
   toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  toolBtnText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
+  toolBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
   toolBtnTextActive: { color: Colors.white },
 
   optionCard: {
