@@ -137,7 +137,7 @@ function SwipeableDmRow({
 }
 
 export default function TalkScreen() {
-  const { setSelectedTalkId, setSelectedDmId, isDesktop, selectedTalkId, selectedDmId } = useTalkContext()
+  const { setSelectedTalkId, setSelectedDmId, isDesktop, selectedTalkId, selectedDmId, dmReloadKey } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
   const [myItem, setMyItem] = useState<{ name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number } | null>(null)
   const [followingItems, setFollowingItems] = useState<FollowingItem[]>([])
@@ -354,6 +354,11 @@ export default function TalkScreen() {
       if (dmRecvCh) supabase.removeChannel(dmRecvCh).catch(() => {})
     }
   }, [load]))
+
+  // IMChatPanelでメッセージ送信時など外部トリガーでDMリストを即時更新
+  useEffect(() => {
+    if (dmReloadKey > 0) load()
+  }, [dmReloadKey, load])
 
   const onRefresh = async () => {
     setRefreshing(true)

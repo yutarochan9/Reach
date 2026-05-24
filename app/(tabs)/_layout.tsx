@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Tabs, router, usePathname } from 'expo-router'
 import { Colors } from '../../constants/colors'
 import { View, Text, StyleSheet, TouchableOpacity, Platform, useWindowDimensions } from 'react-native'
@@ -141,6 +141,8 @@ export default function TabLayout() {
 
   const [selectedTalkId, setSelectedTalkId] = useState<string | null>(null)
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null)
+  const [dmReloadKey, setDmReloadKey] = useState(0)
+  const triggerDmReload = useCallback(() => setDmReloadKey(k => k + 1), [])
 
   // トークページ以外に移動したらパネルを閉じる
   useEffect(() => {
@@ -155,7 +157,7 @@ export default function TabLayout() {
   const showTwoCol = isDesktop && isTalkPage
 
   return (
-    <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, selectedDmId, setSelectedDmId, isDesktop }}>
+    <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, selectedDmId, setSelectedDmId, isDesktop, dmReloadKey, triggerDmReload }}>
       <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column', backgroundColor: Colors.background }}>
 
         {/* 左サイドバー（デスクトップのみ） */}

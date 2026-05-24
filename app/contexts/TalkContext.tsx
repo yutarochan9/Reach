@@ -6,6 +6,8 @@ export type TalkContextType = {
   selectedDmId: string | null
   setSelectedDmId: (id: string | null) => void
   isDesktop: boolean
+  dmReloadKey: number
+  triggerDmReload: () => void
 }
 
 export const TalkContext = createContext<TalkContextType>({
@@ -14,6 +16,8 @@ export const TalkContext = createContext<TalkContextType>({
   selectedDmId: null,
   setSelectedDmId: () => {},
   isDesktop: false,
+  dmReloadKey: 0,
+  triggerDmReload: () => {},
 })
 
 export const useTalkContext = () => useContext(TalkContext)

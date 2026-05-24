@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
 } from 'react-native'
 import { router } from 'expo-router'
+import { useTalkContext } from '../contexts/TalkContext'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
+  const { triggerDmReload } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
   const [myName, setMyName] = useState('')
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
@@ -119,6 +121,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
             return [...prev, { ...msg, reply_preview }]
           })
           setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
+          triggerDmReload() // 自動応答受信時にDMリストも更新
         })
         .subscribe()
     })
@@ -142,6 +145,8 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
     }
     setReplyTo(null)
+    triggerDmReload() // 送信直後にDMリストを更新
+
     const { data: myProfile } = await supabase
       .from('profiles').select('display_name').eq('id', myIdRef.current).single()
     sendPushToUsers([partnerId], myProfile?.display_name ?? 'IM', content.slice(0, 80))
