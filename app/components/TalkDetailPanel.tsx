@@ -175,29 +175,14 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single()
     sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', content.slice(0, 80))
 
-    // 自動応答チェック（keywords配列対応）
-    const { data: autoRules } = await supabase
-      .from('auto_responses')
-      .select('id, keyword, keywords, response_text, match_count')
-      .eq('creator_id', senderId)
-      .eq('is_active', true)
-    const lc = content.toLowerCase()
-    const matched = (autoRules ?? []).find((rule: any) => {
-      const kws: string[] = (rule.keywords && rule.keywords.length > 0)
-        ? rule.keywords
-        : (rule.keyword ? [rule.keyword] : [])
-      return kws.some((kw: string) => lc.includes(kw.toLowerCase()))
-    })
-    if (matched) {
-      setTimeout(async () => {
-        await supabase.from('messages').insert({
-          sender_id: senderId, receiver_id: myId, content: matched.response_text,
-        })
-        await supabase.from('auto_responses')
-          .update({ match_count: matched.match_count + 1 })
-          .eq('id', matched.id)
-      }, 1200)
-    }
+    // 自動応答（SECURITY DEFINER RPCで送信者IDを偽装せず挿入）
+    setTimeout(async () => {
+      await supabase.rpc('check_and_send_auto_response', {
+        p_creator_id: senderId,
+        p_receiver_id: myId,
+        p_message: content,
+      })
+    }, 1200)
   }
 
   const handleSend = async () => {

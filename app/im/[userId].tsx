@@ -115,32 +115,14 @@ export default function IMScreen() {
       .from('profiles').select('display_name').eq('id', myId).single()
     sendPushToUsers([partnerId], myProfile?.display_name ?? 'IM', content.slice(0, 80))
 
-    const { data: autoRules } = await supabase
-      .from('auto_responses')
-      .select('id, keyword, keywords, response_text, match_count')
-      .eq('creator_id', partnerId)
-      .eq('is_active', true)
-    const lc = content.toLowerCase()
-    const matched = (autoRules ?? []).find((rule: any) => {
-      const kws: string[] = (rule.keywords && rule.keywords.length > 0)
-        ? rule.keywords
-        : (rule.keyword ? [rule.keyword] : [])
-      return kws.some((kw: string) => lc.includes(kw.toLowerCase()))
-    })
-    if (matched) {
-      setTimeout(async () => {
-        const { data: autoReply } = await supabase.from('messages').insert({
-          sender_id: partnerId, receiver_id: myId, content: matched.response_text,
-        }).select().single()
-        if (autoReply) {
-          setMessages(prev => [...prev, { ...autoReply, reply_preview: null }])
-          setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
-        }
-        await supabase.from('auto_responses')
-          .update({ match_count: matched.match_count + 1 })
-          .eq('id', matched.id)
-      }, 1200)
-    }
+    // 自動応答（SECURITY DEFINER RPCで送信者IDを偽装せず挿入）
+    setTimeout(async () => {
+      await supabase.rpc('check_and_send_auto_response', {
+        p_creator_id: partnerId,
+        p_receiver_id: myId,
+        p_message: content,
+      })
+    }, 1200)
   }
 
   const formatTime = (iso: string) => {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -17,11 +17,13 @@ type IMConvo = {
 export default function IMInboxScreen() {
   const [convos, setConvos] = useState<IMConvo[]>([])
   const [loading, setLoading] = useState(true)
+  const myIdRef = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
+    myIdRef.current = user.id
 
     // 自分宛のIMメッセージ（broadcast_id IS NULL）
     const { data: imMessages } = await supabase
@@ -63,6 +65,26 @@ export default function IMInboxScreen() {
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
+
+  // リアルタイム：自分宛の新着DMを受信したら即リロード
+  useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      channel = supabase.channel(`im-inbox-${user.id}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${user.id}`,
+        }, (payload) => {
+          if ((payload.new as any).broadcast_id) return // ブロードキャストコメントは除外
+          load()
+        })
+        .subscribe()
+    })
+    return () => { if (channel) supabase.removeChannel(channel) }
+  }, [load])
 
   const formatTime = (iso: string) => {
     const d = new Date(iso)
