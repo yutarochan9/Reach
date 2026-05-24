@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
-  Platform, Image, Animated,
+  Platform, Image, Animated, useWindowDimensions,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { router, useFocusEffect } from 'expo-router'
@@ -124,6 +124,8 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
 }
 
 export default function TileScreen() {
+  const { width } = useWindowDimensions()
+  const isMobile = width < 700
   const [isActive, setIsActive] = useState(false)
   const [buttons, setButtons] = useState<TileButton[]>([])
   const [panelBgImage, setPanelBgImage] = useState<string | null>(null)
@@ -388,12 +390,19 @@ export default function TileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 2カラムレイアウト */}
-      <View style={styles.bodyRow}>
+      {/* レイアウト：デスクトップは2カラム、モバイルは縦積み */}
+      <View style={[styles.bodyRow, isMobile && { flexDirection: 'column' }]}>
 
-        {/* 左：設定エリア */}
+        {/* モバイル：プレビューを上に */}
+        {isMobile && (
+          <View style={styles.mobilePreview}>
+            <PhonePreview />
+          </View>
+        )}
+
+        {/* 設定エリア */}
         <ScrollView
-          style={styles.leftPanel}
+          style={[styles.leftPanel, isMobile && { borderRightWidth: 0 }]}
           scrollEnabled={scrollEnabled}
           contentContainerStyle={styles.leftContent}
           showsVerticalScrollIndicator={false}
@@ -552,13 +561,15 @@ export default function TileScreen() {
           <Text style={styles.note}>※ URLには https:// から始まるリンクを入力してください。</Text>
         </ScrollView>
 
-        {/* 右：フラットプレビュー */}
-        <View style={styles.rightPanel}>
-          <Text style={styles.previewLabel}>プレビュー</Text>
-          <View style={{ flex: 1 }}>
-            <PhonePreview />
+        {/* デスクトップのみ右パネルにプレビュー */}
+        {!isMobile && (
+          <View style={styles.rightPanel}>
+            <Text style={styles.previewLabel}>プレビュー</Text>
+            <View style={{ flex: 1 }}>
+              <PhonePreview />
+            </View>
           </View>
-        </View>
+        )}
 
       </View>
 
@@ -690,8 +701,8 @@ const styles = StyleSheet.create({
   saveButton: { width: 40, alignItems: 'flex-end' },
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
 
-  // 2カラム
   bodyRow: { flex: 1, flexDirection: 'row' },
+  mobilePreview: { height: 280, borderBottomWidth: 1, borderBottomColor: Colors.border, padding: 12, backgroundColor: Colors.background },
 
   // 左パネル
   leftPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },

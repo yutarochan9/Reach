@@ -18,6 +18,8 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true)
   const [savingPush, setSavingPush] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [pastBroadcastsVisible, setPastBroadcastsVisible] = useState(true)
+  const [savingPast, setSavingPast] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -26,7 +28,7 @@ export default function SettingsScreen() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('push_enabled, plan, subscription_status, is_admin')
+      .select('push_enabled, plan, subscription_status, is_admin, past_broadcasts_visible')
       .eq('id', user.id)
       .single()
 
@@ -34,10 +36,19 @@ export default function SettingsScreen() {
     setPlan((profile?.plan ?? 'free') as Plan)
     setSubscriptionStatus(profile?.subscription_status ?? null)
     setIsAdmin(profile?.is_admin ?? false)
+    setPastBroadcastsVisible(profile?.past_broadcasts_visible ?? true)
     setLoading(false)
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
+
+  const handlePastBroadcastsToggle = async (val: boolean) => {
+    setSavingPast(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) await supabase.from('profiles').update({ past_broadcasts_visible: val }).eq('id', user.id)
+    setPastBroadcastsVisible(val)
+    setSavingPast(false)
+  }
 
   const handlePushToggle = async (val: boolean) => {
     setSavingPush(true)
@@ -151,6 +162,24 @@ export default function SettingsScreen() {
             <Ionicons name="mail-outline" size={18} color={Colors.textLight} />
             <Text style={styles.infoLabel}>メールアドレス</Text>
             <Text style={styles.infoValue} numberOfLines={1}>{email ?? '—'}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.sectionLabel}>配信</Text>
+        <View style={styles.section}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <Ionicons name="radio-outline" size={18} color={Colors.accent} />
+              <View>
+                <Text style={styles.toggleLabel}>過去の配信を新規フォロワーに表示</Text>
+                <Text style={styles.toggleDesc}>OFFにするとフォロー後の配信のみ表示</Text>
+              </View>
+            </View>
+            <ToggleSwitch
+              value={pastBroadcastsVisible}
+              onValueChange={handlePastBroadcastsToggle}
+              disabled={savingPast}
+            />
           </View>
         </View>
 

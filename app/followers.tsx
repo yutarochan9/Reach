@@ -157,10 +157,10 @@ export default function FollowersScreen() {
   if (!selectedSegment) {
     const segmentCards: { seg: Segment; icon: string; desc: string; color: string }[] = [
       { seg: { key: 'all' }, icon: 'people', desc: 'フォロワー全員', color: Colors.accent },
-      { seg: { key: 'week' }, icon: 'flash', desc: '直近7日以内にフォロー', color: '#22C55E' },
-      { seg: { key: 'month' }, icon: 'calendar', desc: '直近30日以内にフォロー', color: '#3B82F6' },
-      { seg: { key: 'veteran' }, icon: 'star', desc: '90日以上前からのフォロワー', color: '#F59E0B' },
-      { seg: { key: 'notag' }, icon: 'pricetag-outline', desc: 'タグが未設定', color: '#8B5CF6' },
+      { seg: { key: 'week' }, icon: 'flash', desc: '直近7日以内にフォロー', color: Colors.accent },
+      { seg: { key: 'month' }, icon: 'calendar', desc: '直近30日以内にフォロー', color: Colors.accent },
+      { seg: { key: 'veteran' }, icon: 'star', desc: '90日以上前からのフォロワー', color: Colors.accent },
+      { seg: { key: 'notag' }, icon: 'pricetag-outline', desc: 'タグが未設定', color: Colors.accent },
     ]
 
     return (

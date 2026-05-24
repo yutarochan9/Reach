@@ -38,7 +38,8 @@ export default function RootLayout() {
           if (!prof?.display_name || prof.display_name.includes('@')) {
             router.replace('/onboarding')
           } else {
-            router.replace('/(tabs)/')
+            const savedTab = Platform.OS === 'web' ? (() => { try { return localStorage.getItem('reach_last_tab') } catch { return null } })() : null
+            router.replace((savedTab ?? '/(tabs)/') as any)
           }
         }).catch(() => {
           router.replace('/(tabs)/')
@@ -60,7 +61,8 @@ export default function RootLayout() {
           if (!prof?.display_name || prof.display_name.includes('@')) {
             router.replace('/onboarding')
           } else {
-            router.replace('/(tabs)/')
+            const savedTab = Platform.OS === 'web' ? (() => { try { return localStorage.getItem('reach_last_tab') } catch { return null } })() : null
+            router.replace((savedTab ?? '/(tabs)/') as any)
           }
         }).catch(() => {
           router.replace('/(tabs)/')

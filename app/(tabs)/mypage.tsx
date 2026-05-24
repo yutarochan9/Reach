@@ -1,10 +1,50 @@
-import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard, Linking } from 'react-native'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard, Linking, Platform, PanResponder } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+
+const CROP_SIZE = 240
+
+function WebCropModal({ uri, onConfirm, onCancel }: { uri: string; onConfirm: (dx: number, dy: number) => void; onCancel: () => void }) {
+  const [dx, setDx] = useState(0)
+  const [dy, setDy] = useState(0)
+  const base = useRef({ x: 0, y: 0 })
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderMove: (_, gs) => { setDx(base.current.x + gs.dx); setDy(base.current.y + gs.dy) },
+    onPanResponderRelease: (_, gs) => { base.current = { x: base.current.x + gs.dx, y: base.current.y + gs.dy } },
+  })).current
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={cropStyles.overlay}>
+        <View style={cropStyles.card}>
+          <Text style={cropStyles.title}>切り取り位置を調整</Text>
+          <Text style={cropStyles.hint}>ドラッグして位置を調整</Text>
+          <View style={cropStyles.cropFrame} {...panResponder.panHandlers}>
+            <Image
+              source={{ uri }}
+              style={[cropStyles.cropImage, { transform: [{ translateX: dx }, { translateY: dy }] }]}
+              resizeMode="cover"
+            />
+          </View>
+          <View style={cropStyles.btns}>
+            <TouchableOpacity style={cropStyles.cancelBtn} onPress={onCancel}>
+              <Text style={cropStyles.cancelText}>キャンセル</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={cropStyles.confirmBtn} onPress={() => onConfirm(dx, dy)}>
+              <Text style={cropStyles.confirmText}>この位置で確定</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+}
 
 const SNS_FIELDS = [
   { key: 'x', label: 'X (Twitter)', placeholder: 'https://x.com/yourname', icon: 'logo-twitter' as const },
@@ -24,6 +64,8 @@ export default function MyPageScreen() {
   const [usernameError, setUsernameError] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [cropVisible, setCropVisible] = useState(false)
+  const [cropUri, setCropUri] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const { data } = await supabase.auth.getUser()
@@ -87,7 +129,62 @@ const openEdit = () => {
     }
   }
 
+  const uploadAvatarBase64 = async (base64: string, ext: string) => {
+    if (!user) return
+    const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
+    const path = `${user.id}/avatar.${ext}`
+    const byteCharacters = atob(base64)
+    const byteArray = new Uint8Array(byteCharacters.length)
+    for (let i = 0; i < byteCharacters.length; i++) byteArray[i] = byteCharacters.charCodeAt(i)
+    const { error } = await supabase.storage.from('avatars').upload(path, byteArray, { contentType, upsert: true })
+    if (error) { Alert.alert('エラー', error.message); return }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
+    const { data: updated } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', user.id).select().single()
+    if (updated) setProfile(updated)
+  }
+
+  const handleWebCropConfirm = async (dx: number, dy: number) => {
+    if (!cropUri) return
+    setCropVisible(false)
+    setUploadingAvatar(true)
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = CROP_SIZE
+      canvas.height = CROP_SIZE
+      const ctx = canvas.getContext('2d')!
+      const img = new (window as any).Image()
+      await new Promise<void>(resolve => {
+        img.onload = resolve
+        img.src = cropUri
+      })
+      const scale = Math.max(CROP_SIZE / img.naturalWidth, CROP_SIZE / img.naturalHeight)
+      const sw = img.naturalWidth * scale
+      const sh = img.naturalHeight * scale
+      ctx.drawImage(img, (CROP_SIZE - sw) / 2 + dx, (CROP_SIZE - sh) / 2 + dy, sw, sh)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+      await uploadAvatarBase64(dataUrl.split(',')[1], 'jpg')
+    } finally {
+      setUploadingAvatar(false)
+      if (cropUri.startsWith('blob:')) URL.revokeObjectURL(cropUri)
+      setCropUri(null)
+    }
+  }
+
   const handleAvatarPress = async () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/jpeg,image/png,image/webp'
+      input.onchange = (e: any) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setCropUri(URL.createObjectURL(file))
+        setCropVisible(true)
+      }
+      input.click()
+      return
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
       Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください')
@@ -107,38 +204,9 @@ const openEdit = () => {
     setUploadingAvatar(true)
     try {
       const asset = result.assets[0]
+      if (!asset.base64) { Alert.alert('エラー', '画像の読み込みに失敗しました'); return }
       const ext = (asset.uri.split('.').pop() ?? 'jpg').toLowerCase().replace('jpeg', 'jpg')
-      const path = `${user.id}/avatar.${ext}`
-      const contentType = ext === 'png' ? 'image/png' : 'image/jpeg'
-
-      if (!asset.base64) {
-        Alert.alert('エラー', '画像の読み込みに失敗しました')
-        return
-      }
-
-      const byteCharacters = atob(asset.base64)
-      const byteArray = new Uint8Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteArray[i] = byteCharacters.charCodeAt(i)
-      }
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(path, byteArray, { contentType, upsert: true })
-
-      if (uploadError) {
-        Alert.alert('エラー', uploadError.message)
-        return
-      }
-
-      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-      const { data: updated } = await supabase
-        .from('profiles')
-        .update({ avatar_url: publicUrl })
-        .eq('id', user.id)
-        .select().single()
-
-      if (updated) setProfile(updated)
+      await uploadAvatarBase64(asset.base64, ext)
     } finally {
       setUploadingAvatar(false)
     }
@@ -150,6 +218,9 @@ const openEdit = () => {
 
   return (
     <View style={styles.container}>
+      {cropVisible && cropUri && (
+        <WebCropModal uri={cropUri} onConfirm={handleWebCropConfirm} onCancel={() => { setCropVisible(false); if (cropUri?.startsWith('blob:')) URL.revokeObjectURL(cropUri); setCropUri(null) }} />
+      )}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>マイページ</Text>
       </View>
@@ -413,4 +484,28 @@ const styles = StyleSheet.create({
   snsFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 4 },
   snsFieldIcon: {},
   snsFieldLabel: { fontSize: 13, color: Colors.textLight, fontWeight: '600' },
+})
+
+const cropStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  card: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, alignItems: 'center', gap: 12, width: '100%', maxWidth: 320 },
+  title: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  hint: { fontSize: 12, color: Colors.textLight },
+  cropFrame: {
+    width: CROP_SIZE, height: CROP_SIZE, borderRadius: CROP_SIZE / 2,
+    overflow: 'hidden', borderWidth: 2, borderColor: Colors.accent,
+    backgroundColor: Colors.border,
+  },
+  cropImage: { width: CROP_SIZE, height: CROP_SIZE },
+  btns: { flexDirection: 'row', gap: 10, width: '100%' },
+  cancelBtn: {
+    flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  cancelText: { fontSize: 14, color: Colors.text, fontWeight: '600' },
+  confirmBtn: {
+    flex: 1, backgroundColor: Colors.accent, borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  confirmText: { fontSize: 14, color: Colors.white, fontWeight: '700' },
 })
