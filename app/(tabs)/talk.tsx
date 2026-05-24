@@ -310,17 +310,48 @@ export default function TalkScreen() {
       supabase.removeChannel(channelRef.current).catch(() => {})
       channelRef.current = null
     }
+
+    // broadcasts の更新（フィルターなしでも broadcasts はフォロー中のみ見える）
     const channel = supabase
-      .channel(`talk-list-${Date.now()}`)
+      .channel(`talk-broadcasts-${Date.now()}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'broadcasts' }, () => load())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => load())
       .subscribe()
     channelRef.current = channel
+
+    // DM更新：送受信どちらでも検知するため2チャンネル（フィルターあり）
+    let dmSentCh: ReturnType<typeof supabase.channel> | null = null
+    let dmRecvCh: ReturnType<typeof supabase.channel> | null = null
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      dmSentCh = supabase
+        .channel(`talk-dm-sent-${user.id}-${Date.now()}`)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `sender_id=eq.${user.id}`,
+        }, (payload) => {
+          if (!(payload.new as any).broadcast_id) load()
+        })
+        .subscribe()
+
+      dmRecvCh = supabase
+        .channel(`talk-dm-recv-${user.id}-${Date.now()}`)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `receiver_id=eq.${user.id}`,
+        }, (payload) => {
+          if (!(payload.new as any).broadcast_id) load()
+        })
+        .subscribe()
+    })
+
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current).catch(() => {})
         channelRef.current = null
       }
+      if (dmSentCh) supabase.removeChannel(dmSentCh).catch(() => {})
+      if (dmRecvCh) supabase.removeChannel(dmRecvCh).catch(() => {})
     }
   }, [load]))
 

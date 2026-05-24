@@ -97,24 +97,24 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
+      // フィルターあり（sender_id）でパートナーからのメッセージを確実に受信
       channelRef.current = supabase
         .channel(`im-chat-${user.id}-${partnerId}-${Date.now()}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
+          filter: `sender_id=eq.${partnerId}`,
         }, async (payload) => {
           const msg = payload.new as any
           if (msg.broadcast_id) return
-          // この会話に関係するメッセージ（パートナー→自分）のみ
-          if (msg.sender_id !== partnerId || msg.receiver_id !== user.id) return
+          if (msg.receiver_id !== user.id) return
           let reply_preview = null
           if (msg.reply_to_id) {
             const { data } = await supabase.from('messages').select('content').eq('id', msg.reply_to_id).single()
             reply_preview = data?.content ?? null
           }
           setMessages(prev => {
-            // 重複追加を防ぐ
             if (prev.some(m => m.id === msg.id)) return prev
             return [...prev, { ...msg, reply_preview }]
           })
