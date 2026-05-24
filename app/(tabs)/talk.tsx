@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Animated, PanResponder, Platform, Alert } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -355,10 +355,16 @@ export default function TalkScreen() {
     }
   }, [load]))
 
-  // IMChatPanelでメッセージ送信時など外部トリガーでDMリストを即時更新
+  // 外部トリガー（IMChatPanel送信・受信）でDMリストを即時更新
   useEffect(() => {
     if (dmReloadKey > 0) load()
   }, [dmReloadKey, load])
+
+  // ポーリング：3秒おきにDMリストを自動更新（Realtimeが機能しない環境への対策）
+  useEffect(() => {
+    const timer = setInterval(() => { load() }, 3000)
+    return () => clearInterval(timer)
+  }, [load])
 
   const onRefresh = async () => {
     setRefreshing(true)

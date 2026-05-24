@@ -91,47 +91,30 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     load()
   }, [load])
 
-  // リアルタイム：自分宛メッセージを即時受信（useEffectで正しくクリーンアップ）
+  // ポーリング：3秒おきに新着メッセージを取得（Realtimeの代替）
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
-      // フィルターあり（sender_id）でパートナーからのメッセージを確実に受信
-      channelRef.current = supabase
-        .channel(`im-chat-${user.id}-${partnerId}-${Date.now()}`)
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `sender_id=eq.${partnerId}`,
-        }, async (payload) => {
-          const msg = payload.new as any
-          if (msg.broadcast_id) return
-          if (msg.receiver_id !== user.id) return
-          let reply_preview = null
-          if (msg.reply_to_id) {
-            const { data } = await supabase.from('messages').select('content').eq('id', msg.reply_to_id).single()
-            reply_preview = data?.content ?? null
-          }
-          setMessages(prev => {
-            if (prev.some(m => m.id === msg.id)) return prev
-            return [...prev, { ...msg, reply_preview }]
-          })
-          setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
-          triggerDmReload() // 自動応答受信時にDMリストも更新
-        })
-        .subscribe()
-    })
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
-    }
-  }, [partnerId])
+    const timer = setInterval(async () => {
+      if (!myIdRef.current) return
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('id, content, sender_id, created_at, reply_to_id')
+        .or(
+          `and(sender_id.eq.${myIdRef.current},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${myIdRef.current})`
+        )
+        .is('broadcast_id', null)
+        .order('created_at', { ascending: true })
+      if (!msgs) return
+      setMessages(prev => {
+        const prevIds = new Set(prev.map(m => m.id))
+        const newMsgs = msgs.filter((m: any) => !prevIds.has(m.id))
+        if (newMsgs.length === 0) return prev
+        triggerDmReload()
+        setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
+        return [...prev, ...newMsgs.map((m: any) => ({ ...m, reply_preview: null }))]
+      })
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [partnerId, triggerDmReload])
 
   const handleSend = async () => {
     if (!text.trim() || !myIdRef.current) return
