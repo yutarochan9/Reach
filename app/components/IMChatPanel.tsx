@@ -188,7 +188,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
           )}
           <View>
             <Text style={styles.headerName}>{partnerName}</Text>
-            <Text style={styles.headerSub}>メッセージ</Text>
+            <Text style={styles.headerSub}>DM</Text>
           </View>
         </View>
         <View style={{ width: 32 }} />

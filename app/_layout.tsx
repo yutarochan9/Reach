@@ -28,23 +28,24 @@ export default function RootLayout() {
   const navigated = useRef(false)
 
   useEffect(() => {
+    const navigateTo = async (userId: string) => {
+      const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', userId).single()
+      if (!prof?.display_name || prof.display_name.includes('@')) {
+        router.replace('/onboarding')
+      } else {
+        const savedTab = await AsyncStorage.getItem('reach_last_tab').catch(() => null)
+        router.replace((savedTab ?? '/(tabs)/') as any)
+      }
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (navigated.current) return
-      navigated.current = true
       if (!session) {
         router.replace('/(auth)/login')
       } else {
+        navigated.current = true
         registerPushToken().catch(() => {})
-        supabase.from('profiles').select('display_name').eq('id', session.user.id).single().then(async ({ data: prof }) => {
-          if (!prof?.display_name || prof.display_name.includes('@')) {
-            router.replace('/onboarding')
-          } else {
-            const savedTab = await AsyncStorage.getItem('reach_last_tab').catch(() => null)
-            router.replace((savedTab ?? '/(tabs)/') as any)
-          }
-        }).catch(() => {
-          router.replace('/(tabs)/')
-        })
+        navigateTo(session.user.id).catch(() => router.replace('/(tabs)/'))
       }
     }).catch(() => {
       router.replace('/(auth)/login')
@@ -53,21 +54,15 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         if (authFlags.skipNextSignedOut) { authFlags.skipNextSignedOut = false; return }
+        navigated.current = false
         router.replace('/(auth)/login')
       }
       if (event === 'SIGNED_IN') {
         if (authFlags.skipNextSignedIn) { authFlags.skipNextSignedIn = false; return }
+        if (navigated.current) return  // セッションリフレッシュによる再発火は無視
+        navigated.current = true
         registerPushToken().catch(() => {})
-        supabase.from('profiles').select('display_name').eq('id', session!.user.id).single().then(async ({ data: prof }) => {
-          if (!prof?.display_name || prof.display_name.includes('@')) {
-            router.replace('/onboarding')
-          } else {
-            const savedTab = await AsyncStorage.getItem('reach_last_tab').catch(() => null)
-            router.replace((savedTab ?? '/(tabs)/') as any)
-          }
-        }).catch(() => {
-          router.replace('/(tabs)/')
-        })
+        navigateTo(session!.user.id).catch(() => router.replace('/(tabs)/'))
       }
     })
 
