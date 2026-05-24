@@ -2,16 +2,26 @@ import { useEffect, useRef } from 'react'
 import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as Sentry from '@sentry/react-native'
+import { Platform } from 'react-native'
 import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
 import CookieBanner from './components/CookieBanner'
+import { isAnalyticsEnabled } from '../lib/cookieConsent'
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-  enabled: process.env.NODE_ENV === 'production',
+  enabled: process.env.NODE_ENV === 'production' && (Platform.OS !== 'web' || isAnalyticsEnabled()),
   tracesSampleRate: 0.2,
 })
+
+// Web: 同意が変わったタイミングでSentryの有効/無効を切り替え
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  window.addEventListener('cookieConsentChanged', (e: any) => {
+    const client = Sentry.getClient()
+    if (client) client.getOptions().enabled = e.detail === 'accepted' && process.env.NODE_ENV === 'production'
+  })
+}
 
 export default function RootLayout() {
   const navigated = useRef(false)

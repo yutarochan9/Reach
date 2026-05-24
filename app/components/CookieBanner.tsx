@@ -1,29 +1,23 @@
 import { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native'
 import { Colors } from '../../constants/colors'
-
-const STORAGE_KEY = 'reach_cookie_consent'
+import { getConsent, setConsent } from '../../lib/cookieConsent'
 
 export default function CookieBanner() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (!stored) setVisible(true)
-    } catch {
-      setVisible(true)
-    }
+    if (getConsent() === null) setVisible(true)
   }, [])
 
   const accept = () => {
-    try { localStorage.setItem(STORAGE_KEY, 'accepted') } catch {}
+    setConsent('accepted')
     setVisible(false)
   }
 
   const decline = () => {
-    try { localStorage.setItem(STORAGE_KEY, 'declined') } catch {}
+    setConsent('declined')
     setVisible(false)
   }
 
