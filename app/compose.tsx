@@ -337,14 +337,14 @@ export default function ComposeScreen() {
   // ─── エディタ（新規配信タブ） ─────────────────────────────
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolbarScroll} contentContainerStyle={styles.toolbar}>
+      <View style={styles.toolbar}>
         <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(true); setShowSchedule(false) }}>
           <Ionicons name="people-outline" size={15} color={showTarget ? Colors.white : Colors.accent} />
-          <Text style={[styles.toolBtnText, showTarget && styles.toolBtnTextActive]}>{targetLabel}</Text>
+          <Text style={[styles.toolBtnText, showTarget && styles.toolBtnTextActive]} numberOfLines={1}>{targetLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(true); setShowTarget(false) }}>
           <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
-          <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]}>{scheduledLabel ?? 'スケジュール'}</Text>
+          <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
@@ -356,8 +356,8 @@ export default function ComposeScreen() {
               size={15}
               color={publicReactions ? Colors.white : Colors.accent}
             />
-            <Text style={[styles.toolBtnText, publicReactions && styles.toolBtnTextActive]}>
-              {publicReactions ? 'リアクション公開' : 'リアクション非公開'}
+            <Text style={[styles.toolBtnText, publicReactions && styles.toolBtnTextActive]} numberOfLines={1}>
+              {publicReactions ? '公開' : '非公開'}
             </Text>
           </TouchableOpacity>
         )}
@@ -366,15 +366,15 @@ export default function ComposeScreen() {
           onPress={() => setVisibleToNew(v => !v)}
         >
           <Ionicons
-            name={visibleToNew ? 'eye-outline' : 'eye-off-outline'}
+            name={visibleToNew ? 'archive-outline' : 'archive'}
             size={15}
             color={!visibleToNew ? Colors.white : Colors.accent}
           />
-          <Text style={[styles.toolBtnText, !visibleToNew && styles.toolBtnTextActive]}>
-            {visibleToNew ? '新規にも表示' : '新規には非表示'}
+          <Text style={[styles.toolBtnText, !visibleToNew && styles.toolBtnTextActive]} numberOfLines={1}>
+            {visibleToNew ? '全期間' : '新規から'}
           </Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       {showTarget && (
         <View style={styles.optionCard}>
@@ -847,12 +847,11 @@ const styles = StyleSheet.create({
   editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
   editorPanelContent: { padding: 20, gap: 14 },
 
-  toolbarScroll: { flexGrow: 0 },
-  toolbar: { flexDirection: 'row', gap: 8, paddingVertical: 2 },
+  toolbar: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
   toolBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     backgroundColor: Colors.white, borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 7,
+    paddingHorizontal: 8, paddingVertical: 7,
     borderWidth: 1, borderColor: Colors.border,
   },
   toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
