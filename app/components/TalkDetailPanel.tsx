@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, Image, Modal, Pressable, Linking, StyleSheet as RN,
+  ActivityIndicator, Image, Modal, Pressable, Linking, StyleSheet as RN, Platform,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { sendPushToUsers } from '../../lib/notifications'
+import { useTalkContext } from '../contexts/TalkContext'
 
 type Broadcast = {
   id: string; content: string; image_url: string | null
@@ -27,6 +28,7 @@ const GRID_C = 27, GRID_R = 18
 
 export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: string; onClose: () => void }) {
   const senderId = creatorId
+  const { setSelectedDmId, setSelectedTalkId, triggerDmReload, isDesktop } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
   const [isSelf, setIsSelf] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -190,6 +192,13 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     const text = imText.trim()
     setImText('')
     await sendMessage(text)
+    triggerDmReload()
+    if (isDesktop) {
+      setSelectedTalkId(null)
+      setSelectedDmId(senderId)
+    } else {
+      router.push(`/im/${senderId}` as any)
+    }
   }
 
   const formatTime = (iso: string) => {
