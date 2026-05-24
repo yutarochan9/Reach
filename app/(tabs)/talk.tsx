@@ -360,12 +360,6 @@ export default function TalkScreen() {
     if (dmReloadKey > 0) load()
   }, [dmReloadKey, load])
 
-  // ポーリング：3秒おきにDMリストを自動更新（Realtimeが機能しない環境への対策）
-  useEffect(() => {
-    const timer = setInterval(() => { load() }, 1500)
-    return () => clearInterval(timer)
-  }, [load])
-
   const onRefresh = async () => {
     setRefreshing(true)
     await load()
@@ -454,7 +448,7 @@ export default function TalkScreen() {
         renderItem={({ item }) => {
           if (item.type === 'my') {
             return (
-              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === item.myId && styles.talkItemSelected]} onPress={() => isDesktop ? setSelectedTalkId(item.myId) : router.push(`/talk/${item.myId}` as any)}>
+              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === item.myId && styles.talkItemSelected]} onPress={() => { setSelectedDmId(null); isDesktop ? setSelectedTalkId(item.myId) : router.push(`/talk/${item.myId}` as any) }}>
                 <View style={[styles.avatar, styles.selfAvatar]}>
                   {item.avatar
                     ? <Image source={{ uri: item.avatar }} style={styles.avatarImage} />
@@ -497,7 +491,7 @@ export default function TalkScreen() {
           if (item.type === 'following-item') {
             const d = item.data
             return (
-              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === d.id && styles.talkItemSelected]} onPress={() => isDesktop ? setSelectedTalkId(d.id) : router.push(`/talk/${d.id}` as any)}>
+              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === d.id && styles.talkItemSelected]} onPress={() => { setSelectedDmId(null); isDesktop ? setSelectedTalkId(d.id) : router.push(`/talk/${d.id}` as any) }}>
                 <TouchableOpacity
                   onPress={() => router.push(`/creator/${d.id}` as any)}
                   activeOpacity={0.7}

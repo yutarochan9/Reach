@@ -112,7 +112,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
         return [...prev, ...newMsgs.map((m: any) => ({ ...m, reply_preview: null }))]
       })
-    }, 1500)
+    }, 2000)
     return () => clearInterval(timer)
   }, [partnerId, triggerDmReload])
 
