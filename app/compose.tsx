@@ -62,6 +62,7 @@ export default function ComposeScreen() {
   const [showTarget, setShowTarget] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [publicReactions, setPublicReactions] = useState(false)
+  const [visibleToNew, setVisibleToNew] = useState(true)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -288,6 +289,7 @@ export default function ComposeScreen() {
       status, scheduled_at: scheduledDate?.toISOString() ?? null, target,
       group_id: groupId,
       public_reactions: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? publicReactions : false,
+      visible_to_new_followers: visibleToNew,
     }))
     const { error } = await supabase.from('broadcasts').insert(inserts)
     if (error) { Alert.alert('エラー', error.message); asDraft ? setSaving(false) : setLoading(false); return }
@@ -359,6 +361,19 @@ export default function ComposeScreen() {
             </Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={[styles.toolBtn, !visibleToNew && styles.toolBtnActive]}
+          onPress={() => setVisibleToNew(v => !v)}
+        >
+          <Ionicons
+            name={visibleToNew ? 'eye-outline' : 'eye-off-outline'}
+            size={15}
+            color={!visibleToNew ? Colors.white : Colors.accent}
+          />
+          <Text style={[styles.toolBtnText, !visibleToNew && styles.toolBtnTextActive]}>
+            {visibleToNew ? '新規にも表示' : '新規には非表示'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {showTarget && (
