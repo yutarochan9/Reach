@@ -1,12 +1,28 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, Switch
+  ActivityIndicator, Alert, TextInput, Modal, Animated
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
+
+function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const anim = useRef(new Animated.Value(value ? 1 : 0)).current
+  useEffect(() => {
+    Animated.timing(anim, { toValue: value ? 1 : 0, duration: 200, useNativeDriver: false }).start()
+  }, [value])
+  const thumbX = anim.interpolate({ inputRange: [0, 1], outputRange: [3, 27] })
+  const trackBg = anim.interpolate({ inputRange: [0, 1], outputRange: ['#D1D5DB', Colors.accent] })
+  return (
+    <TouchableOpacity onPress={() => onChange(!value)} activeOpacity={0.85}>
+      <Animated.View style={[styles.toggleTrack, { backgroundColor: trackBg }]}>
+        <Animated.View style={[styles.toggleThumb, { transform: [{ translateX: thumbX }] }]} />
+      </Animated.View>
+    </TouchableOpacity>
+  )
+}
 
 type Sequence = {
   id: string
@@ -138,12 +154,7 @@ export default function StepSequencesScreen() {
                 <Text style={styles.cardSub}>{item.message_count}件のメッセージ</Text>
               </View>
               <View style={styles.cardRight}>
-                <Switch
-                  value={item.is_active}
-                  onValueChange={() => handleToggle(item)}
-                  trackColor={{ false: Colors.border, true: Colors.button }}
-                  thumbColor={Colors.white}
-                />
+                <ToggleSwitch value={item.is_active} onChange={() => handleToggle(item)} />
                 <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
                   <Ionicons name="trash-outline" size={18} color="#E53E3E" />
                 </TouchableOpacity>
@@ -215,6 +226,11 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: 12, color: Colors.textLight },
   cardRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   deleteBtn: { padding: 4 },
+  toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
+  toggleThumb: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
+  },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
   emptyText: { fontSize: 14, color: Colors.textLight },
   emptyBtn: {
