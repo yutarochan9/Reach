@@ -35,20 +35,7 @@ export default function MyPageScreen() {
 
   useEffect(() => { load() }, [load])
 
-  const handleLogout = async () => {
-    Alert.alert('ログアウト', 'ログアウトしますか？', [
-      { text: 'キャンセル', style: 'cancel' },
-      {
-        text: 'ログアウト', style: 'destructive',
-        onPress: async () => {
-          await supabase.auth.signOut()
-          router.replace('/(auth)/login')
-        },
-      },
-    ])
-  }
-
-  const openEdit = () => {
+const openEdit = () => {
     setEditName(profile?.display_name ?? '')
     setEditBio(profile?.bio ?? '')
     setEditUsername(profile?.username ?? '')
@@ -224,9 +211,6 @@ export default function MyPageScreen() {
           <MenuItem icon="settings-outline" label="設定" onPress={() => router.push('/settings' as any)} last />
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>ログアウト</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       <Modal visible={editVisible} animationType="slide" presentationStyle="pageSheet">
@@ -396,15 +380,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginRight: 4,
   },
   menuBadgeText: { color: Colors.white, fontSize: 11, fontWeight: '700' },
-  logoutButton: {
-    backgroundColor: Colors.white,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  logoutText: { color: '#E53E3E', fontWeight: '600', fontSize: 15 },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header,
