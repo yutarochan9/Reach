@@ -49,17 +49,19 @@ export default function SettingsScreen() {
     setSavingPush(false)
   }
 
-  const handleLogout = () => {
-    Alert.alert('ログアウト', 'ログアウトしますか？', [
-      { text: 'キャンセル', style: 'cancel' },
-      {
-        text: 'ログアウト', style: 'destructive',
-        onPress: async () => {
-          await supabase.auth.signOut()
-          router.replace('/(auth)/login')
-        },
-      },
-    ])
+  const handleLogout = async () => {
+    const doLogout = async () => {
+      await supabase.auth.signOut()
+      router.replace('/(auth)/login')
+    }
+    if (Platform.OS === 'web') {
+      if (window.confirm('ログアウトしますか？')) doLogout()
+    } else {
+      Alert.alert('ログアウト', 'ログアウトしますか？', [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: 'ログアウト', style: 'destructive', onPress: doLogout },
+      ])
+    }
   }
 
   const handleDeleteAccount = () => {
