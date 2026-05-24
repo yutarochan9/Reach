@@ -255,10 +255,16 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
                     <Text style={[styles.bubbleText, isOwn && styles.bubbleTextOwn]}>{item.content}</Text>
                   </View>
                   <View style={[styles.msgFooter, isOwn && styles.msgFooterOwn]}>
-                    {item.is_auto && (
+                    {!isOwn && item.is_auto && (
                       <View style={styles.autoBadge}>
                         <Ionicons name="flash-outline" size={9} color="#888" />
                         <Text style={styles.autoBadgeText}>自動応答</Text>
+                      </View>
+                    )}
+                    {!isOwn && !item.is_auto && (
+                      <View style={[styles.autoBadge, styles.staffBadge]}>
+                        <Ionicons name="person-outline" size={9} color="#5A7FD6" />
+                        <Text style={[styles.autoBadgeText, styles.staffBadgeText]}>担当者応答</Text>
                       </View>
                     )}
                     <Text style={styles.msgTime}>{formatTime(item.created_at)}</Text>
@@ -396,6 +402,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2,
   },
   autoBadgeText: { fontSize: 9, color: '#888', fontWeight: '600' },
+  staffBadge: { backgroundColor: '#EDF2FF' },
+  staffBadgeText: { color: '#5A7FD6' },
   moreBtn: {
     paddingHorizontal: 8, paddingVertical: 2,
     backgroundColor: Colors.white, borderRadius: 12,
