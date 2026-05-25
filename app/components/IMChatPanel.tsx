@@ -44,6 +44,16 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const myIdRef = useRef<string | null>(null)
+  const [webKbHeight, setWebKbHeight] = useState(0)
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return
+    const vv = (window as any).visualViewport
+    if (!vv) return
+    const update = () => setWebKbHeight(Math.max(0, window.innerHeight - vv.height))
+    vv.addEventListener('resize', update)
+    return () => vv.removeEventListener('resize', update)
+  }, [])
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -165,7 +175,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={[styles.header, isPanel && styles.headerPanel]}>

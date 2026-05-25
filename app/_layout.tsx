@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
 import CookieBanner from './components/CookieBanner'
+import PwaPrompt from './components/PwaPrompt'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
 
 Sentry.init({
@@ -74,6 +75,7 @@ export default function RootLayout() {
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }} />
       <CookieBanner />
+      <PwaPrompt />
     </>
   )
 }
