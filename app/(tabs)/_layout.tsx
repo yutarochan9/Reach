@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../../lib/supabase'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { TalkContext } from '../contexts/TalkContext'
 import TalkDetailPanel from '../components/TalkDetailPanel'
 import IMChatPanel from '../components/IMChatPanel'
@@ -72,6 +73,8 @@ function DesktopSidebar() {
 
 // ── モバイル用ボトムタブバー ───────────────────────────────────
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets()
+  const bottomPad = Math.max(insets.bottom, 8)
   const iconMap: Record<string, { active: React.ComponentProps<typeof Ionicons>['name']; inactive: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
     index:  { active: 'home',         inactive: 'home-outline',         label: 'ホーム' },
     talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'メッセージ' },
@@ -100,7 +103,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const right = tabs.slice(2)
 
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: bottomPad, height: 56 + bottomPad }]}>
       <View style={styles.tabGroup}>{left}</View>
       <TouchableOpacity
         style={styles.centerButton}
@@ -262,8 +265,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.main,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
-    height: Platform.OS === 'ios' ? 84 : Platform.OS === 'web' ? 80 : 64,
-    paddingBottom: Platform.OS === 'ios' ? 20 : Platform.OS === 'web' ? 16 : 0,
     paddingHorizontal: 8,
   },
   tabGroup: { flex: 1, flexDirection: 'row' },

@@ -45,6 +45,7 @@ export default function TalkDetailScreen() {
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
   const [tileOpen, setTileOpen] = useState(true)
+  const [tileBgLoaded, setTileBgLoaded] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const [webKbHeight, setWebKbHeight] = useState(0)
@@ -432,44 +433,54 @@ export default function TalkDetailScreen() {
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
 
+  const hasBgImage = !!(richMenu?.panel_bg_image)
+  const tileReady = !hasBgImage || tileBgLoaded
+
   const TilePanel = richMenu && normalizedButtons.length > 0 ? (
-    <View style={styles.tileContainer}>
-      {richMenu.panel_bg_image && (
-        <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+    <>
+      {hasBgImage && !tileBgLoaded && (
+        <Image source={{ uri: richMenu.panel_bg_image! }} style={{ width: 0, height: 0 }} onLoad={() => setTileBgLoaded(true)} />
       )}
-      <View style={styles.panelDimOverlay} pointerEvents="none" />
-      <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
-        <View style={styles.tileHandleBar} />
-      </TouchableOpacity>
-      {tileOpen && (
-        <View style={styles.tileGridArea}>
-          {normalizedButtons.map((btn: any) => (
-            <TouchableOpacity
-              key={btn.id}
-              style={{
-                position: 'absolute',
-                left: `${(btn.x / GRID_C) * 100}%` as any,
-                top: `${(btn.y / GRID_R) * 100}%` as any,
-                width: `${(btn.w / GRID_C) * 100}%` as any,
-                height: `${(btn.h / GRID_R) * 100}%` as any,
-                alignItems: 'center', justifyContent: 'center',
-                borderRightWidth: 0.5, borderBottomWidth: 0.5,
-                borderColor: 'rgba(255,255,255,0.1)',
-                overflow: 'hidden',
-              }}
-              onPress={() => Linking.openURL(btn.url)}
-              activeOpacity={0.75}
-            >
-              {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-              {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
-              <Ionicons name={btn.icon ?? 'link-outline'} size={26} color="#FFFFFF" />
-              <View style={styles.tileSeparator} />
-              <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
-            </TouchableOpacity>
-          ))}
+      {tileReady && (
+        <View style={styles.tileContainer}>
+          {richMenu.panel_bg_image && (
+            <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+          )}
+          <View style={styles.panelDimOverlay} pointerEvents="none" />
+          <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
+            <View style={styles.tileHandleBar} />
+          </TouchableOpacity>
+          {tileOpen && (
+            <View style={styles.tileGridArea}>
+              {normalizedButtons.map((btn: any) => (
+                <TouchableOpacity
+                  key={btn.id}
+                  style={{
+                    position: 'absolute',
+                    left: `${(btn.x / GRID_C) * 100}%` as any,
+                    top: `${(btn.y / GRID_R) * 100}%` as any,
+                    width: `${(btn.w / GRID_C) * 100}%` as any,
+                    height: `${(btn.h / GRID_R) * 100}%` as any,
+                    alignItems: 'center', justifyContent: 'center',
+                    borderRightWidth: 0.5, borderBottomWidth: 0.5,
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    overflow: 'hidden',
+                  }}
+                  onPress={() => Linking.openURL(btn.url)}
+                  activeOpacity={0.75}
+                >
+                  {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                  {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
+                  <Ionicons name={btn.icon ?? 'link-outline'} size={26} color="#FFFFFF" />
+                  <View style={styles.tileSeparator} />
+                  <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       )}
-    </View>
+    </>
   ) : null
 
   if (isSelf) {
