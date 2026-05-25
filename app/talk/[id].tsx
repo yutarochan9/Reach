@@ -45,7 +45,6 @@ export default function TalkDetailScreen() {
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
   const [tileOpen, setTileOpen] = useState(true)
-  const [tileBgLoaded, setTileBgLoaded] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const [webKbHeight, setWebKbHeight] = useState(0)
@@ -433,17 +432,15 @@ export default function TalkDetailScreen() {
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
 
-  const hasBgImage = !!(richMenu?.panel_bg_image)
-  const tileReady = !hasBgImage || tileBgLoaded
-
   const TilePanel = richMenu && normalizedButtons.length > 0 ? (
-    <>
-      {hasBgImage && !tileBgLoaded && (
-        <Image source={{ uri: richMenu.panel_bg_image! }} style={{ width: 0, height: 0 }} onLoad={() => setTileBgLoaded(true)} />
-      )}
-      {tileReady && (
-        <View style={styles.tileContainer}>
-          {richMenu.panel_bg_image && (
+    <View style={[
+      styles.tileContainer,
+      isWeb && richMenu.panel_bg_image
+        ? { backgroundImage: `url(${richMenu.panel_bg_image})`, backgroundSize: 'cover', backgroundPosition: 'center' } as any
+        : undefined,
+    ]}>
+          {/* ネイティブのみImage使用。webはCSSbackgroundImageで同一レンダリングサイクルに表示 */}
+          {!isWeb && richMenu.panel_bg_image && (
             <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
           )}
           <View style={styles.panelDimOverlay} pointerEvents="none" />
@@ -479,8 +476,6 @@ export default function TalkDetailScreen() {
             </View>
           )}
         </View>
-      )}
-    </>
   ) : null
 
   if (isSelf) {
