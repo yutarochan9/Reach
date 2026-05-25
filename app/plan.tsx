@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import * as WebBrowser from 'expo-web-browser'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
+import { BETA_MODE } from '../constants/config'
 
 type Plan = 'free' | 'standard' | 'pro'
 
@@ -21,7 +22,7 @@ const PLANS = [
       '基本配信（テキスト・画像）',
       'コメント・リアクション確認',
     ],
-    disabled: ['フロー配信', 'セグメント配信', 'タイル'],
+    disabled: ['フロー配信', 'セグメント配信', 'タイル', '自動応答'],
   },
   {
     id: 'standard' as Plan,
@@ -31,7 +32,7 @@ const PLANS = [
     color: Colors.accent,
     badge: '人気',
     features: [
-      'フォロワー無制限',
+      'フォロワー3,000人まで',
       '配信無制限',
       'フロー配信・自動化',
       '分析（閲覧数・リアクション数）',
@@ -46,11 +47,13 @@ const PLANS = [
     color: '#8B4513',
     badge: '全機能',
     features: [
-      'スタンダードの全機能',
+      'フォロワー無制限',
+      '配信無制限',
+      'フロー配信・自動化',
+      '分析（閲覧数・リアクション数）',
       'タイル作成',
       'セグメント配信（タグで絞り込み）',
       '自動応答',
-      '詳細分析（近日追加）',
     ],
     disabled: [],
   },
@@ -145,9 +148,15 @@ export default function PlanScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.subtitle}>
-          ベータ期間中は全プランの機能を無料でお試しいただけます。{'\n'}正式リリース時に料金プランが適用される予定です。
-        </Text>
+        {BETA_MODE && (
+          <View style={styles.betaBanner}>
+            <Ionicons name="gift-outline" size={20} color="#fff" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.betaTitle}>🎉 お試し期間中 — 全員無料</Text>
+              <Text style={styles.betaDesc}>現在はプロプランの全機能を無料でご利用いただけます。正式リリース時に料金プランが適用されます。</Text>
+            </View>
+          </View>
+        )}
 
         {PLANS.map((plan) => {
           const isCurrent = plan.id === currentPlan
@@ -192,7 +201,7 @@ export default function PlanScreen() {
                 ))}
               </View>
 
-              {plan.id !== 'free' && (
+              {!BETA_MODE && plan.id !== 'free' && (
                 <TouchableOpacity
                   style={[
                     styles.upgradeBtn,
@@ -212,7 +221,7 @@ export default function PlanScreen() {
                 </TouchableOpacity>
               )}
 
-              {plan.id === 'free' && isCurrent && (
+              {!BETA_MODE && plan.id === 'free' && isCurrent && (
                 <View style={[styles.upgradeBtn, { backgroundColor: Colors.background }]}>
                   <Text style={[styles.upgradeBtnText, { color: Colors.textLight }]}>現在のプラン</Text>
                 </View>
@@ -243,6 +252,16 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   subtitle: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22, marginBottom: 4 },
+  betaBanner: {
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  betaTitle: { color: '#fff', fontWeight: '800', fontSize: 15, marginBottom: 4 },
+  betaDesc: { color: 'rgba(255,255,255,0.88)', fontSize: 13, lineHeight: 19 },
   planCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,
