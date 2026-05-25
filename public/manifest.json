@@ -1,0 +1,22 @@
+{
+  "name": "Reach",
+  "short_name": "Reach",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E0D4C4",
+  "theme_color": "#E0D4C4",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
