@@ -185,20 +185,26 @@ export default function RichMenuScreen() {
     setDraftTile(v)
   }
 
-  // web: 生DOMのclickイベントを直接使う（RN Webのイベント変換を完全にバイパス）
-  // clientX/Y と getBoundingClientRect() は同じビューポート座標系なので確実に正確
+  // web: 生DOMのclickイベントを使う。
+  // r.height は RN Web の aspectRatio 実装によっては誤った値を返すことがある。
+  // width は正確なので、アスペクト比から height を逆算して使う。
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    const el = document.getElementById('reach-grid-area')
-    if (!el) return
-    const handler = (ev: MouseEvent) => {
-      const r = el.getBoundingClientRect()
-      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((ev.clientX - r.left) / r.width) * GRID_COLS)))
-      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((ev.clientY - r.top) / r.height) * GRID_ROWS)))
-      handleCellPress(col, row)
+    const attach = () => {
+      const el = document.getElementById('reach-grid-area')
+      if (!el) return () => {}
+      const handler = (ev: MouseEvent) => {
+        const r = el.getBoundingClientRect()
+        const w = r.width
+        const h = w * (GRID_ROWS / GRID_COLS)  // aspectRatio: 27/18 から逆算
+        const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((ev.clientX - r.left) / w) * GRID_COLS)))
+        const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((ev.clientY - r.top) / h) * GRID_ROWS)))
+        handleCellPress(col, row)
+      }
+      el.addEventListener('click', handler)
+      return () => el.removeEventListener('click', handler)
     }
-    el.addEventListener('click', handler)
-    return () => el.removeEventListener('click', handler)
+    return attach()
   }, [handleCellPress])
 
   const load = useCallback(async () => {
@@ -271,12 +277,15 @@ export default function RichMenuScreen() {
     onResponderMove: (e: any) => {
       const dt = draftTileRef.current
       if (!dt) return
-      const rect = getGridRect()
-      if (!rect) return
       const ev = e.nativeEvent
       const cx = ev.clientX ?? ev.pageX
       const cy = ev.clientY ?? ev.pageY
-      const { x: gx, y: gy, w: gw, h: gh } = { x: rect.x, y: rect.y, w: rect.w, h: rect.h }
+      const domEl = Platform.OS === 'web' ? document.getElementById('reach-grid-area') : null
+      const r = domEl?.getBoundingClientRect()
+      const gx = r ? r.left : (getGridRect()?.x ?? 0)
+      const gy = r ? r.top : (getGridRect()?.y ?? 0)
+      const gw = r ? r.width : (getGridRect()?.w ?? 1)
+      const gh = r ? gw * (GRID_ROWS / GRID_COLS) : (getGridRect()?.h ?? 1)
       const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((cx - gx) / (gw / GRID_COLS))))
       const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((cy - gy) / (gh / GRID_ROWS))))
       let { x, y, w, h } = dt
