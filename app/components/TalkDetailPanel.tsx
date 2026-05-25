@@ -240,10 +240,20 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                   if (!code || !myId) return
                   await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: code })
                   router.push(`/im/${senderId}` as any)
-                } else if (btn.url?.startsWith('/')) {
-                  router.push(btn.url as any)
                 } else if (btn.url) {
-                  Linking.openURL(btn.url)
+                  try {
+                    const parsed = new URL(btn.url)
+                    if (Platform.OS === 'web' && parsed.origin === window.location.origin) {
+                      router.push(parsed.pathname as any)
+                    } else if (btn.url.startsWith('/')) {
+                      router.push(btn.url as any)
+                    } else {
+                      Linking.openURL(btn.url)
+                    }
+                  } catch {
+                    if (btn.url.startsWith('/')) router.push(btn.url as any)
+                    else Linking.openURL(btn.url)
+                  }
                 }
               }}
               activeOpacity={0.75}

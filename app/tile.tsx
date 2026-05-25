@@ -385,16 +385,26 @@ export default function RichMenuScreen() {
                     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
                   }} />
                 ))}
-                {/* ドラフトハイライト（黄色） */}
-                <View pointerEvents="none" style={{
-                  position: 'absolute',
-                  left: `${(draft.x / GRID_COLS) * 100}%` as any,
-                  top: `${(draft.y / GRID_ROWS) * 100}%` as any,
-                  width: `${(draft.w / GRID_COLS) * 100}%` as any,
-                  height: `${(draft.h / GRID_ROWS) * 100}%` as any,
-                  backgroundColor: 'rgba(255, 220, 0, 0.22)',
-                  borderWidth: 2, borderColor: '#FFD700', borderStyle: 'dashed',
-                }} />
+                {/* ドラフトハイライト（重複=赤、正常=黄色） */}
+                {(() => {
+                  const overlaps = buttons.some(b =>
+                    draft.x < b.x + b.w && draft.x + draft.w > b.x &&
+                    draft.y < b.y + b.h && draft.y + draft.h > b.y
+                  )
+                  return (
+                    <View pointerEvents="none" style={{
+                      position: 'absolute',
+                      left: `${(draft.x / GRID_COLS) * 100}%` as any,
+                      top: `${(draft.y / GRID_ROWS) * 100}%` as any,
+                      width: `${(draft.w / GRID_COLS) * 100}%` as any,
+                      height: `${(draft.h / GRID_ROWS) * 100}%` as any,
+                      backgroundColor: overlaps ? 'rgba(220, 50, 50, 0.3)' : 'rgba(255, 220, 0, 0.22)',
+                      borderWidth: 2,
+                      borderColor: overlaps ? '#E53E3E' : '#FFD700',
+                      borderStyle: 'dashed',
+                    }} />
+                  )
+                })()}
 
                 {/* タイルはタップで編集モーダルを開く */}
                 {buttons.map(btn => (
@@ -437,11 +447,25 @@ export default function RichMenuScreen() {
               onChangeEnd={v => setDraft(d => ({ ...d, h: v - d.y }))}
             />
 
-            {/* タイルを追加ボタン */}
-            <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
-              <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-              <Text style={styles.addBtnText}>タイルを追加</Text>
-            </TouchableOpacity>
+            {/* タイルを追加ボタン（重複時は無効） */}
+            {(() => {
+              const overlaps = buttons.some(b =>
+                draft.x < b.x + b.w && draft.x + draft.w > b.x &&
+                draft.y < b.y + b.h && draft.y + draft.h > b.y
+              )
+              return (
+                <TouchableOpacity
+                  style={[styles.addBtn, overlaps && { opacity: 0.35, borderColor: '#E53E3E' }]}
+                  onPress={overlaps ? undefined : openAddModal}
+                  disabled={overlaps}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color={overlaps ? '#E53E3E' : Colors.accent} />
+                  <Text style={[styles.addBtnText, overlaps && { color: '#E53E3E' }]}>
+                    {overlaps ? '重複しています' : 'タイルを追加'}
+                  </Text>
+                </TouchableOpacity>
+              )
+            })()}
 
             <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
               ※ タイルをタップすると編集できます。
@@ -675,7 +699,7 @@ const styles = StyleSheet.create({
   bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   twoCol: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, alignItems: 'flex-start' },
   leftCol: { flex: 1, gap: 10 },
-  rightCol: { flex: 1 },
+  rightCol: { width: 200 },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   gridArea: { aspectRatio: 27 / 18 },
