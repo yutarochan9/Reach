@@ -194,6 +194,7 @@ export default function RichMenuScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [draft, setDraft] = useState({ x: 0, y: 0, w: 9, h: 9 })
   const isWebDesktop = Platform.OS === 'web'
 
   const load = useCallback(async () => {
@@ -231,8 +232,7 @@ export default function RichMenuScreen() {
   }
 
   const openAddModal = () => {
-    const pos = DEFAULT_POSITIONS[buttons.length] ?? { x: 0, y: 0, w: 9, h: 9 }
-    setEditingBtn({ id: genId(), label: '', url: '', code: '', icon: 'link-outline', action: 'url', ...pos })
+    setEditingBtn({ id: genId(), label: '', url: '', code: '', icon: 'link-outline', action: 'url', ...draft })
     setModalVisible(true)
   }
 
@@ -385,6 +385,17 @@ export default function RichMenuScreen() {
                     height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
                   }} />
                 ))}
+                {/* ドラフトハイライト（黄色） */}
+                <View pointerEvents="none" style={{
+                  position: 'absolute',
+                  left: `${(draft.x / GRID_COLS) * 100}%` as any,
+                  top: `${(draft.y / GRID_ROWS) * 100}%` as any,
+                  width: `${(draft.w / GRID_COLS) * 100}%` as any,
+                  height: `${(draft.h / GRID_ROWS) * 100}%` as any,
+                  backgroundColor: 'rgba(255, 220, 0, 0.22)',
+                  borderWidth: 2, borderColor: '#FFD700', borderStyle: 'dashed',
+                }} />
+
                 {/* タイルはタップで編集モーダルを開く */}
                 {buttons.map(btn => (
                   <TouchableOpacity
@@ -405,13 +416,26 @@ export default function RichMenuScreen() {
                     <Ionicons name={btn.icon as any} size={11} color="#fff" />
                   </TouchableOpacity>
                 ))}
-                {buttons.length === 0 && (
-                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>タイルを追加してください</Text>
-                  </View>
-                )}
               </View>
             </View>
+
+            {/* 範囲入力（グリッド外・モーダル外） */}
+            <RangeRow
+              label="列" unit="列"
+              startVal={draft.x + 1}
+              endVal={draft.x + draft.w}
+              minStart={1} maxEnd={GRID_COLS}
+              onChangeStart={v => setDraft(d => { const end = d.x + d.w; return { ...d, x: v - 1, w: end - (v - 1) } })}
+              onChangeEnd={v => setDraft(d => ({ ...d, w: v - d.x }))}
+            />
+            <RangeRow
+              label="行" unit="行"
+              startVal={draft.y + 1}
+              endVal={draft.y + draft.h}
+              minStart={1} maxEnd={GRID_ROWS}
+              onChangeStart={v => setDraft(d => { const end = d.y + d.h; return { ...d, y: v - 1, h: end - (v - 1) } })}
+              onChangeEnd={v => setDraft(d => ({ ...d, h: v - d.y }))}
+            />
 
             {/* タイルを追加ボタン */}
             <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
@@ -501,37 +525,6 @@ export default function RichMenuScreen() {
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
-
-              {/* 位置・サイズ（範囲入力） */}
-              <Text style={styles.fieldLabel}>位置とサイズ</Text>
-              <RangeRow
-                label="列"
-                unit="列"
-                startVal={(editingBtn?.x ?? 0) + 1}
-                endVal={(editingBtn?.x ?? 0) + (editingBtn?.w ?? 9)}
-                minStart={1}
-                maxEnd={GRID_COLS}
-                onChangeStart={v => setEditingBtn(p => {
-                  if (!p) return p
-                  const end = (p.x ?? 0) + (p.w ?? 9)
-                  return { ...p, x: v - 1, w: end - (v - 1) }
-                })}
-                onChangeEnd={v => setEditingBtn(p => p ? { ...p, w: v - (p.x ?? 0) } : p)}
-              />
-              <RangeRow
-                label="行"
-                unit="行"
-                startVal={(editingBtn?.y ?? 0) + 1}
-                endVal={(editingBtn?.y ?? 0) + (editingBtn?.h ?? 9)}
-                minStart={1}
-                maxEnd={GRID_ROWS}
-                onChangeStart={v => setEditingBtn(p => {
-                  if (!p) return p
-                  const end = (p.y ?? 0) + (p.h ?? 9)
-                  return { ...p, y: v - 1, h: end - (v - 1) }
-                })}
-                onChangeEnd={v => setEditingBtn(p => p ? { ...p, h: v - (p.y ?? 0) } : p)}
-              />
 
               {/* 背景画像 */}
               <Text style={styles.fieldLabel}>背景画像</Text>
