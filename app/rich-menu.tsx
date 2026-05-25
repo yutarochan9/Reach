@@ -184,6 +184,23 @@ export default function RichMenuScreen() {
     setDraftTile(v)
   }
 
+  // web: スクロール・リサイズのたびに gridRectRef を最新化
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    const update = () => {
+      const el = gridRef.current as any
+      if (!el) return
+      const rect = el.getBoundingClientRect?.()
+      if (rect) gridRectRef.current = { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+    }
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
