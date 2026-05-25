@@ -172,8 +172,7 @@ export default function RichMenuScreen() {
   const [uploading, setUploading] = useState(false)
   const [draftTile, setDraftTile] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [scrollEnabled, setScrollEnabled] = useState(true)
-  const [zoom, setZoom] = useState(1)
-  const [gridWrapperH, setGridWrapperH] = useState(0)
+  const [wideMode, setWideMode] = useState(false)
   const isWebDesktop = Platform.OS === 'web'
   const gridRef = useRef<any>(null)
   const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
@@ -255,10 +254,14 @@ export default function RichMenuScreen() {
     onResponderMove: (e: any) => {
       const dt = draftTileRef.current
       if (!dt) return
-      const { pageX, pageY } = e.nativeEvent
-      const { x: gx, y: gy, w: gw, h: gh } = gridRectRef.current
-      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((pageX - gx) / (gw / GRID_COLS))))
-      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((pageY - gy) / (gh / GRID_ROWS))))
+      const rect = getGridRect()
+      if (!rect) return
+      const ev = e.nativeEvent
+      const cx = ev.clientX ?? ev.pageX
+      const cy = ev.clientY ?? ev.pageY
+      const { x: gx, y: gy, w: gw, h: gh } = { x: rect.x, y: rect.y, w: rect.w, h: rect.h }
+      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((cx - gx) / (gw / GRID_COLS))))
+      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((cy - gy) / (gh / GRID_ROWS))))
       let { x, y, w, h } = dt
       if (edge === 'top') {
         const ny = Math.min(row, y + h - 1); h = y + h - ny; y = ny
@@ -319,20 +322,34 @@ export default function RichMenuScreen() {
     )
   }
 
-  // ── グリッドのタップ処理 ──
-  // locationX/Y は React Native Web では常に 0 付近になるバグがあるため
-  // pageX/pageY（絶対座標）から View.measure() で取得したグリッド位置を引いて計算する
+  // ── グリッド座標取得ユーティリティ ──
+  // web: getBoundingClientRect() でスクロール後も正確な座標を取得
+  // native: measure() のキャッシュを使用
+  const getGridRect = (): { x: number; y: number; w: number; h: number } | null => {
+    if (Platform.OS === 'web' && gridRef.current) {
+      const el = gridRef.current as any
+      const rect = el.getBoundingClientRect?.()
+      if (rect) return { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+    }
+    return gridRectRef.current.w > 1 ? gridRectRef.current : null
+  }
+
   const onGridLayout = () => {
-    gridRef.current?.measure((_: any, __: any, w: number, h: number, px: number, py: number) => {
-      gridRectRef.current = { x: px, y: py, w, h }
-    })
+    if (Platform.OS !== 'web') {
+      gridRef.current?.measure((_: any, __: any, w: number, h: number, px: number, py: number) => {
+        gridRectRef.current = { x: px, y: py, w, h }
+      })
+    }
   }
 
   const onGridPress = (e: any) => {
-    const { pageX, pageY } = e.nativeEvent
-    const { x, y, w, h } = gridRectRef.current
-    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((pageX - x) / w) * GRID_COLS)))
-    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((pageY - y) / h) * GRID_ROWS)))
+    const rect = getGridRect()
+    if (!rect) return
+    const ev = e.nativeEvent
+    const cx = ev.clientX ?? ev.pageX
+    const cy = ev.clientY ?? ev.pageY
+    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((cx - rect.x) / rect.w) * GRID_COLS)))
+    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((cy - rect.y) / rect.h) * GRID_ROWS)))
     handleCellPress(col, row)
   }
 
@@ -361,7 +378,7 @@ export default function RichMenuScreen() {
         <View style={styles.twoCol}>
 
           {/* 左：グリッドエディタ */}
-          <View style={styles.leftCol}>
+          <View style={[styles.leftCol, isWebDesktop && wideMode && { flex: 2 }]}>
 
             {/* パネル背景 */}
             <View style={[styles.card, { marginHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
@@ -414,28 +431,14 @@ export default function RichMenuScreen() {
                 {draftTile ? 'コーナーをドラッグしてサイズ調整' : 'タップでタイル配置・編集'}
               </Text>
               {isWebDesktop && (
-                <View style={styles.zoomControls}>
-                  <TouchableOpacity onPress={() => setZoom(z => Math.max(+(z - 0.5).toFixed(1), 1))} disabled={zoom <= 1}>
-                    <Ionicons name="remove-circle-outline" size={20} color={zoom <= 1 ? Colors.border : Colors.accent} />
-                  </TouchableOpacity>
-                  <Text style={styles.zoomLabel}>{Math.round(zoom * 100)}%</Text>
-                  <TouchableOpacity onPress={() => setZoom(z => Math.min(+(z + 0.5).toFixed(1), 3))}>
-                    <Ionicons name="add-circle-outline" size={20} color={zoom >= 3 ? Colors.border : Colors.accent} />
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity style={styles.wideModeBtn} onPress={() => setWideMode(v => !v)}>
+                  <Ionicons name={wideMode ? 'contract-outline' : 'expand-outline'} size={16} color={Colors.accent} />
+                  <Text style={styles.wideModeBtnText}>{wideMode ? '縮小' : '拡大'}</Text>
+                </TouchableOpacity>
               )}
             </View>
 
-            <View
-              style={[
-                styles.gridWrapper,
-                isWebDesktop && zoom !== 1 ? {
-                  transform: `scale(${zoom})`,
-                  transformOrigin: 'top left',
-                } as any : null,
-              ]}
-              onLayout={e => { if (zoom === 1) setGridWrapperH(e.nativeEvent.layout.height) }}
-            >
+            <View style={styles.gridWrapper}>
               {panelBgImage && (
                 <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
               )}
@@ -527,11 +530,6 @@ export default function RichMenuScreen() {
                 })}
               </View>
             </View>
-
-            {/* ズーム時の高さ補正スペーサー */}
-            {isWebDesktop && zoom > 1 && gridWrapperH > 0 && (
-              <View style={{ height: gridWrapperH * (zoom - 1) }} />
-            )}
 
             {draftTile && (
               <View style={styles.draftActions}>
@@ -844,8 +842,8 @@ const styles = StyleSheet.create({
   rightCol: { flex: 1 },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
-  zoomControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  zoomLabel: { fontSize: 12, color: Colors.textLight, minWidth: 36, textAlign: 'center' },
+  wideModeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
+  wideModeBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
   // 27列×18行 → 横長 (aspectRatio = 27/18 = 1.5)
   gridArea: { aspectRatio: 27 / 18 },
   draftActions: { flexDirection: 'row', gap: 8 },
