@@ -176,6 +176,7 @@ export default function RichMenuScreen() {
   const isWebDesktop = Platform.OS === 'web'
   const gridRef = useRef<any>(null)
   const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
+  const gridSizeRef = useRef({ w: 1, h: 1 })  // onLayout で取得した正確な描画サイズ
   const draftTileRef = useRef(draftTile)
   draftTileRef.current = draftTile  // レンダーごとに同期
 
@@ -352,7 +353,9 @@ export default function RichMenuScreen() {
     return gridRectRef.current.w > 1 ? gridRectRef.current : null
   }
 
-  const onGridLayout = () => {
+  const onGridLayout = (e: any) => {
+    const { width, height } = e.nativeEvent.layout
+    gridSizeRef.current = { w: width, h: height }
     if (Platform.OS !== 'web') {
       gridRef.current?.measure((_: any, __: any, w: number, h: number, px: number, py: number) => {
         gridRectRef.current = { x: px, y: py, w, h }
@@ -361,18 +364,21 @@ export default function RichMenuScreen() {
   }
 
   const onGridPress = (e: any) => {
-    const rect = getGridRect()
-    if (!rect) return
     const ev = e.nativeEvent
-    // locationX/Y は要素相対座標（React Native / RN Web 共通）→ グリッド位置の減算不要
-    // offsetX/Y は DOM MouseEvent の要素相対座標（デスクトップ web フォールバック）
+    const { w: gw, h: gh } = gridSizeRef.current
+    if (gw <= 1) return
+
+    // locationX/Y = 要素相対座標（RN / RN Web 共通）、onLayout サイズと同じ座標系
     const lx: number | undefined = ev.locationX ?? ev.offsetX
     const ly: number | undefined = ev.locationY ?? ev.offsetY
+
     let col: number, row: number
     if (lx != null && ly != null) {
-      col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((lx / rect.w) * GRID_COLS)))
-      row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((ly / rect.h) * GRID_ROWS)))
+      col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((lx / gw) * GRID_COLS)))
+      row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((ly / gh) * GRID_ROWS)))
     } else {
+      const rect = getGridRect()
+      if (!rect) return
       const cx = ev.clientX ?? ev.pageX
       const cy = ev.clientY ?? ev.pageY
       col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((cx - rect.x) / rect.w) * GRID_COLS)))
