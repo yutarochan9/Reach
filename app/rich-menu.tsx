@@ -185,22 +185,21 @@ export default function RichMenuScreen() {
     setDraftTile(v)
   }
 
-  // web: スクロール・リサイズのたびに gridRectRef を最新化
+  // web: 生DOMのclickイベントを直接使う（RN Webのイベント変換を完全にバイパス）
+  // clientX/Y と getBoundingClientRect() は同じビューポート座標系なので確実に正確
   useEffect(() => {
     if (Platform.OS !== 'web') return
-    const update = () => {
-      const el = document.getElementById('reach-grid-area')
-      if (!el) return
-      const rect = el.getBoundingClientRect()
-      gridRectRef.current = { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+    const el = document.getElementById('reach-grid-area')
+    if (!el) return
+    const handler = (ev: MouseEvent) => {
+      const r = el.getBoundingClientRect()
+      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((ev.clientX - r.left) / r.width) * GRID_COLS)))
+      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((ev.clientY - r.top) / r.height) * GRID_ROWS)))
+      handleCellPress(col, row)
     }
-    window.addEventListener('scroll', update, true)
-    window.addEventListener('resize', update)
-    return () => {
-      window.removeEventListener('scroll', update, true)
-      window.removeEventListener('resize', update)
-    }
-  }, [])
+    el.addEventListener('click', handler)
+    return () => el.removeEventListener('click', handler)
+  }, [handleCellPress])
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -531,12 +530,14 @@ export default function RichMenuScreen() {
                     borderWidth: 2, borderColor: '#FFE000',
                   }} />
                 )}
-                {/* タップ受付レイヤー（視覚要素は全て pointerEvents="none"） */}
-                <TouchableOpacity
-                  activeOpacity={1}
-                  style={StyleSheet.absoluteFillObject}
-                  onPress={onGridPress}
-                />
+                {/* タップ受付レイヤー: native のみ。web は上の DOM click リスナーが処理 */}
+                {Platform.OS !== 'web' && (
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    style={StyleSheet.absoluteFillObject}
+                    onPress={onGridPress}
+                  />
+                )}
                 {/* リサイズハンドル（辺の中央4点） */}
                 {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
                   const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100

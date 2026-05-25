@@ -234,7 +234,18 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                 borderRightWidth: 0.5, borderBottomWidth: 0.5,
                 borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden',
               }}
-              onPress={() => btn.url && Linking.openURL(btn.url)}
+              onPress={async () => {
+                if (btn.action === 'code') {
+                  const code = btn.code?.trim()
+                  if (!code || !myId) return
+                  await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: code })
+                  router.push(`/im/${senderId}` as any)
+                } else if (btn.url?.startsWith('/')) {
+                  router.push(btn.url as any)
+                } else if (btn.url) {
+                  Linking.openURL(btn.url)
+                }
+              }}
               activeOpacity={0.75}
             >
               {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
