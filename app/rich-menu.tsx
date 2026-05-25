@@ -279,10 +279,9 @@ export default function RichMenuScreen() {
 
   const handleSaveBtn = () => {
     const action = editingBtn?.action ?? 'url'
-    if (!editingBtn?.label?.trim()) return
     if (action === 'url' && !editingBtn?.url?.trim()) return
     if (action === 'code' && !editingBtn?.code?.trim()) return
-    const updated = { ...editingBtn, action, label: editingBtn.label.trim(), url: editingBtn.url?.trim() ?? '', code: editingBtn.code?.trim() ?? '' } as RichMenuButton
+    const updated = { ...editingBtn, action, label: '', url: editingBtn.url?.trim() ?? '', code: editingBtn.code?.trim() ?? '' } as RichMenuButton
     setButtons(prev => {
       const exists = prev.find(b => b.id === updated.id)
       return exists ? prev.map(b => b.id === updated.id ? updated : b) : [...prev, updated]
@@ -631,12 +630,10 @@ export default function RichMenuScreen() {
               </TouchableOpacity>
               <Text style={styles.modalTitle}>タイル設定</Text>
               <TouchableOpacity onPress={handleSaveBtn} disabled={
-                !editingBtn?.label?.trim() ||
-                ((editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim())
+                (editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim()
               }>
                 <Text style={[styles.modalSave, (
-                  !editingBtn?.label?.trim() ||
-                  ((editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim())
+                  (editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim()
                 ) && { opacity: 0.4 }]}>完了</Text>
               </TouchableOpacity>
             </View>
@@ -717,17 +714,6 @@ export default function RichMenuScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-
-              {/* ラベル */}
-              <Text style={styles.fieldLabel}>ラベル</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="例: 公式サイト"
-                placeholderTextColor={Colors.textLight}
-                value={editingBtn?.label ?? ''}
-                onChangeText={text => setEditingBtn(p => p ? { ...p, label: text } : p)}
-                maxLength={12}
-              />
 
               {/* アクション種別 */}
               <Text style={styles.fieldLabel}>アクション</Text>
