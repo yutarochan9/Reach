@@ -73,7 +73,7 @@ export default function PlanScreen() {
       .select('plan, subscription_status')
       .eq('id', user.id)
       .single()
-    setCurrentPlan((data?.plan ?? 'free') as Plan)
+    setCurrentPlan(BETA_MODE ? 'pro' : (data?.plan ?? 'free') as Plan)
     setSubscriptionStatus(data?.subscription_status ?? null)
     setLoading(false)
   }, [])
@@ -150,9 +150,11 @@ export default function PlanScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {BETA_MODE && (
           <View style={styles.betaBanner}>
-            <Ionicons name="gift-outline" size={20} color="#fff" />
+            <View style={styles.betaIconWrap}>
+              <Ionicons name="diamond-outline" size={18} color={Colors.accent} />
+            </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.betaTitle}>🎉 お試し期間中 — 全員無料</Text>
+              <Text style={styles.betaTitle}>お試し期間中 — 全機能を無料開放</Text>
               <Text style={styles.betaDesc}>現在はプロプランの全機能を無料でご利用いただけます。正式リリース時に料金プランが適用されます。</Text>
             </View>
           </View>
@@ -253,15 +255,26 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   subtitle: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22, marginBottom: 4 },
   betaBanner: {
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.white,
     borderRadius: 14,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.accent,
   },
-  betaTitle: { color: '#fff', fontWeight: '800', fontSize: 15, marginBottom: 4 },
-  betaDesc: { color: 'rgba(255,255,255,0.88)', fontSize: 13, lineHeight: 19 },
+  betaIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0,122,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  betaTitle: { color: Colors.text, fontWeight: '700', fontSize: 14, marginBottom: 3 },
+  betaDesc: { color: Colors.textLight, fontSize: 12, lineHeight: 18 },
   planCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,

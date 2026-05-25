@@ -238,8 +238,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
               activeOpacity={0.75}
             >
               {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-              {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
-              <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
             </TouchableOpacity>
           ))}
         </View>

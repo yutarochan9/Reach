@@ -32,10 +32,12 @@ export default function LoginScreen() {
   const [totpCode, setTotpCode] = useState('')
   const [totpFactorId, setTotpFactorId] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loginError, setLoginError] = useState('')
 
   const handleSignIn = async () => {
     if (!email.trim() || !password) return
     setLoading(true)
+    setLoginError('')
 
     // パスワード確認（中間のSIGNED_INはスキップ）
     authFlags.skipNextSignedIn = true
@@ -46,7 +48,7 @@ export default function LoginScreen() {
     if (error) {
       authFlags.skipNextSignedIn = false
       setLoading(false)
-      Alert.alert('サインイン失敗', 'メールアドレスまたはパスワードが正しくありません。')
+      setLoginError('メールアドレスまたはパスワードが正しくありません。')
       return
     }
 
@@ -225,6 +227,10 @@ export default function LoginScreen() {
                 }
               </TouchableOpacity>
 
+              {loginError ? (
+                <Text style={styles.errorText}>{loginError}</Text>
+              ) : null}
+
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>または</Text>
@@ -402,4 +408,5 @@ const styles = StyleSheet.create({
   },
   resendBtn: { alignItems: 'center' },
   resendText: { color: Colors.accent, fontSize: 14 },
+  errorText: { color: '#E53E3E', fontSize: 13, textAlign: 'center' },
 })

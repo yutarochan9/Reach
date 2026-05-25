@@ -5,6 +5,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
+import { BETA_MODE } from '../constants/config'
 
 type Broadcast = {
   id: string
@@ -201,7 +202,7 @@ export default function AnalyticsScreen() {
     )
   }
 
-  const isFree = stats?.plan === 'free'
+  const isFree = !BETA_MODE && stats?.plan === 'free'
   const monthlyPct = isFree ? Math.min(((stats?.monthlyBroadcasts ?? 0) / FREE_LIMIT) * 100, 100) : 100
   const monthlyNearLimit = isFree && (stats?.monthlyBroadcasts ?? 0) >= FREE_LIMIT * 0.8
 
@@ -228,7 +229,7 @@ export default function AnalyticsScreen() {
             <Ionicons name="people-outline" size={20} color={Colors.accent} />
             <Text style={styles.statValue}>{stats?.followerCount.toLocaleString()}</Text>
             <Text style={styles.statLabel}>フォロワー</Text>
-            {isFree && <Text style={styles.statSub}>上限500人</Text>}
+            {!BETA_MODE && isFree && <Text style={styles.statSub}>上限500人</Text>}
           </View>
           <View style={[styles.statCard, { flex: 1 }]}>
             <Ionicons name="person-add-outline" size={20} color={Colors.accent} />
@@ -289,7 +290,7 @@ export default function AnalyticsScreen() {
         )}
 
         {/* 今月の配信（無料プランのみ進捗バー） */}
-        {isFree && (
+        {!BETA_MODE && isFree && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>今月の配信</Text>

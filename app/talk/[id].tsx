@@ -467,10 +467,6 @@ export default function TalkDetailScreen() {
                   activeOpacity={0.75}
                 >
                   {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                  {btn.bgImage && <View style={styles.tileBtnImgOverlay} />}
-                  <Ionicons name={btn.icon ?? 'link-outline'} size={26} color="#FFFFFF" />
-                  <View style={styles.tileSeparator} />
-                  <Text style={styles.tileBtnLabel} numberOfLines={1}>{btn.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>

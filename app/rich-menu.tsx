@@ -172,6 +172,9 @@ export default function RichMenuScreen() {
   const [uploading, setUploading] = useState(false)
   const [draftTile, setDraftTile] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [scrollEnabled, setScrollEnabled] = useState(true)
+  const [zoom, setZoom] = useState(1)
+  const [gridWrapperH, setGridWrapperH] = useState(0)
+  const isWebDesktop = Platform.OS === 'web'
   const gridRef = useRef<any>(null)
   const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
   const draftTileRef = useRef(draftTile)
@@ -406,11 +409,33 @@ export default function RichMenuScreen() {
             </View>
 
             {/* グリッドエディタ */}
-            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>
-              {draftTile ? 'コーナーをドラッグしてサイズ調整' : 'タップでタイル配置・編集'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>
+                {draftTile ? 'コーナーをドラッグしてサイズ調整' : 'タップでタイル配置・編集'}
+              </Text>
+              {isWebDesktop && (
+                <View style={styles.zoomControls}>
+                  <TouchableOpacity onPress={() => setZoom(z => Math.max(+(z - 0.5).toFixed(1), 1))} disabled={zoom <= 1}>
+                    <Ionicons name="remove-circle-outline" size={20} color={zoom <= 1 ? Colors.border : Colors.accent} />
+                  </TouchableOpacity>
+                  <Text style={styles.zoomLabel}>{Math.round(zoom * 100)}%</Text>
+                  <TouchableOpacity onPress={() => setZoom(z => Math.min(+(z + 0.5).toFixed(1), 3))}>
+                    <Ionicons name="add-circle-outline" size={20} color={zoom >= 3 ? Colors.border : Colors.accent} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
 
-            <View style={styles.gridWrapper}>
+            <View
+              style={[
+                styles.gridWrapper,
+                isWebDesktop && zoom !== 1 ? {
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'top left',
+                } as any : null,
+              ]}
+              onLayout={e => { if (zoom === 1) setGridWrapperH(e.nativeEvent.layout.height) }}
+            >
               {panelBgImage && (
                 <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
               )}
@@ -502,6 +527,11 @@ export default function RichMenuScreen() {
                 })}
               </View>
             </View>
+
+            {/* ズーム時の高さ補正スペーサー */}
+            {isWebDesktop && zoom > 1 && gridWrapperH > 0 && (
+              <View style={{ height: gridWrapperH * (zoom - 1) }} />
+            )}
 
             {draftTile && (
               <View style={styles.draftActions}>
@@ -814,6 +844,8 @@ const styles = StyleSheet.create({
   rightCol: { flex: 1 },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
+  zoomControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  zoomLabel: { fontSize: 12, color: Colors.textLight, minWidth: 36, textAlign: 'center' },
   // 27列×18行 → 横長 (aspectRatio = 27/18 = 1.5)
   gridArea: { aspectRatio: 27 / 18 },
   draftActions: { flexDirection: 'row', gap: 8 },

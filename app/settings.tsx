@@ -5,6 +5,7 @@ import ToggleSwitch from './components/ToggleSwitch'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
+import { BETA_MODE } from '../constants/config'
 
 type Plan = 'free' | 'standard' | 'pro'
 const PLAN_LABELS: Record<Plan, string> = { free: '無料', standard: 'スタンダード', pro: 'プロ' }
@@ -31,7 +32,7 @@ export default function SettingsScreen() {
       .single()
 
     setPushEnabled(profile?.push_enabled ?? true)
-    setPlan((profile?.plan ?? 'free') as Plan)
+    setPlan(BETA_MODE ? 'pro' : (profile?.plan ?? 'free') as Plan)
     setSubscriptionStatus(profile?.subscription_status ?? null)
     setIsAdmin(profile?.is_admin ?? false)
     setLoading(false)
