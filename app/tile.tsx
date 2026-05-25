@@ -699,7 +699,7 @@ const styles = StyleSheet.create({
   bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   twoCol: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, alignItems: 'flex-start' },
   leftCol: { flex: 1, gap: 10 },
-  rightCol: { width: 200 },
+  rightCol: { width: 320 },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   gridArea: { aspectRatio: 27 / 18 },
