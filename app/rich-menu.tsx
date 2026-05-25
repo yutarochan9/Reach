@@ -137,30 +137,47 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
   )
 }
 
-// 数値ステッパー（位置・サイズ入力用）
+// 数値ステッパー
 function Stepper({
-  label, value, min, max,
-  onChange,
-}: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  value, min, max, onChange,
+}: { value: number; min: number; max: number; onChange: (v: number) => void }) {
   return (
-    <View style={styles.stepper}>
-      <Text style={styles.stepperLabel}>{label}</Text>
-      <View style={styles.stepperRow}>
-        <TouchableOpacity
-          style={[styles.stepperBtn, value <= min && { opacity: 0.3 }]}
-          onPress={() => onChange(Math.max(min, value - 1))}
-          disabled={value <= min}
-        >
-          <Text style={styles.stepperBtnText}>−</Text>
-        </TouchableOpacity>
-        <Text style={styles.stepperValue}>{value}</Text>
-        <TouchableOpacity
-          style={[styles.stepperBtn, value >= max && { opacity: 0.3 }]}
-          onPress={() => onChange(Math.min(max, value + 1))}
-          disabled={value >= max}
-        >
-          <Text style={styles.stepperBtnText}>+</Text>
-        </TouchableOpacity>
+    <View style={styles.stepperRow}>
+      <TouchableOpacity
+        style={[styles.stepperBtn, value <= min && { opacity: 0.3 }]}
+        onPress={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+      >
+        <Text style={styles.stepperBtnText}>−</Text>
+      </TouchableOpacity>
+      <Text style={styles.stepperValue}>{value}</Text>
+      <TouchableOpacity
+        style={[styles.stepperBtn, value >= max && { opacity: 0.3 }]}
+        onPress={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+      >
+        <Text style={styles.stepperBtnText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+// N〜M 範囲入力行
+function RangeRow({ label, unit, startVal, endVal, minStart, maxEnd, onChangeStart, onChangeEnd }: {
+  label: string; unit: string
+  startVal: number; endVal: number
+  minStart: number; maxEnd: number
+  onChangeStart: (v: number) => void
+  onChangeEnd: (v: number) => void
+}) {
+  return (
+    <View style={styles.rangeRow}>
+      <Text style={styles.rangeLabel}>{label}</Text>
+      <View style={styles.rangeInputs}>
+        <Stepper value={startVal} min={minStart} max={endVal} onChange={onChangeStart} />
+        <Text style={styles.rangeSep}>〜</Text>
+        <Stepper value={endVal} min={startVal} max={maxEnd} onChange={onChangeEnd} />
+        <Text style={styles.rangeUnit}>{unit}</Text>
       </View>
     </View>
   )
@@ -177,7 +194,6 @@ export default function RichMenuScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [wideMode, setWideMode] = useState(false)
   const isWebDesktop = Platform.OS === 'web'
 
   const load = useCallback(async () => {
@@ -313,7 +329,7 @@ export default function RichMenuScreen() {
         <View style={styles.twoCol}>
 
           {/* 左：グリッドプレビュー + タイル一覧 */}
-          <View style={[styles.leftCol, isWebDesktop && wideMode && { flex: 2 }]}>
+          <View style={styles.leftCol}>
 
             {/* パネル背景 */}
             <View style={[styles.card, { marginHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
@@ -347,15 +363,7 @@ export default function RichMenuScreen() {
             </View>
 
             {/* グリッドプレビュー */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>グリッドプレビュー</Text>
-              {isWebDesktop && (
-                <TouchableOpacity style={styles.wideModeBtn} onPress={() => setWideMode(v => !v)}>
-                  <Ionicons name={wideMode ? 'contract-outline' : 'expand-outline'} size={16} color={Colors.accent} />
-                  <Text style={styles.wideModeBtnText}>{wideMode ? '縮小' : '拡大'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>グリッドプレビュー</Text>
 
             <View style={styles.gridWrapper}>
               {panelBgImage && (
@@ -412,7 +420,7 @@ export default function RichMenuScreen() {
             </TouchableOpacity>
 
             <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
-              ※ グリッドは27列×18行。タイルをタップすると編集できます。
+              ※ タイルをタップすると編集できます。
             </Text>
           </View>
 
@@ -494,18 +502,36 @@ export default function RichMenuScreen() {
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
 
-              {/* 位置・サイズ（数値入力） */}
-              <Text style={styles.fieldLabel}>位置とサイズ（グリッド: 27列 × 18行）</Text>
-              <View style={styles.stepperGrid}>
-                <Stepper label="列（X）" value={editingBtn?.x ?? 0} min={0} max={GRID_COLS - 1}
-                  onChange={v => setEditingBtn(p => p ? { ...p, x: v } : p)} />
-                <Stepper label="行（Y）" value={editingBtn?.y ?? 0} min={0} max={GRID_ROWS - 1}
-                  onChange={v => setEditingBtn(p => p ? { ...p, y: v } : p)} />
-                <Stepper label="幅" value={editingBtn?.w ?? 9} min={1} max={GRID_COLS}
-                  onChange={v => setEditingBtn(p => p ? { ...p, w: v } : p)} />
-                <Stepper label="高さ" value={editingBtn?.h ?? 9} min={1} max={GRID_ROWS}
-                  onChange={v => setEditingBtn(p => p ? { ...p, h: v } : p)} />
-              </View>
+              {/* 位置・サイズ（範囲入力） */}
+              <Text style={styles.fieldLabel}>位置とサイズ</Text>
+              <RangeRow
+                label="列"
+                unit="列"
+                startVal={(editingBtn?.x ?? 0) + 1}
+                endVal={(editingBtn?.x ?? 0) + (editingBtn?.w ?? 9)}
+                minStart={1}
+                maxEnd={GRID_COLS}
+                onChangeStart={v => setEditingBtn(p => {
+                  if (!p) return p
+                  const end = (p.x ?? 0) + (p.w ?? 9)
+                  return { ...p, x: v - 1, w: end - (v - 1) }
+                })}
+                onChangeEnd={v => setEditingBtn(p => p ? { ...p, w: v - (p.x ?? 0) } : p)}
+              />
+              <RangeRow
+                label="行"
+                unit="行"
+                startVal={(editingBtn?.y ?? 0) + 1}
+                endVal={(editingBtn?.y ?? 0) + (editingBtn?.h ?? 9)}
+                minStart={1}
+                maxEnd={GRID_ROWS}
+                onChangeStart={v => setEditingBtn(p => {
+                  if (!p) return p
+                  const end = (p.y ?? 0) + (p.h ?? 9)
+                  return { ...p, y: v - 1, h: end - (v - 1) }
+                })}
+                onChangeEnd={v => setEditingBtn(p => p ? { ...p, h: v - (p.y ?? 0) } : p)}
+              />
 
               {/* 背景画像 */}
               <Text style={styles.fieldLabel}>背景画像</Text>
@@ -659,8 +685,6 @@ const styles = StyleSheet.create({
   rightCol: { flex: 1 },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
-  wideModeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
-  wideModeBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
   gridArea: { aspectRatio: 27 / 18 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -706,19 +730,21 @@ const styles = StyleSheet.create({
   modalSave: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   modalBody: { padding: 16, gap: 10, paddingBottom: 40 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 8 },
-  stepperGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  stepper: {
-    width: '47%', backgroundColor: Colors.white, borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.border, padding: 12, gap: 8,
+  rangeRow: {
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, padding: 14, gap: 10,
   },
-  stepperLabel: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
-  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rangeLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight },
+  rangeInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rangeSep: { fontSize: 16, color: Colors.textLight, fontWeight: '500' },
+  rangeUnit: { fontSize: 13, color: Colors.textLight, fontWeight: '600', marginLeft: 4 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepperBtn: {
-    width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.background,
+    width: 34, height: 34, borderRadius: 8, backgroundColor: Colors.background,
     borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
   },
   stepperBtnText: { fontSize: 18, color: Colors.text, fontWeight: '600', lineHeight: 22 },
-  stepperValue: { fontSize: 20, fontWeight: '700', color: Colors.text, minWidth: 32, textAlign: 'center' },
+  stepperValue: { fontSize: 18, fontWeight: '700', color: Colors.text, minWidth: 28, textAlign: 'center' },
   actionTypeRow: { flexDirection: 'row', gap: 8 },
   actionTypeBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
