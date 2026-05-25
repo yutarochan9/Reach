@@ -24,18 +24,6 @@ type RichMenuButton = {
   h: number
 }
 
-const ICON_OPTIONS = [
-  { name: 'link-outline', label: 'リンク' },
-  { name: 'globe-outline', label: 'Web' },
-  { name: 'mail-outline', label: 'メール' },
-  { name: 'call-outline', label: '電話' },
-  { name: 'cart-outline', label: 'ショップ' },
-  { name: 'calendar-outline', label: '予約' },
-  { name: 'document-text-outline', label: '資料' },
-  { name: 'gift-outline', label: 'プレゼント' },
-  { name: 'star-outline', label: 'お気に入り' },
-  { name: 'information-circle-outline', label: '情報' },
-]
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const BUCKET = 'broadcast-images'
@@ -232,7 +220,7 @@ export default function RichMenuScreen() {
   }
 
   const openAddModal = () => {
-    setEditingBtn({ id: genId(), label: '', url: '', code: '', icon: 'link-outline', action: 'url', ...draft })
+    setEditingBtn({ id: genId(), label: '', url: '', code: '', icon: 'link-outline', action: 'url' as const, ...draft })
     setModalVisible(true)
   }
 
@@ -581,21 +569,6 @@ export default function RichMenuScreen() {
                 )}
               </View>
 
-              {/* アイコン */}
-              <Text style={styles.fieldLabel}>アイコン</Text>
-              <View style={styles.iconGrid}>
-                {ICON_OPTIONS.map(opt => (
-                  <TouchableOpacity
-                    key={opt.name}
-                    style={[styles.iconOption, editingBtn?.icon === opt.name && styles.iconOptionActive]}
-                    onPress={() => setEditingBtn(p => p ? { ...p, icon: opt.name } : p)}
-                  >
-                    <Ionicons name={opt.name as any} size={22} color={editingBtn?.icon === opt.name ? '#fff' : Colors.accent} />
-                    <Text style={[styles.iconLabel, editingBtn?.icon === opt.name && { color: '#fff' }]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
               {/* アクション種別 */}
               <Text style={styles.fieldLabel}>アクション</Text>
               <View style={styles.actionTypeRow}>
@@ -605,11 +578,15 @@ export default function RichMenuScreen() {
                     <TouchableOpacity
                       key={a}
                       style={[styles.actionTypeBtn, isAct && styles.actionTypeBtnActive]}
-                      onPress={() => setEditingBtn(p => p ? { ...p, action: a } : p)}
+                      onPress={() => setEditingBtn(p => p ? {
+                        ...p,
+                        action: a,
+                        icon: a === 'url' ? 'link-outline' : 'chatbubble-ellipses-outline',
+                      } : p)}
                     >
-                      <Ionicons name={a === 'url' ? 'link-outline' : 'code-slash-outline'} size={16} color={isAct ? '#fff' : Colors.accent} />
+                      <Ionicons name={a === 'url' ? 'link-outline' : 'chatbubble-ellipses-outline'} size={16} color={isAct ? '#fff' : Colors.accent} />
                       <Text style={[styles.actionTypeBtnText, isAct && { color: '#fff' }]}>
-                        {a === 'url' ? 'URLを開く' : 'コードを送信'}
+                        {a === 'url' ? 'URLを開く' : 'ワンタップ返信'}
                       </Text>
                     </TouchableOpacity>
                   )
@@ -631,17 +608,17 @@ export default function RichMenuScreen() {
                 </>
               ) : (
                 <>
-                  <Text style={styles.fieldLabel}>送信コード</Text>
+                  <Text style={styles.fieldLabel}>返信メッセージ</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="タップ時に自動送信するテキスト（例: #注文 / 予約希望）"
+                    placeholder="例：予約希望 / 詳しく聞きたい"
                     placeholderTextColor={Colors.textLight}
                     value={editingBtn?.code ?? ''}
                     onChangeText={text => setEditingBtn(p => p ? { ...p, code: text } : p)}
                     autoCapitalize="none"
                   />
                   <Text style={[styles.fieldLabel, { color: Colors.accent, fontWeight: '500', textTransform: 'none', letterSpacing: 0 }]}>
-                    ユーザーがこのボタンを押すと、コードが自動でDMに送信されます
+                    フォロワーがボタンを押すと、このメッセージが自動でDMに送られます
                   </Text>
                 </>
               )}
