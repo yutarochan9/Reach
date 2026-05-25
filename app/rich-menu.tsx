@@ -188,10 +188,10 @@ export default function RichMenuScreen() {
   useEffect(() => {
     if (Platform.OS !== 'web') return
     const update = () => {
-      const el = gridRef.current as any
+      const el = document.getElementById('reach-grid-area')
       if (!el) return
-      const rect = el.getBoundingClientRect?.()
-      if (rect) gridRectRef.current = { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+      const rect = el.getBoundingClientRect()
+      gridRectRef.current = { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
     }
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
@@ -339,13 +339,15 @@ export default function RichMenuScreen() {
   }
 
   // ── グリッド座標取得ユーティリティ ──
-  // web: getBoundingClientRect() でスクロール後も正確な座標を取得
+  // web: getElementById で確実にDOM要素を取得し getBoundingClientRect() で現在位置を返す
   // native: measure() のキャッシュを使用
   const getGridRect = (): { x: number; y: number; w: number; h: number } | null => {
-    if (Platform.OS === 'web' && gridRef.current) {
-      const el = gridRef.current as any
-      const rect = el.getBoundingClientRect?.()
-      if (rect) return { x: rect.left, y: rect.top, w: rect.width, h: rect.height }
+    if (Platform.OS === 'web') {
+      const el = document.getElementById('reach-grid-area')
+      if (el) {
+        const r = el.getBoundingClientRect()
+        return { x: r.left, y: r.top, w: r.width, h: r.height }
+      }
     }
     return gridRectRef.current.w > 1 ? gridRectRef.current : null
   }
@@ -362,10 +364,20 @@ export default function RichMenuScreen() {
     const rect = getGridRect()
     if (!rect) return
     const ev = e.nativeEvent
-    const cx = ev.clientX ?? ev.pageX
-    const cy = ev.clientY ?? ev.pageY
-    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((cx - rect.x) / rect.w) * GRID_COLS)))
-    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((cy - rect.y) / rect.h) * GRID_ROWS)))
+    // locationX/Y は要素相対座標（React Native / RN Web 共通）→ グリッド位置の減算不要
+    // offsetX/Y は DOM MouseEvent の要素相対座標（デスクトップ web フォールバック）
+    const lx: number | undefined = ev.locationX ?? ev.offsetX
+    const ly: number | undefined = ev.locationY ?? ev.offsetY
+    let col: number, row: number
+    if (lx != null && ly != null) {
+      col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((lx / rect.w) * GRID_COLS)))
+      row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((ly / rect.h) * GRID_ROWS)))
+    } else {
+      const cx = ev.clientX ?? ev.pageX
+      const cy = ev.clientY ?? ev.pageY
+      col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((cx - rect.x) / rect.w) * GRID_COLS)))
+      row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((cy - rect.y) / rect.h) * GRID_ROWS)))
+    }
     handleCellPress(col, row)
   }
 
@@ -463,6 +475,7 @@ export default function RichMenuScreen() {
               {/* ref を持つ View でサイズ・位置を記録。タップは最前面の absoluteFill TouchableOpacity で受付 */}
               <View
                 ref={gridRef}
+                id="reach-grid-area"
                 style={styles.gridArea}
                 onLayout={onGridLayout}
               >
