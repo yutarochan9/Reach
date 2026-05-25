@@ -246,6 +246,19 @@ export default function TalkDetailScreen() {
     const { data: myProfile } = await supabase
       .from('profiles').select('display_name').eq('id', myId).single()
     sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.slice(0, 80))
+
+    // 自動応答
+    const capturedMyId = myId
+    setTimeout(async () => {
+      await supabase.rpc('check_and_send_auto_response', {
+        p_creator_id: senderId,
+        p_receiver_id: capturedMyId,
+        p_message: text,
+      })
+    }, 1200)
+
+    // DM画面へ遷移
+    router.push(`/im/${senderId}` as any)
   }
 
   const formatTime = (iso: string) => {
@@ -617,7 +630,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: Colors.white, borderRadius: 22,
     borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 14, color: Colors.text, maxHeight: 100,
+    fontSize: 16, color: Colors.text, maxHeight: 100,
   },
   sendButton: {
     width: 40, height: 40, borderRadius: 20,
