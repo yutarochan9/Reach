@@ -28,7 +28,15 @@
       "bundler": "metro",
       "favicon": "./assets/icon.png",
       "themeColor": "#E0D4C4",
-      "backgroundColor": "#E0D4C4"
+      "backgroundColor": "#E0D4C4",
+      "manifest": {
+        "name": "Reach",
+        "short_name": "Reach",
+        "icons": [
+          { "src": "/icon.png", "sizes": "192x192", "type": "image/png" },
+          { "src": "/icon.png", "sizes": "512x512", "type": "image/png" }
+        ]
+      }
     },
     "plugins": [
       "expo-router",
