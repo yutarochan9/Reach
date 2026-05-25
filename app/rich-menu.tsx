@@ -18,10 +18,10 @@ type RichMenuButton = {
   code: string
   icon: string
   bgImage?: string
-  x: number   // 列 (0〜GRID_COLS-1)
-  y: number   // 行 (0〜GRID_ROWS-1)
-  w: number   // 列スパン
-  h: number   // 行スパン
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 const ICON_OPTIONS = [
@@ -39,11 +39,10 @@ const ICON_OPTIONS = [
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const BUCKET = 'broadcast-images'
-const GRID_COLS = 27   // 横方向（列）
-const GRID_ROWS = 18   // 縦方向（行）
+const GRID_COLS = 27
+const GRID_ROWS = 18
 const genId = () => Math.random().toString(36).slice(2)
 
-// 旧データ（x/y/w/h なし）向けデフォルト配置 - 3列×2行
 const DEFAULT_POSITIONS = [
   { x: 0,  y: 0, w: 9, h: 9 },
   { x: 9,  y: 0, w: 9, h: 9 },
@@ -55,7 +54,6 @@ const DEFAULT_POSITIONS = [
 
 // ── 画像アップロード ──────────────────────────────────────
 
-// Native: XHR + FormData
 async function uploadImageNative(
   userId: string,
   asset: ImagePicker.ImagePickerAsset,
@@ -83,53 +81,33 @@ async function uploadImageNative(
   })
 }
 
-// Web: Supabase SDK で File オブジェクトを直接アップロード
 async function uploadFileWeb(
   userId: string,
   file: File,
   onSuccess: (url: string) => void,
   setUploading: (v: boolean) => void,
 ) {
-  console.log('[upload] 開始', { name: file.name, type: file.type, size: file.size })
   setUploading(true)
   try {
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
     const path = `tiles/${userId}/img_${Date.now()}.${ext}`
-    console.log('[upload] パス:', path, 'バケット:', BUCKET)
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
-    if (error) {
-      console.error('[upload] Supabase エラー:', error)
-      Alert.alert('アップロードエラー', `${error.message}\n(コンソールに詳細あり)`)
-      return
-    }
-    // SDK の getPublicUrl で URL を取得（手動構築より確実）
+    if (error) { Alert.alert('アップロードエラー', error.message); return }
     const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
-    const publicUrl = urlData.publicUrl
-    console.log('[upload] 成功 URL:', publicUrl)
-    onSuccess(publicUrl)
+    onSuccess(urlData.publicUrl)
   } catch (e: any) {
-    console.error('[upload] 例外:', e)
     Alert.alert('エラー', e?.message ?? 'エラーが発生しました')
   } finally {
     setUploading(false)
   }
 }
 
-// ── Web 専用: label+input overlay ────────────────────────────
-// onPress 内から input.click() を呼ぶとブラウザが user gesture と
-// 認識しないためファイルピッカーが開かない。
-// label 要素でラップすることでブラウザネイティブの activation を使う。
 function WebImageOverlay({ onFile }: { onFile: (file: File) => void }) {
   if (Platform.OS !== 'web') return null
   return (
-    <label
-      style={{
-        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-        cursor: 'pointer', zIndex: 10,
-      } as any}
-    >
+    <label style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, cursor: 'pointer', zIndex: 10 } as any}>
       <input
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif"
@@ -159,6 +137,35 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
   )
 }
 
+// 数値ステッパー（位置・サイズ入力用）
+function Stepper({
+  label, value, min, max,
+  onChange,
+}: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.stepper}>
+      <Text style={styles.stepperLabel}>{label}</Text>
+      <View style={styles.stepperRow}>
+        <TouchableOpacity
+          style={[styles.stepperBtn, value <= min && { opacity: 0.3 }]}
+          onPress={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+        >
+          <Text style={styles.stepperBtnText}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.stepperValue}>{value}</Text>
+        <TouchableOpacity
+          style={[styles.stepperBtn, value >= max && { opacity: 0.3 }]}
+          onPress={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+        >
+          <Text style={styles.stepperBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  )
+}
+
 export default function RichMenuScreen() {
   const [isActive, setIsActive] = useState(false)
   const [buttons, setButtons] = useState<RichMenuButton[]>([])
@@ -170,42 +177,8 @@ export default function RichMenuScreen() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [draftTile, setDraftTile] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-  const [scrollEnabled, setScrollEnabled] = useState(true)
   const [wideMode, setWideMode] = useState(false)
   const isWebDesktop = Platform.OS === 'web'
-  const gridRef = useRef<any>(null)
-  const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
-  const gridSizeRef = useRef({ w: 1, h: 1 })  // onLayout で取得した正確な描画サイズ
-  const draftTileRef = useRef(draftTile)
-  draftTileRef.current = draftTile  // レンダーごとに同期
-
-  const updateDraft = (v: typeof draftTile) => {
-    draftTileRef.current = v
-    setDraftTile(v)
-  }
-
-  // web: 生DOMのclickイベントを使う。
-  // r.height は RN Web の aspectRatio 実装によっては誤った値を返すことがある。
-  // width は正確なので、アスペクト比から height を逆算して使う。
-  useEffect(() => {
-    if (Platform.OS !== 'web') return
-    const attach = () => {
-      const el = document.getElementById('reach-grid-area')
-      if (!el) return () => {}
-      const handler = (ev: MouseEvent) => {
-        const r = el.getBoundingClientRect()
-        const w = r.width
-        const h = w * (GRID_ROWS / GRID_COLS)  // aspectRatio: 27/18 から逆算
-        const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((ev.clientX - r.left) / w) * GRID_COLS)))
-        const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((ev.clientY - r.top) / h) * GRID_ROWS)))
-        handleCellPress(col, row)
-      }
-      el.addEventListener('click', handler)
-      return () => el.removeEventListener('click', handler)
-    }
-    return attach()
-  }, [handleCellPress])
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -241,73 +214,41 @@ export default function RichMenuScreen() {
     router.back()
   }
 
-  const getCellTile = useCallback((col: number, row: number) =>
-    buttons.find(b => col >= b.x && col < b.x + b.w && row >= b.y && row < b.y + b.h) ?? null
-  , [buttons])
-
-  const handleCellPress = useCallback((col: number, row: number) => {
-    const existing = getCellTile(col, row)
-    if (existing) {
-      updateDraft(null)
-      setEditingBtn({ ...existing })
-      setModalVisible(true)
-      return
-    }
-    // 空セルをタップ → 1×1 のドラフトタイルを置く
-    updateDraft({ x: col, y: row, w: 1, h: 1 })
-  }, [getCellTile])
-
-  const confirmDraft = () => {
-    if (!draftTile) return
-    const overlap = buttons.some(b =>
-      draftTile.x < b.x + b.w && draftTile.x + draftTile.w > b.x &&
-      draftTile.y < b.y + b.h && draftTile.y + draftTile.h > b.y
-    )
-    if (overlap) { Alert.alert('重複', '既存のタイルと重なっています'); return }
-    setEditingBtn({ id: genId(), label: '', url: '', icon: 'link-outline', ...draftTile })
-    updateDraft(null)
+  const openAddModal = () => {
+    const pos = DEFAULT_POSITIONS[buttons.length] ?? { x: 0, y: 0, w: 9, h: 9 }
+    setEditingBtn({ id: genId(), label: '', url: '', code: '', icon: 'link-outline', action: 'url', ...pos })
     setModalVisible(true)
   }
 
-  // 辺ハンドルのレスポンダー（各辺の中央からドラッグでリサイズ）
-  const makeEdgeHandleResponders = (edge: 'top' | 'right' | 'bottom' | 'left') => ({
-    onStartShouldSetResponder: () => true,
-    onMoveShouldSetResponder: () => true,
-    onResponderGrant: () => setScrollEnabled(false),
-    onResponderMove: (e: any) => {
-      const dt = draftTileRef.current
-      if (!dt) return
-      const ev = e.nativeEvent
-      const cx = ev.clientX ?? ev.pageX
-      const cy = ev.clientY ?? ev.pageY
-      const domEl = Platform.OS === 'web' ? document.getElementById('reach-grid-area') : null
-      const r = domEl?.getBoundingClientRect()
-      const gx = r ? r.left : (getGridRect()?.x ?? 0)
-      const gy = r ? r.top : (getGridRect()?.y ?? 0)
-      const gw = r ? r.width : (getGridRect()?.w ?? 1)
-      const gh = r ? gw * (GRID_ROWS / GRID_COLS) : (getGridRect()?.h ?? 1)
-      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((cx - gx) / (gw / GRID_COLS))))
-      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((cy - gy) / (gh / GRID_ROWS))))
-      let { x, y, w, h } = dt
-      if (edge === 'top') {
-        const ny = Math.min(row, y + h - 1); h = y + h - ny; y = ny
-      } else if (edge === 'bottom') {
-        h = Math.max(1, row - y + 1)
-      } else if (edge === 'left') {
-        const nx = Math.min(col, x + w - 1); w = x + w - nx; x = nx
-      } else {
-        w = Math.max(1, col - x + 1)
-      }
-      updateDraft({ x, y, w, h })
-    },
-    onResponderRelease: () => setScrollEnabled(true),
-  })
+  const openEditModal = (btn: RichMenuButton) => {
+    setEditingBtn({ ...btn })
+    setModalVisible(true)
+  }
 
   const handleSaveBtn = () => {
     const action = editingBtn?.action ?? 'url'
     if (action === 'url' && !editingBtn?.url?.trim()) return
     if (action === 'code' && !editingBtn?.code?.trim()) return
-    const updated = { ...editingBtn, action, label: '', url: editingBtn.url?.trim() ?? '', code: editingBtn.code?.trim() ?? '' } as RichMenuButton
+    const updated = {
+      ...editingBtn,
+      action,
+      label: '',
+      url: editingBtn?.url?.trim() ?? '',
+      code: editingBtn?.code?.trim() ?? '',
+      x: editingBtn?.x ?? 0,
+      y: editingBtn?.y ?? 0,
+      w: editingBtn?.w ?? 9,
+      h: editingBtn?.h ?? 9,
+    } as RichMenuButton
+
+    // 重複チェック
+    const overlap = buttons.some(b => {
+      if (b.id === updated.id) return false
+      return updated.x < b.x + b.w && updated.x + updated.w > b.x &&
+             updated.y < b.y + b.h && updated.y + updated.h > b.y
+    })
+    if (overlap) { Alert.alert('重複', '既存のタイルと重なっています。位置やサイズを調整してください'); return }
+
     setButtons(prev => {
       const exists = prev.find(b => b.id === updated.id)
       return exists ? prev.map(b => b.id === updated.id ? updated : b) : [...prev, updated]
@@ -347,54 +288,6 @@ export default function RichMenuScreen() {
     )
   }
 
-  // ── グリッド座標取得ユーティリティ ──
-  // web: getElementById で確実にDOM要素を取得し getBoundingClientRect() で現在位置を返す
-  // native: measure() のキャッシュを使用
-  const getGridRect = (): { x: number; y: number; w: number; h: number } | null => {
-    if (Platform.OS === 'web') {
-      const el = document.getElementById('reach-grid-area')
-      if (el) {
-        const r = el.getBoundingClientRect()
-        return { x: r.left, y: r.top, w: r.width, h: r.height }
-      }
-    }
-    return gridRectRef.current.w > 1 ? gridRectRef.current : null
-  }
-
-  const onGridLayout = (e: any) => {
-    const { width, height } = e.nativeEvent.layout
-    gridSizeRef.current = { w: width, h: height }
-    if (Platform.OS !== 'web') {
-      gridRef.current?.measure((_: any, __: any, w: number, h: number, px: number, py: number) => {
-        gridRectRef.current = { x: px, y: py, w, h }
-      })
-    }
-  }
-
-  const onGridPress = (e: any) => {
-    const ev = e.nativeEvent
-    const { w: gw, h: gh } = gridSizeRef.current
-    if (gw <= 1) return
-
-    // locationX/Y = 要素相対座標（RN / RN Web 共通）、onLayout サイズと同じ座標系
-    const lx: number | undefined = ev.locationX ?? ev.offsetX
-    const ly: number | undefined = ev.locationY ?? ev.offsetY
-
-    let col: number, row: number
-    if (lx != null && ly != null) {
-      col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((lx / gw) * GRID_COLS)))
-      row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((ly / gh) * GRID_ROWS)))
-    } else {
-      const rect = getGridRect()
-      if (!rect) return
-      const cx = ev.clientX ?? ev.pageX
-      const cy = ev.clientY ?? ev.pageY
-      col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((cx - rect.x) / rect.w) * GRID_COLS)))
-      row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((cy - rect.y) / rect.h) * GRID_ROWS)))
-    }
-    handleCellPress(col, row)
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -407,7 +300,7 @@ export default function RichMenuScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView scrollEnabled={scrollEnabled} contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
 
         <View style={styles.card}>
           <View>
@@ -419,7 +312,7 @@ export default function RichMenuScreen() {
 
         <View style={styles.twoCol}>
 
-          {/* 左：グリッドエディタ */}
+          {/* 左：グリッドプレビュー + タイル一覧 */}
           <View style={[styles.leftCol, isWebDesktop && wideMode && { flex: 2 }]}>
 
             {/* パネル背景 */}
@@ -430,16 +323,9 @@ export default function RichMenuScreen() {
                   <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
                   <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
                     <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
-                    {Platform.OS === 'web'
-                      ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
-                      : null
-                    }
+                    {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />}
                     {Platform.OS !== 'web' && (
-                      <TouchableOpacity
-                        style={StyleSheet.absoluteFillObject}
-                        onPress={() => pickImageNative(setPanelBgImage)}
-                        disabled={uploading}
-                      />
+                      <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
                     )}
                   </View>
                   <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
@@ -452,26 +338,17 @@ export default function RichMenuScreen() {
                     ? <ActivityIndicator size="small" color={Colors.accent} />
                     : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
                   }
-                  {Platform.OS === 'web'
-                    ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
-                    : null
-                  }
+                  {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />}
                   {Platform.OS !== 'web' && (
-                    <TouchableOpacity
-                      style={StyleSheet.absoluteFillObject}
-                      onPress={() => pickImageNative(setPanelBgImage)}
-                      disabled={uploading}
-                    />
+                    <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
                   )}
                 </View>
               )}
             </View>
 
-            {/* グリッドエディタ */}
+            {/* グリッドプレビュー */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>
-                {draftTile ? 'コーナーをドラッグしてサイズ調整' : 'タップでタイル配置・編集'}
-              </Text>
+              <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>グリッドプレビュー</Text>
               {isWebDesktop && (
                 <TouchableOpacity style={styles.wideModeBtn} onPress={() => setWideMode(v => !v)}>
                   <Ionicons name={wideMode ? 'contract-outline' : 'expand-outline'} size={16} color={Colors.accent} />
@@ -485,110 +362,57 @@ export default function RichMenuScreen() {
                 <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
               )}
               <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-
-              {/* ref を持つ View でサイズ・位置を記録。タップは最前面の absoluteFill TouchableOpacity で受付 */}
-              <View
-                ref={gridRef}
-                id="reach-grid-area"
-                style={styles.gridArea}
-                onLayout={onGridLayout}
-              >
-                {/* 縦線 */}
+              <View style={styles.gridArea}>
                 {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
                   <View key={`v${i}`} pointerEvents="none" style={{
                     position: 'absolute', top: 0, bottom: 0,
                     left: `${(i / GRID_COLS) * 100}%` as any,
-                    width: StyleSheet.hairlineWidth,
-                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
                   }} />
                 ))}
-                {/* 横線 */}
                 {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
                   <View key={`h${i}`} pointerEvents="none" style={{
                     position: 'absolute', left: 0, right: 0,
                     top: `${(i / GRID_ROWS) * 100}%` as any,
-                    height: StyleSheet.hairlineWidth,
-                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
                   }} />
                 ))}
-                {/* 配置済みタイル */}
+                {/* タイルはタップで編集モーダルを開く */}
                 {buttons.map(btn => (
-                  <View key={btn.id} pointerEvents="none" style={{
-                    position: 'absolute',
-                    left: `${(btn.x / GRID_COLS) * 100}%` as any,
-                    top: `${(btn.y / GRID_ROWS) * 100}%` as any,
-                    width: `${(btn.w / GRID_COLS) * 100}%` as any,
-                    height: `${(btn.h / GRID_ROWS) * 100}%` as any,
-                    backgroundColor: `${Colors.accent}99`,
-                    borderWidth: 1.5, borderColor: Colors.accent,
-                    alignItems: 'center', justifyContent: 'center', gap: 2,
-                  }}>
-                    <Ionicons name={btn.icon as any} size={11} color="#fff" />
-                    <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
-                  </View>
-                ))}
-                {/* ドラフトタイル（黄色ハイライト） */}
-                {draftTile && (
-                  <View pointerEvents="none" style={{
-                    position: 'absolute',
-                    left: `${(draftTile.x / GRID_COLS) * 100}%` as any,
-                    top: `${(draftTile.y / GRID_ROWS) * 100}%` as any,
-                    width: `${(draftTile.w / GRID_COLS) * 100}%` as any,
-                    height: `${(draftTile.h / GRID_ROWS) * 100}%` as any,
-                    backgroundColor: 'rgba(255,220,0,0.3)',
-                    borderWidth: 2, borderColor: '#FFE000',
-                  }} />
-                )}
-                {/* タップ受付レイヤー: native のみ。web は上の DOM click リスナーが処理 */}
-                {Platform.OS !== 'web' && (
                   <TouchableOpacity
-                    activeOpacity={1}
-                    style={StyleSheet.absoluteFillObject}
-                    onPress={onGridPress}
-                  />
+                    key={btn.id}
+                    activeOpacity={0.75}
+                    onPress={() => openEditModal(btn)}
+                    style={{
+                      position: 'absolute',
+                      left: `${(btn.x / GRID_COLS) * 100}%` as any,
+                      top: `${(btn.y / GRID_ROWS) * 100}%` as any,
+                      width: `${(btn.w / GRID_COLS) * 100}%` as any,
+                      height: `${(btn.h / GRID_ROWS) * 100}%` as any,
+                      backgroundColor: `${Colors.accent}99`,
+                      borderWidth: 1.5, borderColor: Colors.accent,
+                      alignItems: 'center', justifyContent: 'center', gap: 2,
+                    }}
+                  >
+                    <Ionicons name={btn.icon as any} size={11} color="#fff" />
+                  </TouchableOpacity>
+                ))}
+                {buttons.length === 0 && (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>タイルを追加してください</Text>
+                  </View>
                 )}
-                {/* リサイズハンドル（辺の中央4点） */}
-                {draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
-                  const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
-                    : edge === 'right' ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
-                    : ((draftTile.x + draftTile.w / 2) / GRID_COLS) * 100
-                  const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
-                    : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
-                    : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
-                  return (
-                    <View
-                      key={edge}
-                      style={{
-                        position: 'absolute',
-                        left: `${lPct}%` as any,
-                        top: `${tPct}%` as any,
-                        width: 14, height: 14,
-                        backgroundColor: '#FFE000',
-                        borderWidth: 2, borderColor: '#fff',
-                        borderRadius: 7,
-                        transform: [{ translateX: -7 }, { translateY: -7 }],
-                        zIndex: 30,
-                      }}
-                      {...makeEdgeHandleResponders(edge)}
-                    />
-                  )
-                })}
               </View>
             </View>
 
-            {draftTile && (
-              <View style={styles.draftActions}>
-                <TouchableOpacity style={styles.cancelSelBtn} onPress={() => updateDraft(null)}>
-                  <Text style={styles.cancelSelText}>キャンセル</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmBtn} onPress={confirmDraft}>
-                  <Text style={styles.confirmBtnText}>確定</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* タイルを追加ボタン */}
+            <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
+              <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
+              <Text style={styles.addBtnText}>タイルを追加</Text>
+            </TouchableOpacity>
 
             <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
-              ※ URLには https:// から始まるリンクを入力してください。
+              ※ グリッドは27列×18行。タイルをタップすると編集できます。
             </Text>
           </View>
 
@@ -617,20 +441,6 @@ export default function RichMenuScreen() {
                     <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
                   )}
                   <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-                  {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
-                    <View key={`pv${i}`} pointerEvents="none" style={{
-                      position: 'absolute', top: 0, bottom: 0,
-                      left: `${(i / GRID_COLS) * 100}%` as any,
-                      width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)',
-                    }} />
-                  ))}
-                  {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
-                    <View key={`ph${i}`} pointerEvents="none" style={{
-                      position: 'absolute', left: 0, right: 0,
-                      top: `${(i / GRID_ROWS) * 100}%` as any,
-                      height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.06)',
-                    }} />
-                  ))}
                   {buttons.map(btn => (
                     <View key={btn.id} pointerEvents="none" style={{
                       position: 'absolute',
@@ -645,8 +455,6 @@ export default function RichMenuScreen() {
                       {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
                       {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
                       <Ionicons name={btn.icon as any} size={12} color="#FFF" />
-                      <View style={styles.previewSep} />
-                      <Text style={styles.previewLabel} numberOfLines={1}>{btn.label}</Text>
                     </View>
                   ))}
                   {buttons.length === 0 && (
@@ -685,17 +493,18 @@ export default function RichMenuScreen() {
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
-              {/* プレビュー */}
-              <View style={styles.previewWrap}>
-                <View style={styles.modalPreviewTile}>
-                  {editingBtn?.bgImage && (
-                    <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                  )}
-                  {editingBtn?.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none" />}
-                  <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={30} color="#FFF" />
-                  <View style={styles.tileSeparator} />
-                  <Text style={styles.tileLabel} numberOfLines={1}>{editingBtn?.label || 'ラベル'}</Text>
-                </View>
+
+              {/* 位置・サイズ（数値入力） */}
+              <Text style={styles.fieldLabel}>位置とサイズ（グリッド: 27列 × 18行）</Text>
+              <View style={styles.stepperGrid}>
+                <Stepper label="列（X）" value={editingBtn?.x ?? 0} min={0} max={GRID_COLS - 1}
+                  onChange={v => setEditingBtn(p => p ? { ...p, x: v } : p)} />
+                <Stepper label="行（Y）" value={editingBtn?.y ?? 0} min={0} max={GRID_ROWS - 1}
+                  onChange={v => setEditingBtn(p => p ? { ...p, y: v } : p)} />
+                <Stepper label="幅" value={editingBtn?.w ?? 9} min={1} max={GRID_COLS}
+                  onChange={v => setEditingBtn(p => p ? { ...p, w: v } : p)} />
+                <Stepper label="高さ" value={editingBtn?.h ?? 9} min={1} max={GRID_ROWS}
+                  onChange={v => setEditingBtn(p => p ? { ...p, h: v } : p)} />
               </View>
 
               {/* 背景画像 */}
@@ -706,22 +515,12 @@ export default function RichMenuScreen() {
                     <Image source={{ uri: editingBtn.bgImage }} style={styles.bgThumb} resizeMode="cover" />
                     <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
                       <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
-                      {Platform.OS === 'web'
-                        ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />
-                        : null
-                      }
+                      {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />}
                       {Platform.OS !== 'web' && (
-                        <TouchableOpacity
-                          style={StyleSheet.absoluteFillObject}
-                          onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))}
-                          disabled={uploading}
-                        />
+                        <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))} disabled={uploading} />
                       )}
                     </View>
-                    <TouchableOpacity
-                      style={[styles.bgBtn, styles.bgBtnDel]}
-                      onPress={() => setEditingBtn(p => p ? { ...p, bgImage: undefined } : p)}
-                    >
+                    <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setEditingBtn(p => p ? { ...p, bgImage: undefined } : p)}>
                       <Text style={styles.bgBtnDelText}>削除</Text>
                     </TouchableOpacity>
                   </>
@@ -731,16 +530,9 @@ export default function RichMenuScreen() {
                       ? <ActivityIndicator size="small" color={Colors.accent} />
                       : <><Ionicons name="image-outline" size={20} color={Colors.accent} /><Text style={styles.bgPickerText}>画像を選択</Text></>
                     }
-                    {Platform.OS === 'web'
-                      ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />
-                      : null
-                    }
+                    {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />}
                     {Platform.OS !== 'web' && (
-                      <TouchableOpacity
-                        style={StyleSheet.absoluteFillObject}
-                        onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))}
-                        disabled={uploading}
-                      />
+                      <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))} disabled={uploading} />
                     )}
                   </View>
                 )}
@@ -765,19 +557,15 @@ export default function RichMenuScreen() {
               <Text style={styles.fieldLabel}>アクション</Text>
               <View style={styles.actionTypeRow}>
                 {(['url', 'code'] as const).map(a => {
-                  const isActive = (editingBtn?.action ?? 'url') === a
+                  const isAct = (editingBtn?.action ?? 'url') === a
                   return (
                     <TouchableOpacity
                       key={a}
-                      style={[styles.actionTypeBtn, isActive && styles.actionTypeBtnActive]}
+                      style={[styles.actionTypeBtn, isAct && styles.actionTypeBtnActive]}
                       onPress={() => setEditingBtn(p => p ? { ...p, action: a } : p)}
                     >
-                      <Ionicons
-                        name={a === 'url' ? 'link-outline' : 'code-slash-outline'}
-                        size={16}
-                        color={isActive ? '#fff' : Colors.accent}
-                      />
-                      <Text style={[styles.actionTypeBtnText, isActive && { color: '#fff' }]}>
+                      <Ionicons name={a === 'url' ? 'link-outline' : 'code-slash-outline'} size={16} color={isAct ? '#fff' : Colors.accent} />
+                      <Text style={[styles.actionTypeBtnText, isAct && { color: '#fff' }]}>
                         {a === 'url' ? 'URLを開く' : 'コードを送信'}
                       </Text>
                     </TouchableOpacity>
@@ -817,10 +605,7 @@ export default function RichMenuScreen() {
 
               {/* 削除 */}
               {editingBtn?.id && buttons.some(b => b.id === editingBtn.id) && (
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDeleteBtn(editingBtn.id!)}
-                >
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteBtn(editingBtn.id!)}>
                   <Ionicons name="trash-outline" size={16} color="#E53E3E" />
                   <Text style={styles.deleteBtnText}>このタイルを削除</Text>
                 </TouchableOpacity>
@@ -876,13 +661,12 @@ const styles = StyleSheet.create({
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   wideModeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
   wideModeBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  // 27列×18行 → 横長 (aspectRatio = 27/18 = 1.5)
   gridArea: { aspectRatio: 27 / 18 },
-  draftActions: { flexDirection: 'row', gap: 8 },
-  cancelSelBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
-  cancelSelText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  confirmBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: Colors.accent },
-  confirmBtnText: { fontSize: 12, color: '#fff', fontWeight: '700' },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
+  },
+  addBtnText: { fontSize: 14, color: Colors.accent, fontWeight: '600' },
   note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
   phoneFrame: { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
   phoneHeader: {
@@ -911,8 +695,6 @@ const styles = StyleSheet.create({
   tileHandleArea: { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   previewTileArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
-  previewSep: { width: 16, height: 1.5, backgroundColor: Colors.accent, marginVertical: 3 },
-  previewLabel: { fontSize: 7, fontWeight: '600', textAlign: 'center', color: '#FFF' },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
@@ -924,13 +706,19 @@ const styles = StyleSheet.create({
   modalSave: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   modalBody: { padding: 16, gap: 10, paddingBottom: 40 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 8 },
-  previewWrap: { alignItems: 'center', paddingVertical: 8 },
-  modalPreviewTile: {
-    width: 110, aspectRatio: 1, overflow: 'hidden',
-    backgroundColor: '#2C2C2E', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 4,
+  stepperGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  stepper: {
+    width: '47%', backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, padding: 12, gap: 8,
   },
-  tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
-  tileLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFF' },
+  stepperLabel: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  stepperBtn: {
+    width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.background,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
+  },
+  stepperBtnText: { fontSize: 18, color: Colors.text, fontWeight: '600', lineHeight: 22 },
+  stepperValue: { fontSize: 20, fontWeight: '700', color: Colors.text, minWidth: 32, textAlign: 'center' },
   actionTypeRow: { flexDirection: 'row', gap: 8 },
   actionTypeBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
