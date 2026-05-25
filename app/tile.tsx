@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
-  Platform, Image, Animated, useWindowDimensions,
+  Platform, Image, Animated,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { router, useFocusEffect } from 'expo-router'
@@ -10,10 +10,12 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
 
-type TileButton = {
+type RichMenuButton = {
   id: string
   label: string
+  action: 'url' | 'code'
   url: string
+  code: string
   icon: string
   bgImage?: string
   x: number
@@ -50,8 +52,12 @@ const DEFAULT_POSITIONS = [
   { x: 18, y: 9, w: 9, h: 9 },
 ]
 
+// ── 画像アップロード ──────────────────────────────────────
+
 async function uploadImageNative(
-  userId: string, asset: ImagePicker.ImagePickerAsset, token: string,
+  userId: string,
+  asset: ImagePicker.ImagePickerAsset,
+  token: string,
 ): Promise<string | null> {
   const mimeType = asset.mimeType ?? 'image/jpeg'
   const rawExt = asset.uri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg'
@@ -76,15 +82,18 @@ async function uploadImageNative(
 }
 
 async function uploadFileWeb(
-  userId: string, file: File,
-  onSuccess: (url: string) => void, setUploading: (v: boolean) => void,
+  userId: string,
+  file: File,
+  onSuccess: (url: string) => void,
+  setUploading: (v: boolean) => void,
 ) {
   setUploading(true)
   try {
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
     const path = `tiles/${userId}/img_${Date.now()}.${ext}`
     const { error } = await supabase.storage
-      .from(BUCKET).upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
+      .from(BUCKET)
+      .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
     if (error) { Alert.alert('アップロードエラー', error.message); return }
     const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path)
     onSuccess(urlData.publicUrl)
@@ -99,9 +108,14 @@ function WebImageOverlay({ onFile }: { onFile: (file: File) => void }) {
   if (Platform.OS !== 'web') return null
   return (
     <label style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, cursor: 'pointer', zIndex: 10 } as any}>
-      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
         style={{ display: 'none' } as any}
-        onChange={(e: any) => { const file = e.target.files?.[0]; if (file) { onFile(file); e.target.value = '' } }}
+        onChange={(e: any) => {
+          const file = e.target.files?.[0]
+          if (file) { onFile(file); e.target.value = '' }
+        }}
       />
     </label>
   )
@@ -113,7 +127,7 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
     Animated.timing(anim, { toValue: value ? 1 : 0, duration: 200, useNativeDriver: false }).start()
   }, [value])
   const thumbX = anim.interpolate({ inputRange: [0, 1], outputRange: [3, 27] })
-  const trackBg = anim.interpolate({ inputRange: [0, 1], outputRange: ['#D1D5DB', Colors.accent] })
+  const trackBg = anim.interpolate({ inputRange: [0, 1], outputRange: ['#D1D5DB', '#028090'] })
   return (
     <TouchableOpacity onPress={() => onChange(!value)} activeOpacity={0.85}>
       <Animated.View style={[styles.toggleTrack, { backgroundColor: trackBg }]}>
@@ -123,56 +137,64 @@ function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v: boole
   )
 }
 
-export default function TileScreen() {
-  const { width } = useWindowDimensions()
-  const isMobile = width < 700
+// 数値ステッパー
+function Stepper({
+  value, min, max, onChange,
+}: { value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.stepperRow}>
+      <TouchableOpacity
+        style={[styles.stepperBtn, value <= min && { opacity: 0.3 }]}
+        onPress={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+      >
+        <Text style={styles.stepperBtnText}>−</Text>
+      </TouchableOpacity>
+      <Text style={styles.stepperValue}>{value}</Text>
+      <TouchableOpacity
+        style={[styles.stepperBtn, value >= max && { opacity: 0.3 }]}
+        onPress={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+      >
+        <Text style={styles.stepperBtnText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+// N〜M 範囲入力行
+function RangeRow({ label, unit, startVal, endVal, minStart, maxEnd, onChangeStart, onChangeEnd }: {
+  label: string; unit: string
+  startVal: number; endVal: number
+  minStart: number; maxEnd: number
+  onChangeStart: (v: number) => void
+  onChangeEnd: (v: number) => void
+}) {
+  return (
+    <View style={styles.rangeRow}>
+      <Text style={styles.rangeLabel}>{label}</Text>
+      <View style={styles.rangeInputs}>
+        <Stepper value={startVal} min={minStart} max={endVal} onChange={onChangeStart} />
+        <Text style={styles.rangeSep}>〜</Text>
+        <Stepper value={endVal} min={startVal} max={maxEnd} onChange={onChangeEnd} />
+        <Text style={styles.rangeUnit}>{unit}</Text>
+      </View>
+    </View>
+  )
+}
+
+export default function RichMenuScreen() {
   const [isActive, setIsActive] = useState(false)
-  const [buttons, setButtons] = useState<TileButton[]>([])
+  const [buttons, setButtons] = useState<RichMenuButton[]>([])
   const [panelBgImage, setPanelBgImage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
-  const [tileId, setTileId] = useState<string | null>(null)
+  const [menuId, setMenuId] = useState<string | null>(null)
   const [modalVisible, setModalVisible] = useState(false)
-  const [editingBtn, setEditingBtn] = useState<Partial<TileButton> | null>(null)
+  const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [draftTile, setDraftTile] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-  const [scrollEnabled, setScrollEnabled] = useState(true)
-  const [colFrom, setColFrom] = useState('1')
-  const [colTo, setColTo]     = useState('9')
-  const [rowFrom, setRowFrom] = useState('1')
-  const [rowTo, setRowTo]     = useState('9')
-  const gridRef = useRef<any>(null)
-  const gridRectRef = useRef({ x: 0, y: 0, w: 1, h: 1 })
-  const draftTileRef = useRef(draftTile)
-  draftTileRef.current = draftTile
-
-  const updateDraft = (v: typeof draftTile) => {
-    draftTileRef.current = v
-    setDraftTile(v)
-    if (v) {
-      setColFrom(String(v.x + 1))
-      setColTo(String(v.x + v.w))
-      setRowFrom(String(v.y + 1))
-      setRowTo(String(v.y + v.h))
-    }
-  }
-
-  const applyNumberInput = (cf: string, ct: string, rf: string, rt: string) => {
-    const c1 = Math.max(1, Math.min(GRID_COLS, parseInt(cf) || 1))
-    const c2 = Math.max(c1, Math.min(GRID_COLS, parseInt(ct) || c1))
-    const r1 = Math.max(1, Math.min(GRID_ROWS, parseInt(rf) || 1))
-    const r2 = Math.max(r1, Math.min(GRID_ROWS, parseInt(rt) || r1))
-    const next = { x: c1 - 1, y: r1 - 1, w: c2 - c1 + 1, h: r2 - r1 + 1 }
-    draftTileRef.current = next
-    setDraftTile(next)
-  }
-
-  const startMobileDraft = () => {
-    const x = 0, y = 0, w = 9, h = 9
-    setColFrom('1'); setColTo('9'); setRowFrom('1'); setRowTo('9')
-    updateDraft({ x, y, w, h })
-  }
+  const isWebDesktop = Platform.OS === 'web'
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -180,12 +202,12 @@ export default function TileScreen() {
     setUserId(user.id)
     const { data } = await supabase.from('rich_menus').select('*').eq('creator_id', user.id).single()
     if (data) {
-      setTileId(data.id)
+      setMenuId(data.id)
       setIsActive(data.is_active)
       const raw: any[] = data.buttons ?? []
       const normalized = raw.map((b, i) =>
         b.x != null ? b : { ...b, ...(DEFAULT_POSITIONS[i] ?? { x: 0, y: 0, w: 9, h: 9 }) }
-      ) as TileButton[]
+      ) as RichMenuButton[]
       setButtons(normalized)
       setPanelBgImage(data.panel_bg_image ?? null)
     }
@@ -198,74 +220,51 @@ export default function TileScreen() {
     if (!userId) return
     setSaving(true)
     const payload = { buttons, is_active: isActive, panel_bg_image: panelBgImage, updated_at: new Date().toISOString() }
-    if (tileId) {
-      await supabase.from('rich_menus').update(payload).eq('id', tileId)
+    if (menuId) {
+      await supabase.from('rich_menus').update(payload).eq('id', menuId)
     } else {
       const { data } = await supabase.from('rich_menus').insert({ creator_id: userId, ...payload }).select().single()
-      if (data) setTileId(data.id)
+      if (data) setMenuId(data.id)
     }
     setSaving(false)
     router.back()
   }
 
-  const getTileAt = useCallback((col: number, row: number) =>
-    buttons.find(b => col >= b.x && col < b.x + b.w && row >= b.y && row < b.y + b.h) ?? null
-  , [buttons])
-
-  const handleCellPress = useCallback((col: number, row: number) => {
-    const existing = getTileAt(col, row)
-    if (existing) {
-      updateDraft(null)
-      setEditingBtn({ ...existing })
-      setModalVisible(true)
-      return
-    }
-    updateDraft({ x: col, y: row, w: 1, h: 1 })
-  }, [getTileAt])
-
-  const confirmDraft = () => {
-    if (!draftTile) return
-    const overlap = buttons.some(b =>
-      draftTile.x < b.x + b.w && draftTile.x + draftTile.w > b.x &&
-      draftTile.y < b.y + b.h && draftTile.y + draftTile.h > b.y
-    )
-    if (overlap) { Alert.alert('重複', '既存のタイルと重なっています'); return }
-    setEditingBtn({ id: genId(), label: '', url: '', icon: 'link-outline', ...draftTile })
-    updateDraft(null)
+  const openAddModal = () => {
+    const pos = DEFAULT_POSITIONS[buttons.length] ?? { x: 0, y: 0, w: 9, h: 9 }
+    setEditingBtn({ id: genId(), label: '', url: '', code: '', icon: 'link-outline', action: 'url', ...pos })
     setModalVisible(true)
   }
 
-  const makeEdgeHandleResponders = (edge: 'top' | 'right' | 'bottom' | 'left') => ({
-    onStartShouldSetResponder: () => true,
-    onMoveShouldSetResponder: () => true,
-    onStartShouldSetResponderCapture: () => true,
-    onMoveShouldSetResponderCapture: () => true,
-    onResponderGrant: () => setScrollEnabled(false),
-    onResponderMove: (e: any) => {
-      const dt = draftTileRef.current
-      if (!dt) return
-      const { pageX, pageY } = e.nativeEvent
-      const { x: gx, y: gy, w: gw, h: gh } = gridRectRef.current
-      const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor((pageX - gx) / (gw / GRID_COLS))))
-      const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor((pageY - gy) / (gh / GRID_ROWS))))
-      let { x, y, w, h } = dt
-      if (edge === 'top') {
-        const ny = Math.min(row, y + h - 1); h = y + h - ny; y = ny
-      } else if (edge === 'bottom') {
-        h = Math.max(1, row - y + 1)
-      } else if (edge === 'left') {
-        const nx = Math.min(col, x + w - 1); w = x + w - nx; x = nx
-      } else {
-        w = Math.max(1, col - x + 1)
-      }
-      updateDraft({ x, y, w, h })
-    },
-    onResponderRelease: () => setScrollEnabled(true),
-  })
+  const openEditModal = (btn: RichMenuButton) => {
+    setEditingBtn({ ...btn })
+    setModalVisible(true)
+  }
 
   const handleSaveBtn = () => {
-    if (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) return
-    const updated = { ...editingBtn, label: editingBtn.label.trim(), url: editingBtn.url.trim() } as TileButton
+    const action = editingBtn?.action ?? 'url'
+    if (action === 'url' && !editingBtn?.url?.trim()) return
+    if (action === 'code' && !editingBtn?.code?.trim()) return
+    const updated = {
+      ...editingBtn,
+      action,
+      label: '',
+      url: editingBtn?.url?.trim() ?? '',
+      code: editingBtn?.code?.trim() ?? '',
+      x: editingBtn?.x ?? 0,
+      y: editingBtn?.y ?? 0,
+      w: editingBtn?.w ?? 9,
+      h: editingBtn?.h ?? 9,
+    } as RichMenuButton
+
+    // 重複チェック
+    const overlap = buttons.some(b => {
+      if (b.id === updated.id) return false
+      return updated.x < b.x + b.w && updated.x + updated.w > b.x &&
+             updated.y < b.y + b.h && updated.y + updated.h > b.y
+    })
+    if (overlap) { Alert.alert('重複', '既存のタイルと重なっています。位置やサイズを調整してください'); return }
+
     setButtons(prev => {
       const exists = prev.find(b => b.id === updated.id)
       return exists ? prev.map(b => b.id === updated.id ? updated : b) : [...prev, updated]
@@ -305,105 +304,6 @@ export default function TileScreen() {
     )
   }
 
-  const onGridLayout = () => {
-    gridRef.current?.measure((_: any, __: any, w: number, h: number, px: number, py: number) => {
-      gridRectRef.current = { x: px, y: py, w, h }
-    })
-  }
-
-  const onGridPress = (e: any) => {
-    const { pageX, pageY } = e.nativeEvent
-    const { x, y, w, h } = gridRectRef.current
-    const col = Math.min(GRID_COLS - 1, Math.max(0, Math.floor(((pageX - x) / w) * GRID_COLS)))
-    const row = Math.min(GRID_ROWS - 1, Math.max(0, Math.floor(((pageY - y) / h) * GRID_ROWS)))
-    handleCellPress(col, row)
-  }
-
-  // チャット風フラットプレビュー（compose と同スタイル）
-  const PhonePreview = () => (
-    <View style={styles.phoneFrame}>
-      {/* ヘッダー */}
-      <View style={styles.phoneHeader}>
-        <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
-        <View>
-          <Text style={styles.phoneHeaderName}>クリエイター名</Text>
-          <Text style={styles.phoneHeaderSub}>トーク画面</Text>
-        </View>
-      </View>
-      {/* チャットエリア（flex:1 でタイルを下に押し出す） */}
-      <View style={styles.phoneChatArea}>
-        <View style={styles.dateBadge}>
-          <Text style={styles.dateBadgeText}>{new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}</Text>
-        </View>
-        <View style={styles.bubbleRow}>
-          <View style={styles.bubbleAvatar}><Text style={styles.bubbleAvatarText}>R</Text></View>
-          <View style={styles.bubble}><Text style={styles.bubbleText}>こんにちは！</Text></View>
-        </View>
-        <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
-          <View style={[styles.bubble, styles.bubbleSelf]}>
-            <Text style={[styles.bubbleText, { color: '#FFF' }]}>よろしく！</Text>
-          </View>
-        </View>
-      </View>
-      {/* スペーサー：タイルパネルを下に固定 */}
-      <View style={{ flex: 1 }} />
-      {/* タイルパネル */}
-      <View style={styles.phoneTilePanel}>
-        <View style={styles.phoneTileHandle}>
-          <View style={styles.phoneTileHandleBar} />
-        </View>
-        <View style={styles.phoneTileGrid}>
-          {panelBgImage && (
-            <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
-          )}
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-          {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
-            <View key={`pv${i}`} pointerEvents="none" style={{
-              position: 'absolute', top: 0, bottom: 0,
-              left: `${(i / GRID_COLS) * 100}%` as any,
-              width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)',
-            }} />
-          ))}
-          {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
-            <View key={`ph${i}`} pointerEvents="none" style={{
-              position: 'absolute', left: 0, right: 0,
-              top: `${(i / GRID_ROWS) * 100}%` as any,
-              height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)',
-            }} />
-          ))}
-          {buttons.map(btn => (
-            <View key={btn.id} pointerEvents="none" style={{
-              position: 'absolute',
-              left: `${(btn.x / GRID_COLS) * 100}%` as any,
-              top: `${(btn.y / GRID_ROWS) * 100}%` as any,
-              width: `${(btn.w / GRID_COLS) * 100}%` as any,
-              height: `${(btn.h / GRID_ROWS) * 100}%` as any,
-              alignItems: 'center', justifyContent: 'center',
-              borderRightWidth: 0.5, borderBottomWidth: 0.5,
-              borderColor: 'rgba(255,255,255,0.15)', overflow: 'hidden',
-            }}>
-              {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-              {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
-              <Ionicons name={btn.icon as any} size={14} color="#FFF" />
-              <View style={{ width: 16, height: 1.5, backgroundColor: Colors.accent, marginVertical: 3 }} />
-              <Text style={{ fontSize: 9, fontWeight: '600', color: '#FFF', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
-            </View>
-          ))}
-          {buttons.length === 0 && (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
-            </View>
-          )}
-        </View>
-      </View>
-      {/* DMエリア */}
-      <View style={styles.phoneDmRow}>
-        <View style={styles.phoneDmField}><Text style={styles.phoneDmPlaceholder}>DMを送る...</Text></View>
-        <View style={styles.phoneDmSend}><Ionicons name="send" size={12} color="#FFF" /></View>
-      </View>
-    </View>
-  )
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -416,222 +316,171 @@ export default function TileScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* レイアウト：デスクトップは2カラム、モバイルは縦積み */}
-      <View style={[styles.bodyRow, isMobile && { flexDirection: 'column' }]}>
+      <ScrollView contentContainerStyle={styles.content}>
 
-        {/* 設定エリア */}
-        <ScrollView
-          style={[styles.leftPanel, isMobile && { borderRightWidth: 0 }]}
-          scrollEnabled={scrollEnabled}
-          contentContainerStyle={styles.leftContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* 表示切り替え */}
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.toggleLabel}>メニューを表示</Text>
-              <Text style={styles.toggleDesc}>トーク画面に表示</Text>
-            </View>
-            <ToggleSwitch value={isActive} onChange={setIsActive} />
+        <View style={styles.card}>
+          <View>
+            <Text style={styles.toggleLabel}>メニューを表示</Text>
+            <Text style={styles.toggleDesc}>トーク画面にタイルメニューを表示します</Text>
           </View>
+          <ToggleSwitch value={isActive} onChange={setIsActive} />
+        </View>
 
-          {/* パネル背景 */}
-          <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch' }]}>
-            <Text style={[styles.cardTitle, { marginBottom: 8 }]}>パネル背景</Text>
-            {panelBgImage ? (
-              <View style={styles.bgActions}>
-                <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
-                <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
-                  <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
-                  {Platform.OS === 'web'
-                    ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
-                    : null}
+        <View style={styles.twoCol}>
+
+          {/* 左：グリッドプレビュー + タイル一覧 */}
+          <View style={styles.leftCol}>
+
+            {/* パネル背景 */}
+            <View style={[styles.card, { marginHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
+              <Text style={[styles.cardTitle, { marginBottom: 10 }]}>パネル背景</Text>
+              {panelBgImage ? (
+                <View style={styles.bgActions}>
+                  <Image source={{ uri: panelBgImage }} style={styles.bgThumb} resizeMode="cover" />
+                  <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
+                    <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
+                    {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />}
+                    {Platform.OS !== 'web' && (
+                      <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
+                    )}
+                  </View>
+                  <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
+                    <Text style={styles.bgBtnDelText}>削除</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={[styles.bgPicker, { overflow: 'hidden' }]}>
+                  {uploading
+                    ? <ActivityIndicator size="small" color={Colors.accent} />
+                    : <><Ionicons name="image-outline" size={18} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
+                  }
+                  {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />}
                   {Platform.OS !== 'web' && (
                     <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
                   )}
                 </View>
-                <TouchableOpacity style={[styles.bgBtn, styles.bgBtnDel]} onPress={() => setPanelBgImage(null)}>
-                  <Text style={styles.bgBtnDelText}>削除</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={[styles.bgPicker, { overflow: 'hidden' }]}>
-                {uploading
-                  ? <ActivityIndicator size="small" color={Colors.accent} />
-                  : <><Ionicons name="image-outline" size={16} color={Colors.accent} /><Text style={styles.bgPickerText}>背景画像を選択</Text></>
-                }
-                {Platform.OS === 'web'
-                  ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, setPanelBgImage, setUploading)} />
-                  : null}
-                {Platform.OS !== 'web' && (
-                  <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(setPanelBgImage)} disabled={uploading} />
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* グリッドエディタ */}
-          <Text style={styles.sectionLabel}>
-            {draftTile ? (isMobile ? '範囲を数字で指定' : '辺をドラッグしてサイズ調整') : 'タップで配置・編集'}
-          </Text>
-
-          {/* モバイル：数字入力で範囲指定 */}
-          {isMobile && draftTile && (
-            <View style={styles.numInputCard}>
-              <View style={styles.numInputRow}>
-                <Text style={styles.numInputLabel}>列（左→右）</Text>
-                <TextInput style={styles.numInput} keyboardType="number-pad" value={colFrom}
-                  onChangeText={v => { setColFrom(v); applyNumberInput(v, colTo, rowFrom, rowTo) }} />
-                <Text style={styles.numInputSep}>〜</Text>
-                <TextInput style={styles.numInput} keyboardType="number-pad" value={colTo}
-                  onChangeText={v => { setColTo(v); applyNumberInput(colFrom, v, rowFrom, rowTo) }} />
-                <Text style={styles.numInputRange}>/ {GRID_COLS}</Text>
-              </View>
-              <View style={styles.numInputRow}>
-                <Text style={styles.numInputLabel}>行（上→下）</Text>
-                <TextInput style={styles.numInput} keyboardType="number-pad" value={rowFrom}
-                  onChangeText={v => { setRowFrom(v); applyNumberInput(colFrom, colTo, v, rowTo) }} />
-                <Text style={styles.numInputSep}>〜</Text>
-                <TextInput style={styles.numInput} keyboardType="number-pad" value={rowTo}
-                  onChangeText={v => { setRowTo(v); applyNumberInput(colFrom, colTo, rowFrom, v) }} />
-                <Text style={styles.numInputRange}>/ {GRID_ROWS}</Text>
-              </View>
-            </View>
-          )}
-
-          <View style={styles.gridWrapper}>
-            {panelBgImage && (
-              <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
-            )}
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-            <View ref={gridRef} style={styles.gridArea} onLayout={onGridLayout}>
-              {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
-                <View key={`v${i}`} pointerEvents="none" style={{
-                  position: 'absolute', top: 0, bottom: 0,
-                  left: `${(i / GRID_COLS) * 100}%` as any,
-                  width: StyleSheet.hairlineWidth,
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                }} />
-              ))}
-              {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
-                <View key={`h${i}`} pointerEvents="none" style={{
-                  position: 'absolute', left: 0, right: 0,
-                  top: `${(i / GRID_ROWS) * 100}%` as any,
-                  height: StyleSheet.hairlineWidth,
-                  backgroundColor: 'rgba(255,255,255,0.12)',
-                }} />
-              ))}
-              {buttons.map(btn => (
-                <View key={btn.id} pointerEvents="none" style={{
-                  position: 'absolute',
-                  left: `${(btn.x / GRID_COLS) * 100}%` as any,
-                  top: `${(btn.y / GRID_ROWS) * 100}%` as any,
-                  width: `${(btn.w / GRID_COLS) * 100}%` as any,
-                  height: `${(btn.h / GRID_ROWS) * 100}%` as any,
-                  backgroundColor: `${Colors.accent}99`,
-                  borderWidth: 1.5, borderColor: Colors.accent,
-                  alignItems: 'center', justifyContent: 'center', gap: 2,
-                }}>
-                  <Ionicons name={btn.icon as any} size={11} color="#fff" />
-                  <Text style={{ fontSize: 8, color: '#fff', fontWeight: '600', textAlign: 'center' }} numberOfLines={1}>{btn.label}</Text>
-                </View>
-              ))}
-              {draftTile && (
-                <View pointerEvents="none" style={{
-                  position: 'absolute',
-                  left: `${(draftTile.x / GRID_COLS) * 100}%` as any,
-                  top: `${(draftTile.y / GRID_ROWS) * 100}%` as any,
-                  width: `${(draftTile.w / GRID_COLS) * 100}%` as any,
-                  height: `${(draftTile.h / GRID_ROWS) * 100}%` as any,
-                  backgroundColor: 'rgba(255,220,0,0.3)',
-                  borderWidth: 2, borderColor: '#FFE000',
-                }} />
               )}
-              <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFillObject} onPress={onGridPress} />
+            </View>
 
-              {/* 辺ハンドル：デスクトップのみ */}
-              {!isMobile && draftTile && (['top', 'right', 'bottom', 'left'] as const).map(edge => {
-                const isHoriz = edge === 'top' || edge === 'bottom'
-                const lPct = edge === 'left' ? (draftTile.x / GRID_COLS) * 100
-                  : edge === 'right' ? ((draftTile.x + draftTile.w) / GRID_COLS) * 100
-                  : ((draftTile.x + draftTile.w / 2) / GRID_COLS) * 100
-                const tPct = edge === 'top' ? (draftTile.y / GRID_ROWS) * 100
-                  : edge === 'bottom' ? ((draftTile.y + draftTile.h) / GRID_ROWS) * 100
-                  : ((draftTile.y + draftTile.h / 2) / GRID_ROWS) * 100
-                // 視覚的なカプセルサイズ（小さめに）
-                const capW = isHoriz ? 20 : 6
-                const capH = isHoriz ? 6 : 20
-                // タッチエリアは最低44px確保
-                const touchW = Math.max(capW, 44)
-                const touchH = Math.max(capH, 44)
-                return (
-                  <View
-                    key={edge}
+            {/* グリッドプレビュー */}
+            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>グリッドプレビュー</Text>
+
+            <View style={styles.gridWrapper}>
+              {panelBgImage && (
+                <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+              )}
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+              <View style={styles.gridArea}>
+                {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
+                  <View key={`v${i}`} pointerEvents="none" style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    left: `${(i / GRID_COLS) * 100}%` as any,
+                    width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
+                  }} />
+                ))}
+                {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
+                  <View key={`h${i}`} pointerEvents="none" style={{
+                    position: 'absolute', left: 0, right: 0,
+                    top: `${(i / GRID_ROWS) * 100}%` as any,
+                    height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
+                  }} />
+                ))}
+                {/* タイルはタップで編集モーダルを開く */}
+                {buttons.map(btn => (
+                  <TouchableOpacity
+                    key={btn.id}
+                    activeOpacity={0.75}
+                    onPress={() => openEditModal(btn)}
                     style={{
                       position: 'absolute',
-                      left: `${lPct}%` as any,
-                      top: `${tPct}%` as any,
-                      width: touchW, height: touchH,
-                      transform: [{ translateX: -(touchW / 2) }, { translateY: -(touchH / 2) }],
-                      zIndex: 30,
-                      alignItems: 'center', justifyContent: 'center',
+                      left: `${(btn.x / GRID_COLS) * 100}%` as any,
+                      top: `${(btn.y / GRID_ROWS) * 100}%` as any,
+                      width: `${(btn.w / GRID_COLS) * 100}%` as any,
+                      height: `${(btn.h / GRID_ROWS) * 100}%` as any,
+                      backgroundColor: `${Colors.accent}99`,
+                      borderWidth: 1.5, borderColor: Colors.accent,
+                      alignItems: 'center', justifyContent: 'center', gap: 2,
                     }}
-                    {...makeEdgeHandleResponders(edge)}
                   >
-                    <View style={{
-                      width: capW, height: capH,
-                      backgroundColor: '#FFE000',
-                      borderWidth: 2, borderColor: '#fff',
-                      borderRadius: 6,
-                    }} />
+                    <Ionicons name={btn.icon as any} size={11} color="#fff" />
+                  </TouchableOpacity>
+                ))}
+                {buttons.length === 0 && (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>タイルを追加してください</Text>
                   </View>
-                )
-              })}
+                )}
+              </View>
             </View>
-          </View>
 
-          {draftTile && (
-            <View style={styles.draftActions}>
-              <TouchableOpacity style={styles.cancelSelBtn} onPress={() => updateDraft(null)}>
-                <Text style={styles.cancelSelText}>キャンセル</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmBtn} onPress={confirmDraft}>
-                <Text style={styles.confirmBtnText}>確定</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* モバイル：新規タイル追加ボタン */}
-          {isMobile && !draftTile && (
-            <TouchableOpacity style={styles.addTileBtn} onPress={startMobileDraft}>
+            {/* タイルを追加ボタン */}
+            <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
               <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
-              <Text style={styles.addTileBtnText}>タイルを追加</Text>
+              <Text style={styles.addBtnText}>タイルを追加</Text>
             </TouchableOpacity>
-          )}
 
-          <Text style={styles.note}>※ URLには https:// から始まるリンクを入力してください。</Text>
+            <Text style={[styles.note, { marginHorizontal: 0, textAlign: 'left' }]}>
+              ※ タイルをタップすると編集できます。
+            </Text>
+          </View>
 
-          {/* モバイル：プレビューをScrollView内に（スクロールで見える） */}
-          {isMobile && (
-            <View style={styles.mobilePreviewInner}>
-              <Text style={styles.previewLabel}>プレビュー</Text>
-              <PhonePreview />
-            </View>
-          )}
-        </ScrollView>
-
-        {/* デスクトップのみ右パネルにプレビュー */}
-        {!isMobile && (
-          <View style={styles.rightPanel}>
-            <Text style={styles.previewLabel}>プレビュー</Text>
-            <View style={{ flex: 1 }}>
-              <PhonePreview />
+          {/* 右：プレビュー */}
+          <View style={styles.rightCol}>
+            <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>プレビュー</Text>
+            <View style={[styles.phoneFrame, { marginHorizontal: 0 }]}>
+              <View style={styles.phoneHeader}>
+                <View style={styles.phoneAvatar}><Text style={styles.phoneAvatarText}>R</Text></View>
+                <Text style={styles.phoneName}>クリエイター名</Text>
+              </View>
+              <View style={styles.phoneChat}>
+                <View style={styles.bubbleRow}>
+                  <View style={styles.bubble}><Text style={styles.bubbleText}>こんにちは！</Text></View>
+                </View>
+                <View style={[styles.bubbleRow, { justifyContent: 'flex-end' }]}>
+                  <View style={[styles.bubble, styles.bubbleSelf]}>
+                    <Text style={[styles.bubbleText, { color: '#FFF' }]}>よろしくお願いします</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.previewPanel}>
+                <View style={styles.tileHandleArea}><View style={styles.tileHandleBar} /></View>
+                <View style={styles.previewTileArea}>
+                  {panelBgImage && (
+                    <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
+                  )}
+                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+                  {buttons.map(btn => (
+                    <View key={btn.id} pointerEvents="none" style={{
+                      position: 'absolute',
+                      left: `${(btn.x / GRID_COLS) * 100}%` as any,
+                      top: `${(btn.y / GRID_ROWS) * 100}%` as any,
+                      width: `${(btn.w / GRID_COLS) * 100}%` as any,
+                      height: `${(btn.h / GRID_ROWS) * 100}%` as any,
+                      alignItems: 'center', justifyContent: 'center',
+                      borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)',
+                      overflow: 'hidden',
+                    }}>
+                      {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+                      {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
+                      <Ionicons name={btn.icon as any} size={12} color="#FFF" />
+                    </View>
+                  ))}
+                  {buttons.length === 0 && (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <View style={styles.phoneDmArea}>
+                <View style={styles.phoneDmField}><Text style={styles.phoneDmPlaceholder}>メッセージ</Text></View>
+                <View style={styles.phoneDmSend}><Ionicons name="arrow-up" size={13} color="#FFF" /></View>
+              </View>
             </View>
           </View>
-        )}
 
-
-      </View>
+        </View>
+      </ScrollView>
 
       {/* タイル編集モーダル */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
@@ -642,24 +491,47 @@ export default function TileScreen() {
                 <Text style={styles.modalCancel}>キャンセル</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>タイル設定</Text>
-              <TouchableOpacity onPress={handleSaveBtn} disabled={!editingBtn?.label?.trim() || !editingBtn?.url?.trim()}>
-                <Text style={[styles.modalSave, (!editingBtn?.label?.trim() || !editingBtn?.url?.trim()) && { opacity: 0.4 }]}>完了</Text>
+              <TouchableOpacity onPress={handleSaveBtn} disabled={
+                (editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim()
+              }>
+                <Text style={[styles.modalSave, (
+                  (editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim()
+                ) && { opacity: 0.4 }]}>完了</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.modalBody}>
-              {/* プレビュー */}
-              <View style={styles.previewWrap}>
-                <View style={styles.modalPreviewTile}>
-                  {editingBtn?.bgImage && (
-                    <Image source={{ uri: editingBtn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                  )}
-                  {editingBtn?.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} pointerEvents="none" />}
-                  <Ionicons name={(editingBtn?.icon ?? 'link-outline') as any} size={30} color="#FFF" />
-                  <View style={styles.tileSeparator} />
-                  <Text style={styles.tileLabel} numberOfLines={1}>{editingBtn?.label || 'ラベル'}</Text>
-                </View>
-              </View>
+
+              {/* 位置・サイズ（範囲入力） */}
+              <Text style={styles.fieldLabel}>位置とサイズ</Text>
+              <RangeRow
+                label="列"
+                unit="列"
+                startVal={(editingBtn?.x ?? 0) + 1}
+                endVal={(editingBtn?.x ?? 0) + (editingBtn?.w ?? 9)}
+                minStart={1}
+                maxEnd={GRID_COLS}
+                onChangeStart={v => setEditingBtn(p => {
+                  if (!p) return p
+                  const end = (p.x ?? 0) + (p.w ?? 9)
+                  return { ...p, x: v - 1, w: end - (v - 1) }
+                })}
+                onChangeEnd={v => setEditingBtn(p => p ? { ...p, w: v - (p.x ?? 0) } : p)}
+              />
+              <RangeRow
+                label="行"
+                unit="行"
+                startVal={(editingBtn?.y ?? 0) + 1}
+                endVal={(editingBtn?.y ?? 0) + (editingBtn?.h ?? 9)}
+                minStart={1}
+                maxEnd={GRID_ROWS}
+                onChangeStart={v => setEditingBtn(p => {
+                  if (!p) return p
+                  const end = (p.y ?? 0) + (p.h ?? 9)
+                  return { ...p, y: v - 1, h: end - (v - 1) }
+                })}
+                onChangeEnd={v => setEditingBtn(p => p ? { ...p, h: v - (p.y ?? 0) } : p)}
+              />
 
               {/* 背景画像 */}
               <Text style={styles.fieldLabel}>背景画像</Text>
@@ -669,9 +541,7 @@ export default function TileScreen() {
                     <Image source={{ uri: editingBtn.bgImage }} style={styles.bgThumb} resizeMode="cover" />
                     <View style={[styles.bgBtn, { overflow: 'hidden' }]}>
                       <Text style={styles.bgBtnText}>{uploading ? '...' : '変更'}</Text>
-                      {Platform.OS === 'web'
-                        ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />
-                        : null}
+                      {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />}
                       {Platform.OS !== 'web' && (
                         <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))} disabled={uploading} />
                       )}
@@ -686,9 +556,7 @@ export default function TileScreen() {
                       ? <ActivityIndicator size="small" color={Colors.accent} />
                       : <><Ionicons name="image-outline" size={20} color={Colors.accent} /><Text style={styles.bgPickerText}>画像を選択</Text></>
                     }
-                    {Platform.OS === 'web'
-                      ? <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />
-                      : null}
+                    {Platform.OS === 'web' && <WebImageOverlay onFile={f => uploadFileWeb(userId!, f, url => setEditingBtn(p => p ? { ...p, bgImage: url } : p), setUploading)} />}
                     {Platform.OS !== 'web' && (
                       <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => pickImageNative(url => setEditingBtn(p => p ? { ...p, bgImage: url } : p))} disabled={uploading} />
                     )}
@@ -711,28 +579,55 @@ export default function TileScreen() {
                 ))}
               </View>
 
-              {/* ラベル */}
-              <Text style={styles.fieldLabel}>ラベル</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="例: 公式サイト"
-                placeholderTextColor={Colors.textLight}
-                value={editingBtn?.label ?? ''}
-                onChangeText={text => setEditingBtn(p => p ? { ...p, label: text } : p)}
-                maxLength={12}
-              />
+              {/* アクション種別 */}
+              <Text style={styles.fieldLabel}>アクション</Text>
+              <View style={styles.actionTypeRow}>
+                {(['url', 'code'] as const).map(a => {
+                  const isAct = (editingBtn?.action ?? 'url') === a
+                  return (
+                    <TouchableOpacity
+                      key={a}
+                      style={[styles.actionTypeBtn, isAct && styles.actionTypeBtnActive]}
+                      onPress={() => setEditingBtn(p => p ? { ...p, action: a } : p)}
+                    >
+                      <Ionicons name={a === 'url' ? 'link-outline' : 'code-slash-outline'} size={16} color={isAct ? '#fff' : Colors.accent} />
+                      <Text style={[styles.actionTypeBtnText, isAct && { color: '#fff' }]}>
+                        {a === 'url' ? 'URLを開く' : 'コードを送信'}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
 
-              {/* URL */}
-              <Text style={styles.fieldLabel}>リンク先URL</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="https://example.com"
-                placeholderTextColor={Colors.textLight}
-                value={editingBtn?.url ?? ''}
-                onChangeText={text => setEditingBtn(p => p ? { ...p, url: text } : p)}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
+              {(editingBtn?.action ?? 'url') === 'url' ? (
+                <>
+                  <Text style={styles.fieldLabel}>リンク先URL</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="https://example.com"
+                    placeholderTextColor={Colors.textLight}
+                    value={editingBtn?.url ?? ''}
+                    onChangeText={text => setEditingBtn(p => p ? { ...p, url: text } : p)}
+                    autoCapitalize="none"
+                    keyboardType="url"
+                  />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.fieldLabel}>送信コード</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="タップ時に自動送信するテキスト（例: #注文 / 予約希望）"
+                    placeholderTextColor={Colors.textLight}
+                    value={editingBtn?.code ?? ''}
+                    onChangeText={text => setEditingBtn(p => p ? { ...p, code: text } : p)}
+                    autoCapitalize="none"
+                  />
+                  <Text style={[styles.fieldLabel, { color: Colors.accent, fontWeight: '500', textTransform: 'none', letterSpacing: 0 }]}>
+                    ユーザーがこのボタンを押すと、コードが自動でDMに送信されます
+                  </Text>
+                </>
+              )}
 
               {/* 削除 */}
               {editingBtn?.id && buttons.some(b => b.id === editingBtn.id) && (
@@ -760,139 +655,70 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   saveButton: { width: 40, alignItems: 'flex-end' },
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
-
-  bodyRow: { flex: 1, flexDirection: 'row' },
-  mobilePreviewInner: { marginTop: 8, height: 320 },
-  addTileBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    borderWidth: 1.5, borderColor: Colors.accent, borderRadius: 10,
-    paddingVertical: 12, marginTop: 4,
-  },
-  addTileBtnText: { fontSize: 14, fontWeight: '700', color: Colors.accent },
-  numInputCard: {
-    backgroundColor: Colors.white, borderRadius: 10,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 12, gap: 10,
-  },
-  numInputRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  numInputLabel: { fontSize: 12, color: Colors.textLight, fontWeight: '600', width: 80 },
-  numInput: {
-    borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
-    width: 44, paddingVertical: 6, paddingHorizontal: 8,
-    fontSize: 15, color: Colors.text, textAlign: 'center',
-    backgroundColor: Colors.background,
-  },
-  numInputSep: { fontSize: 14, color: Colors.textLight },
-  numInputRange: { fontSize: 11, color: Colors.textLight, marginLeft: 2 },
-
-  // 左パネル
-  leftPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
-  leftContent: { padding: 12, paddingBottom: 40, gap: 10 },
-
-  // 右パネル（フラットプレビュー）
-  rightPanel: {
-    width: 320,
-    backgroundColor: Colors.background,
-    paddingTop: 16,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
-    gap: 8,
-    borderLeftWidth: 1,
-    borderLeftColor: Colors.border,
-  },
-  previewLabel: { fontSize: 13, fontWeight: '700', color: Colors.textLight },
-
-  // compose と同スタイルのフラットフレーム
-  phoneFrame: {
-    flex: 1, backgroundColor: '#F0F0F0', borderRadius: 16, overflow: 'hidden',
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  phoneHeader: {
-    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  phoneAvatar: {
-    width: 34, height: 34, borderRadius: 7,
-    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
-  },
-  phoneAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
-  phoneHeaderName: { fontSize: 13, fontWeight: '700', color: Colors.text },
-  phoneHeaderSub: { fontSize: 10, color: Colors.textLight },
-  phoneChatArea: { padding: 12, gap: 8 },
-  dateBadge: { alignItems: 'center', marginVertical: 4 },
-  dateBadgeText: {
-    fontSize: 11, color: Colors.textLight,
-    backgroundColor: 'rgba(0,0,0,0.08)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10,
-  },
-  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  bubbleAvatar: {
-    width: 30, height: 30, borderRadius: 6,
-    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
-  },
-  bubbleAvatarText: { fontSize: 12, fontWeight: '700', color: Colors.white },
-  bubble: {
-    backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
-  },
-  bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
-  bubbleText: { fontSize: 13, color: Colors.text, lineHeight: 20, padding: 10 },
-  phoneTilePanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
-  phoneTileHandle: {
-    alignItems: 'center', paddingVertical: 6,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
-  },
-  phoneTileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
-  phoneTileGrid: { aspectRatio: 27 / 18, overflow: 'hidden' },
-  phoneDmRow: {
-    backgroundColor: Colors.white,
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 10, paddingVertical: 8,
-    borderTopWidth: 1, borderTopColor: Colors.border,
-  },
-  phoneDmField: {
-    flex: 1, height: 34, borderRadius: 17,
-    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
-    paddingHorizontal: 12, justifyContent: 'center',
-  },
-  phoneDmPlaceholder: { fontSize: 13, color: Colors.textLight },
-  phoneDmSend: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-
-  // 設定カード
+  content: { paddingTop: 16, paddingBottom: 40, gap: 12 },
   card: {
-    backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
-    padding: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderRadius: 16, borderWidth: 1, borderColor: Colors.border,
+    padding: 16, marginHorizontal: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12,
   },
-  cardTitle: { fontSize: 13, fontWeight: '700', color: Colors.text },
-  toggleLabel: { fontSize: 13, fontWeight: '600', color: Colors.text },
-  toggleDesc: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  toggleLabel: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  toggleDesc: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   toggleTrack: { width: 54, height: 30, borderRadius: 15, justifyContent: 'center' },
   toggleThumb: {
     width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF',
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 2,
   },
-  bgActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  bgThumb: { width: 40, height: 40, borderRadius: 6 },
-  bgBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
-  bgBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  bgActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  bgThumb: { width: 48, height: 48, borderRadius: 8 },
+  bgBtn: { paddingHorizontal: 13, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
+  bgBtnText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   bgBtnDel: { borderColor: '#E53E3E' },
-  bgBtnDelText: { fontSize: 12, color: '#E53E3E', fontWeight: '600' },
+  bgBtnDelText: { fontSize: 13, color: '#E53E3E', fontWeight: '600' },
   bgPicker: {
-    height: 38, borderRadius: 8, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    flex: 1, height: 44, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  bgPickerText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  sectionLabel: { fontSize: 10, color: Colors.textLight },
+  bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
+  twoCol: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, alignItems: 'flex-start' },
+  leftCol: { flex: 1, gap: 10 },
+  rightCol: { flex: 1 },
+  sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   gridArea: { aspectRatio: 27 / 18 },
-  draftActions: { flexDirection: 'row', gap: 8 },
-  cancelSelBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.accent },
-  cancelSelText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
-  confirmBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.accent },
-  confirmBtnText: { fontSize: 12, color: '#fff', fontWeight: '700' },
-  note: { fontSize: 10, color: Colors.textLight, lineHeight: 16 },
-
-  // モーダル
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: Colors.accent, borderStyle: 'dashed',
+  },
+  addBtnText: { fontSize: 14, color: Colors.accent, fontWeight: '600' },
+  note: { fontSize: 11, color: Colors.textLight, lineHeight: 18, textAlign: 'center', marginHorizontal: 16 },
+  phoneFrame: { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
+  phoneHeader: {
+    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  phoneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  phoneAvatarText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  phoneName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  phoneChat: { backgroundColor: Colors.background, paddingHorizontal: 12, paddingVertical: 5, gap: 5 },
+  bubbleRow: { flexDirection: 'row' },
+  bubble: {
+    backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
+  },
+  bubbleSelf: { backgroundColor: Colors.accent, borderTopLeftRadius: 14, borderTopRightRadius: 4 },
+  bubbleText: { fontSize: 11, color: Colors.text, lineHeight: 18, paddingHorizontal: 8, paddingVertical: 5 },
+  phoneDmArea: {
+    backgroundColor: Colors.white, flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 10, paddingVertical: 7, borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  phoneDmField: { flex: 1, height: 30, borderRadius: 15, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, justifyContent: 'center' },
+  phoneDmPlaceholder: { fontSize: 11, color: Colors.textLight },
+  phoneDmSend: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
+  previewPanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
+  tileHandleArea: { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  previewTileArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
@@ -904,13 +730,28 @@ const styles = StyleSheet.create({
   modalSave: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   modalBody: { padding: 16, gap: 10, paddingBottom: 40 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 8 },
-  previewWrap: { alignItems: 'center', paddingVertical: 8 },
-  modalPreviewTile: {
-    width: 120, aspectRatio: 1, overflow: 'hidden',
-    backgroundColor: '#2C2C2E', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 4,
+  rangeRow: {
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, padding: 14, gap: 10,
   },
-  tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
-  tileLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center', color: '#FFF' },
+  rangeLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight },
+  rangeInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rangeSep: { fontSize: 16, color: Colors.textLight, fontWeight: '500' },
+  rangeUnit: { fontSize: 13, color: Colors.textLight, fontWeight: '600', marginLeft: 4 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepperBtn: {
+    width: 34, height: 34, borderRadius: 8, backgroundColor: Colors.background,
+    borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center',
+  },
+  stepperBtnText: { fontSize: 18, color: Colors.text, fontWeight: '600', lineHeight: 22 },
+  stepperValue: { fontSize: 18, fontWeight: '700', color: Colors.text, minWidth: 28, textAlign: 'center' },
+  actionTypeRow: { flexDirection: 'row', gap: 8 },
+  actionTypeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: Colors.accent,
+  },
+  actionTypeBtnActive: { backgroundColor: Colors.accent },
+  actionTypeBtnText: { fontSize: 13, fontWeight: '600', color: Colors.accent },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: {
     width: '18%', aspectRatio: 1, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
