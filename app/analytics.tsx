@@ -85,20 +85,20 @@ function BarChart({
 }: { data: number[]; color: string; width: number; height?: number }) {
   if (data.length === 0 || width < 10) return null
   const max = Math.max(...data, 1)
-  const gap = 5
-  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 2)
-  const maxH = height - 8
+  const gap = 6
+  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 4)
+  const maxH = height - 12
   return (
     <Svg width={width} height={height}>
       <Line x1={0} y1={height - 4} x2={width} y2={height - 4}
-        stroke={Colors.border} strokeWidth={1} />
+        stroke={Colors.border} strokeWidth={1.5} />
       {data.map((v, i) => {
-        const barH = Math.max((v / max) * maxH, 2)
+        const barH = Math.max((v / max) * maxH, 3)
         return (
           <Rect key={i}
             x={i * (barW + gap)} y={height - barH - 4}
             width={barW} height={barH}
-            rx={3} fill={color} opacity={v === 0 ? 0.2 : 0.85}
+            rx={4} fill={color} opacity={v === 0 ? 0.15 : 0.88}
           />
         )
       })}
@@ -350,7 +350,7 @@ export default function AnalyticsScreen() {
               </View>
             </View>
             {chartW > 0 && (
-              <BarChart data={likeSeries} color={Colors.button} width={chartW} height={90} />
+              <BarChart data={likeSeries} color={Colors.button} width={chartW} height={100} />
             )}
           </View>
         )}
@@ -428,21 +428,21 @@ const styles = StyleSheet.create({
   followerCard: {
     flex: 1, borderRadius: 12, padding: 10, gap: 2, justifyContent: 'center', alignItems: 'flex-start',
   },
-  followerValue: { fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  followerLabel: { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
+  followerValue: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  followerLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
   accentCard: { backgroundColor: Colors.accent, borderColor: Colors.accent },
 
   statGrid: { flex: 3, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   miniCard: {
     width: '47%', backgroundColor: Colors.white, borderRadius: 10,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 9, gap: 1,
+    padding: 12, gap: 2,
   },
-  miniIconWrap: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  miniValue: { fontSize: 17, fontWeight: '800', color: Colors.text },
-  miniLabel: { fontSize: 9, color: Colors.textLight, fontWeight: '600' },
-  miniLimitText: { fontSize: 9, color: Colors.textLight, fontWeight: '400' },
-  miniProgressBg: { height: 3, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden', marginTop: 3 },
+  miniIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  miniValue: { fontSize: 22, fontWeight: '800', color: Colors.text },
+  miniLabel: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
+  miniLimitText: { fontSize: 10, color: Colors.textLight, fontWeight: '400' },
+  miniProgressBg: { height: 3, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden', marginTop: 4 },
   miniProgressFill: { height: 3, backgroundColor: Colors.button, borderRadius: 2 },
 
   // ── チャートカード ──
