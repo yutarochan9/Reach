@@ -258,35 +258,55 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* ── 上部 2×2 スタットグリッド ── */}
-        <View style={styles.statGrid}>
-          <View style={[styles.miniCard, styles.accentCard]}>
+        {/* ── 上部: フォロワー(flex:1) ＋ 4分割グリッド(flex:3) ── */}
+        <View style={styles.topRow}>
+          {/* フォロワーカード（縦長・細い） */}
+          <View style={[styles.followerCard, styles.accentCard]}>
             <View style={[styles.miniIconWrap, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-              <Ionicons name="people" size={15} color="#fff" />
+              <Ionicons name="people" size={13} color="#fff" />
             </View>
-            <Text style={[styles.miniValue, { color: '#fff' }]}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
-            <Text style={[styles.miniLabel, { color: 'rgba(255,255,255,0.8)' }]}>フォロワー</Text>
+            <Text style={styles.followerValue}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
+            <Text style={styles.followerLabel}>フォロワー</Text>
           </View>
-          <View style={styles.miniCard}>
-            <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.button}20` }]}>
-              <Ionicons name="eye-outline" size={15} color={Colors.button} />
+
+          {/* 4分割グリッド（flex:3） */}
+          <View style={styles.statGrid}>
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.button}20` }]}>
+                <Ionicons name="eye-outline" size={13} color={Colors.button} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.totalReads ?? 0).toLocaleString()}</Text>
+              <Text style={styles.miniLabel}>累計閲覧</Text>
             </View>
-            <Text style={styles.miniValue}>{(stats?.totalReads ?? 0).toLocaleString()}</Text>
-            <Text style={styles.miniLabel}>累計閲覧</Text>
-          </View>
-          <View style={styles.miniCard}>
-            <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
-              <Ionicons name="heart-outline" size={15} color={Colors.accent} />
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
+                <Ionicons name="heart-outline" size={13} color={Colors.accent} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.totalLikes ?? 0).toLocaleString()}</Text>
+              <Text style={styles.miniLabel}>累計いいね</Text>
             </View>
-            <Text style={styles.miniValue}>{(stats?.totalLikes ?? 0).toLocaleString()}</Text>
-            <Text style={styles.miniLabel}>累計いいね</Text>
-          </View>
-          <View style={styles.miniCard}>
-            <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
-              <Ionicons name="radio-outline" size={15} color={Colors.accent} />
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
+                <Ionicons name="radio-outline" size={13} color={Colors.accent} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.totalBroadcasts ?? 0).toLocaleString()}</Text>
+              <Text style={styles.miniLabel}>累計配信</Text>
             </View>
-            <Text style={styles.miniValue}>{(stats?.totalBroadcasts ?? 0).toLocaleString()}</Text>
-            <Text style={styles.miniLabel}>累計配信</Text>
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.button}20` }]}>
+                <Ionicons name="calendar-outline" size={13} color={Colors.button} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.monthlyBroadcasts ?? 0).toLocaleString()}{isFree ? <Text style={styles.miniLimitText}>/{FREE_LIMIT}</Text> : ''}</Text>
+              <Text style={styles.miniLabel}>今月の配信</Text>
+              {isFree && (
+                <View style={styles.miniProgressBg}>
+                  <View style={[styles.miniProgressFill,
+                    { width: `${monthlyPct}%` as any },
+                    monthlyNearLimit && { backgroundColor: '#E53E3E' },
+                  ]} />
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -316,46 +336,22 @@ export default function AnalyticsScreen() {
           </View>
         )}
 
-        {/* ── いいね棒グラフ ＋ 今月配信カード ── */}
+        {/* ── いいね棒グラフ ── */}
         {chartData.length >= 2 && (
-          <View style={styles.row2}>
-            <View style={[styles.chartCard, { flex: 1 }]}>
-              <View style={styles.chartHeader}>
-                <View>
-                  <Text style={styles.chartTitle}>いいね数</Text>
-                  <Text style={styles.chartSub}>直近 {chartData.length} 配信</Text>
-                </View>
-                <View style={[styles.chartBadge, { backgroundColor: `${Colors.button}15` }]}>
-                  <Ionicons name="heart-outline" size={12} color={Colors.button} />
-                  <Text style={[styles.chartBadgeText, { color: Colors.button }]}>いいね</Text>
-                </View>
+          <View style={styles.chartCard}>
+            <View style={styles.chartHeader}>
+              <View>
+                <Text style={styles.chartTitle}>いいね数</Text>
+                <Text style={styles.chartSub}>直近 {chartData.length} 配信</Text>
               </View>
-              {chartW > 0 && (
-                <BarChart data={likeSeries} color={Colors.button} width={chartW / 2} height={90} />
-              )}
+              <View style={[styles.chartBadge, { backgroundColor: `${Colors.button}15` }]}>
+                <Ionicons name="heart-outline" size={12} color={Colors.button} />
+                <Text style={[styles.chartBadgeText, { color: Colors.button }]}>いいね</Text>
+              </View>
             </View>
-
-            {/* 今月配信カード */}
-            <View style={styles.monthCard}>
-              <Text style={styles.monthNumber}>{stats?.monthlyBroadcasts ?? 0}</Text>
-              <Text style={styles.monthLabel}>今月の配信</Text>
-              {isFree && (
-                <>
-                  <View style={styles.monthBar}>
-                    <View style={[styles.monthBarFill,
-                      { width: `${monthlyPct}%` as any },
-                      monthlyNearLimit && { backgroundColor: '#E53E3E' },
-                    ]} />
-                  </View>
-                  <Text style={styles.monthLimitText}>上限 {FREE_LIMIT} 回</Text>
-                  {monthlyNearLimit && (
-                    <TouchableOpacity onPress={() => router.push('/plan' as any)} style={styles.upgradeBtn}>
-                      <Text style={styles.upgradeBtnText}>アップグレード</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-            </View>
+            {chartW > 0 && (
+              <BarChart data={likeSeries} color={Colors.button} width={chartW} height={90} />
+            )}
           </View>
         )}
 
@@ -427,17 +423,27 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   content: { padding: 16, gap: 12, paddingBottom: 48 },
 
-  // ── 2×2 スタットグリッド ──
-  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  miniCard: {
-    width: '47%', backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border,
-    padding: 14, gap: 2,
+  // ── 上部レイアウト ──
+  topRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
+  followerCard: {
+    flex: 1, borderRadius: 12, padding: 10, gap: 2, justifyContent: 'center', alignItems: 'flex-start',
   },
+  followerValue: { fontSize: 18, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  followerLabel: { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
   accentCard: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  miniIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  miniValue: { fontSize: 24, fontWeight: '800', color: Colors.text },
-  miniLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
+
+  statGrid: { flex: 3, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  miniCard: {
+    width: '47%', backgroundColor: Colors.white, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: 9, gap: 1,
+  },
+  miniIconWrap: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  miniValue: { fontSize: 17, fontWeight: '800', color: Colors.text },
+  miniLabel: { fontSize: 9, color: Colors.textLight, fontWeight: '600' },
+  miniLimitText: { fontSize: 9, color: Colors.textLight, fontWeight: '400' },
+  miniProgressBg: { height: 3, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden', marginTop: 3 },
+  miniProgressFill: { height: 3, backgroundColor: Colors.button, borderRadius: 2 },
 
   // ── チャートカード ──
   chartCard: {
@@ -456,22 +462,6 @@ const styles = StyleSheet.create({
   xLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   xLabel: { fontSize: 9, color: Colors.textLight, flex: 1, textAlign: 'center' },
 
-  // ── 行2（いいねチャート＋今月カード） ──
-  row2: { flexDirection: 'row', gap: 10 },
-  monthCard: {
-    width: 120, backgroundColor: Colors.text, borderRadius: 16,
-    padding: 16, gap: 6, justifyContent: 'center',
-  },
-  monthNumber: { fontSize: 34, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  monthLabel: { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
-  monthBar: { height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden', marginTop: 4 },
-  monthBarFill: { height: 4, backgroundColor: Colors.button, borderRadius: 2 },
-  monthLimitText: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
-  upgradeBtn: {
-    marginTop: 4, backgroundColor: Colors.accent,
-    borderRadius: 8, paddingVertical: 5, paddingHorizontal: 8, alignItems: 'center',
-  },
-  upgradeBtnText: { fontSize: 9, color: '#fff', fontWeight: '700' },
 
   // ── テーブル ──
   tableCard: {
