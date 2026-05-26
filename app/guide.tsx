@@ -7,7 +7,8 @@ const STEPS = [
   { step: '1', title: 'アカウントを作成する', desc: 'メールアドレスとパスワードで登録します。登録後すぐに使い始められます。', icon: 'person-add-outline' as const },
   { step: '2', title: 'クリエイターをフォローする', desc: 'お気に入りのクリエイターのプロフィールページからフォローします。フォロー後、配信が届くようになります。', icon: 'heart-outline' as const },
   { step: '3', title: '配信を受け取る', desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像・動画など様々な形式に対応しています。', icon: 'notifications-outline' as const },
-  { step: '4', title: 'DMで直接やり取りする', desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。', icon: 'chatbubble-ellipses-outline' as const },
+  { step: '4', title: '配信にいいねとコメントをしてみよう', desc: '配信メッセージを長押しするといいね・コメントができます。クリエイターに気持ちを伝えてみましょう。', icon: 'heart-circle-outline' as const },
+  { step: '5', title: 'DMで直接やり取りする', desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。', icon: 'chatbubble-ellipses-outline' as const },
 ]
 
 const TOOLS = [
