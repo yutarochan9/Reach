@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Animated, PanResponder, Platform, Alert } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -144,6 +145,17 @@ export default function TalkScreen() {
   const [dmItems, setDmItems] = useState<DmItem[]>([])
   const [followingOpen, setFollowingOpen] = useState(true)
   const [dmOpen, setDmOpen] = useState(true)
+
+  // 開閉状態を永続化
+  useEffect(() => {
+    AsyncStorage.multiGet(['talk_following_open', 'talk_dm_open']).then(pairs => {
+      const fo = pairs[0][1]; const do_ = pairs[1][1]
+      if (fo !== null) setFollowingOpen(fo === 'true')
+      if (do_ !== null) setDmOpen(do_ === 'true')
+    }).catch(() => {})
+  }, [])
+  useEffect(() => { AsyncStorage.setItem('talk_following_open', String(followingOpen)).catch(() => {}) }, [followingOpen])
+  useEffect(() => { AsyncStorage.setItem('talk_dm_open', String(dmOpen)).catch(() => {}) }, [dmOpen])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
