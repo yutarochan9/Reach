@@ -84,7 +84,7 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   })
 }
 
-const SKIP_SAVE = ['/(auth)', '/onboarding']
+const SKIP_SAVE = ['/(auth)', '/onboarding', '/talk/', '/creator/', '/im/', '/broadcast-thread/']
 const isRestorable = (p: string) =>
   p && p !== '/' && !SKIP_SAVE.some(s => p.startsWith(s))
 
