@@ -700,6 +700,7 @@ export default function TalkDetailScreen() {
 
   return (
     <View style={styles.outerWrap}>
+      {RightPanel}
       <KeyboardAvoidingView
         style={[styles.container, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -748,14 +749,13 @@ export default function TalkDetailScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
-      {RightPanel}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   outerWrap: { flex: 1, flexDirection: 'row', backgroundColor: Colors.background },
-  container: { flex: 1, backgroundColor: Colors.background, maxWidth: isWeb ? 680 : undefined, width: '100%', borderRightWidth: isWeb ? 1 : 0, borderRightColor: Colors.border },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
     paddingTop: isWeb ? 12 : 56, paddingHorizontal: 16, paddingBottom: 12,
@@ -773,9 +773,9 @@ const styles = StyleSheet.create({
   headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   rightPanel: {
-    width: 260,
+    width: 280,
     backgroundColor: Colors.header,
-    borderLeftWidth: 1, borderLeftColor: Colors.border,
+    borderRightWidth: 1, borderRightColor: Colors.border,
   },
   rightPanelHeader: {
     paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16,
