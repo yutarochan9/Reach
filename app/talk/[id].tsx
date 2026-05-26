@@ -55,6 +55,8 @@ export default function TalkDetailScreen() {
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
   const [richMenuLoading, setRichMenuLoading] = useState(true)
+  const [tileVisible, setTileVisible] = useState(false)
+  const tileLoadedRef = useRef(0)
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -207,6 +209,44 @@ export default function TalkDetailScreen() {
   }, [senderId])
 
   useEffect(() => { load() }, [load])
+
+  // richMenu が確定したら画像を事前ロードし、全部揃ったら一斉表示
+  useEffect(() => {
+    if (richMenuLoading) return
+    if (!richMenu || !richMenu.buttons?.length) {
+      setTileVisible(false)
+      return
+    }
+    const imgUrls = richMenu.buttons
+      .map((b: any) => b.bgImage)
+      .filter(Boolean) as string[]
+    const panelBg = richMenu.panel_bg_image
+    const allUrls = panelBg ? [panelBg, ...imgUrls] : imgUrls
+
+    if (allUrls.length === 0) {
+      setTileVisible(true)
+      return
+    }
+    tileLoadedRef.current = 0
+    setTileVisible(false)
+    allUrls.forEach(url => {
+      if (isWeb && typeof window !== 'undefined') {
+        const img = new window.Image()
+        img.onload = img.onerror = () => {
+          tileLoadedRef.current++
+          if (tileLoadedRef.current >= allUrls.length) setTileVisible(true)
+        }
+        img.src = url
+      } else {
+        Image.prefetch(url)
+          .catch(() => {})
+          .finally(() => {
+            tileLoadedRef.current++
+            if (tileLoadedRef.current >= allUrls.length) setTileVisible(true)
+          })
+      }
+    })
+  }, [richMenu, richMenuLoading])
 
   useEffect(() => {
     if (!myId || !senderId) return
@@ -521,9 +561,7 @@ export default function TalkDetailScreen() {
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
 
-  const TilePanel = richMenuLoading ? (
-    <View style={styles.tileSkeleton} />
-  ) : richMenu && normalizedButtons.length > 0 ? (
+  const TilePanel = tileVisible && richMenu && normalizedButtons.length > 0 ? (
     <View style={[
       styles.tileContainer,
       isWeb && richMenu.panel_bg_image
@@ -862,7 +900,6 @@ const styles = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
   tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
-  tileSkeleton: { height: 28, backgroundColor: Colors.background },
   panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   tileHandle: {
     alignItems: 'center', paddingVertical: 7,
