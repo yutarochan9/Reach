@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert,
 } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -139,6 +139,22 @@ export default function BroadcastThreadScreen() {
     setTimeout(() => listRef.current?.scrollToEnd(), 200)
   }
 
+  const removeComment = (list: Comment[], id: string): Comment[] =>
+    list.filter(c => c.id !== id).map(c => ({ ...c, replies: removeComment(c.replies, id) }))
+
+  const handleDeleteComment = (comment: Comment) => {
+    Alert.alert('コメントを削除', 'このコメントを削除しますか？', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除', style: 'destructive',
+        onPress: async () => {
+          await supabase.from('messages').delete().eq('id', comment.id)
+          setComments(prev => removeComment(prev, comment.id))
+        },
+      },
+    ])
+  }
+
   const toggleReplies = (commentId: string) => {
     setExpandedReplies(prev => {
       const next = new Set(prev)
@@ -177,7 +193,11 @@ export default function BroadcastThreadScreen() {
     const descendants = isReply ? [] : getDescendants(comment)
     return (
       <View key={comment.id}>
-        <View style={[styles.commentRow, isReply && styles.commentRowReply]}>
+        <TouchableOpacity
+          activeOpacity={1}
+          onLongPress={() => comment.is_mine && handleDeleteComment(comment)}
+          style={[styles.commentRow, isReply && styles.commentRowReply]}
+        >
           <View style={[styles.commentAvatar, isCreator && styles.commentAvatarCreator]}>
             {comment.sender_avatar
               ? <Image source={{ uri: comment.sender_avatar }} style={styles.commentAvatarImg} />
@@ -216,7 +236,7 @@ export default function BroadcastThreadScreen() {
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </TouchableOpacity>
 
         {!isReply && expanded && (
           <View style={styles.repliesWrap}>

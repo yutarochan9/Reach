@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Alert,
 } from 'react-native'
 import { router } from 'expo-router'
 import { useTalkContext } from '../contexts/TalkContext'
@@ -313,6 +313,28 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
               <Ionicons name="return-down-forward-outline" size={22} color={Colors.text} />
               <Text style={styles.popupBtnText}>返信する</Text>
             </TouchableOpacity>
+            {longPressMsg?.sender_id === myId && (
+              <TouchableOpacity
+                style={styles.popupBtn}
+                onPress={() => {
+                  const msg = longPressMsg
+                  setLongPressMsg(null)
+                  Alert.alert('メッセージを削除', 'このメッセージを削除しますか？', [
+                    { text: 'キャンセル', style: 'cancel' },
+                    {
+                      text: '削除', style: 'destructive',
+                      onPress: async () => {
+                        await supabase.from('messages').delete().eq('id', msg.id)
+                        setMessages(prev => prev.filter(m => m.id !== msg.id))
+                      },
+                    },
+                  ])
+                }}
+              >
+                <Ionicons name="trash-outline" size={22} color="#E53E3E" />
+                <Text style={[styles.popupBtnText, { color: '#E53E3E' }]}>削除</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </Pressable>
       </Modal>
