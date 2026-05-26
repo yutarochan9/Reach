@@ -269,11 +269,11 @@ export default function AnalyticsScreen() {
   const readSeries = chartData.map(b => b.read_count)
   const likeSeries = chartData.map(b => b.like_count)
 
-  const statItems = [
-    { label: 'フォロワー', value: stats?.followerCount ?? 0, icon: 'people-outline' as const, color: C.accent },
-    { label: '累計閲覧', value: stats?.totalReads ?? 0, icon: 'eye-outline' as const, color: C.button },
-    { label: '累計いいね', value: stats?.totalLikes ?? 0, icon: 'heart-outline' as const, color: C.accent },
-    { label: '累計配信', value: stats?.totalBroadcasts ?? 0, icon: 'radio-outline' as const, color: C.button },
+  const subItems = [
+    { label: '累計閲覧', value: stats?.totalReads ?? 0, icon: 'eye-outline' as const, color: C.accent },
+    { label: '累計いいね', value: stats?.totalLikes ?? 0, icon: 'heart-outline' as const, color: C.button },
+    { label: '累計配信', value: stats?.totalBroadcasts ?? 0, icon: 'radio-outline' as const, color: C.accent },
+    { label: 'フォロー中', value: stats?.followingCount ?? 0, icon: 'person-add-outline' as const, color: C.button },
   ]
 
   return (
@@ -288,17 +288,26 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={s.content}>
 
-        {/* ── 4つの数値カード ── */}
-        <View style={s.grid2}>
-          {statItems.map(item => (
-            <View key={item.label} style={s.statCard}>
-              <View style={s.statIconRow}>
-                <Ionicons name={item.icon} size={14} color={item.color} />
-                <Text style={[s.statLabel, { color: item.color }]}>{item.label}</Text>
-              </View>
-              <Text style={s.statNum}>{item.value.toLocaleString()}</Text>
+        {/* ── 左：フォロワー大 / 右：4つのサブ stat ── */}
+        <View style={s.topRow}>
+          <View style={s.followerCard}>
+            <View style={s.statIconRow}>
+              <Ionicons name="people-outline" size={14} color={C.accent} />
+              <Text style={[s.statLabel, { color: C.accent }]}>フォロワー</Text>
             </View>
-          ))}
+            <Text style={s.followerNum}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
+          </View>
+          <View style={s.subGrid}>
+            {subItems.map(item => (
+              <View key={item.label} style={s.subCard}>
+                <View style={s.statIconRow}>
+                  <Ionicons name={item.icon} size={11} color={item.color} />
+                  <Text style={[s.subLabel, { color: item.color }]}>{item.label}</Text>
+                </View>
+                <Text style={s.subNum}>{item.value.toLocaleString()}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         {/* ── 今月の配信（無料プランのみリング表示） ── */}
@@ -425,14 +434,24 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   content: { padding: 14, gap: 12, paddingBottom: 48 },
 
-  grid2: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statCard: {
-    width: '47.5%',
+  topRow: { flexDirection: 'row', gap: 10 },
+  followerCard: {
+    flex: 1,
     backgroundColor: C.card, borderRadius: 14,
     borderWidth: 1, borderColor: C.border,
-    padding: 14, gap: 6,
+    padding: 14, gap: 8, justifyContent: 'center',
   },
-  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  followerNum: { fontSize: 36, fontWeight: '800', color: C.text, letterSpacing: -1 },
+  subGrid: { flex: 2, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  subCard: {
+    width: '47%',
+    backgroundColor: C.card, borderRadius: 12,
+    borderWidth: 1, borderColor: C.border,
+    padding: 10, gap: 4,
+  },
+  subLabel: { fontSize: 10, fontWeight: '600' },
+  subNum: { fontSize: 20, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
+  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statLabel: { fontSize: 12, fontWeight: '600' },
   statNum: { fontSize: 30, fontWeight: '800', color: C.text, letterSpacing: -1 },
 
