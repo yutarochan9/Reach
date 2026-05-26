@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
-import Svg, { Polyline, Circle, Rect, G, Line, Text as SvgText } from 'react-native-svg'
+import Svg, { Polyline, Circle, Rect, G, Line, Path, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -15,7 +15,7 @@ type Broadcast = {
   like_count: number
   reply_count: number
   group_id: string | null
-  block_count: number  // グループ内のブロック数（1=単体配信）
+  block_count: number
 }
 
 type Stats = {
@@ -30,82 +30,95 @@ type Stats = {
 
 const FREE_LIMIT = 50
 
-// ── 折れ線グラフ ──────────────────────────────────────────
-function LineChart({
-  data, color, width, height = 90,
-}: { data: number[]; color: string; width: number; height?: number }) {
+// ── グラデーション付き折れ線グラフ ──────────────────────────
+function AreaChart({
+  data, color, width, height = 100, gradId,
+}: { data: number[]; color: string; width: number; height?: number; gradId: string }) {
   if (data.length < 2 || width < 10) return null
   const max = Math.max(...data, 1)
   const min = Math.min(...data, 0)
   const range = max - min || 1
-  const pX = 8, pY = 10
+  const pX = 4, pY = 8
   const w = width - pX * 2
-  const h = height - pY * 2 - 20 // space for x labels
-  const pts = data.map((v, i) =>
-    `${pX + (i / (data.length - 1)) * w},${pY + (1 - (v - min) / range) * h}`
-  ).join(' ')
+  const h = height - pY * 2
+  const pts = data.map((v, i) => ({
+    x: pX + (i / (data.length - 1)) * w,
+    y: pY + (1 - (v - min) / range) * h,
+  }))
+  const linePts = pts.map(p => `${p.x},${p.y}`).join(' ')
+  const areaPath = [
+    `M ${pts[0].x} ${pts[0].y}`,
+    ...pts.slice(1).map(p => `L ${p.x} ${p.y}`),
+    `L ${pts[pts.length - 1].x} ${pY + h}`,
+    `L ${pts[0].x} ${pY + h}`,
+    'Z',
+  ].join(' ')
+
   return (
     <Svg width={width} height={height}>
-      {/* Y axis grid lines */}
+      <Defs>
+        <SvgLinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={color} stopOpacity="0.25" />
+          <Stop offset="1" stopColor={color} stopOpacity="0" />
+        </SvgLinearGradient>
+      </Defs>
       {[0, 0.5, 1].map((t, i) => (
-        <Line
-          key={i}
-          x1={pX} y1={pY + (1 - t) * h}
-          x2={width - pX} y2={pY + (1 - t) * h}
-          stroke={Colors.border} strokeWidth={1}
-          strokeDasharray="3,3"
+        <Line key={i}
+          x1={pX} y1={pY + t * h} x2={width - pX} y2={pY + t * h}
+          stroke={Colors.border} strokeWidth={1} strokeDasharray="4,4"
         />
       ))}
-      <Polyline
-        points={pts}
-        fill="none"
-        stroke={color}
-        strokeWidth={2.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <Path d={areaPath} fill={`url(#${gradId})`} />
+      <Polyline points={linePts} fill="none" stroke={color} strokeWidth={2.5}
+        strokeLinecap="round" strokeLinejoin="round" />
+      {pts.map((p, i) => (
+        <Circle key={i} cx={p.x} cy={p.y} r={3.5}
+          fill="#fff" stroke={color} strokeWidth={2} />
+      ))}
+    </Svg>
+  )
+}
+
+// ── 棒グラフ ────────────────────────────────────────────────
+function BarChart({
+  data, color, width, height = 90,
+}: { data: number[]; color: string; width: number; height?: number }) {
+  if (data.length === 0 || width < 10) return null
+  const max = Math.max(...data, 1)
+  const gap = 5
+  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 2)
+  const maxH = height - 8
+  return (
+    <Svg width={width} height={height}>
+      <Line x1={0} y1={height - 4} x2={width} y2={height - 4}
+        stroke={Colors.border} strokeWidth={1} />
       {data.map((v, i) => {
-        const cx = pX + (i / (data.length - 1)) * w
-        const cy = pY + (1 - (v - min) / range) * h
+        const barH = Math.max((v / max) * maxH, 2)
         return (
-          <G key={i}>
-            <Circle cx={cx} cy={cy} r={4} fill={Colors.white} stroke={color} strokeWidth={2} />
-          </G>
+          <Rect key={i}
+            x={i * (barW + gap)} y={height - barH - 4}
+            width={barW} height={barH}
+            rx={3} fill={color} opacity={v === 0 ? 0.2 : 0.85}
+          />
         )
       })}
     </Svg>
   )
 }
 
-// ── 棒グラフ ──────────────────────────────────────────────
-function BarChart({
-  data, color, width, height = 90,
-}: { data: number[]; color: string; width: number; height?: number }) {
-  if (data.length === 0 || width < 10) return null
+// ── ミニ折れ線（ヒーローカード用） ───────────────────────────
+function MiniLine({ data, color, width, height = 40 }: { data: number[]; color: string; width: number; height: number }) {
+  if (data.length < 2 || width < 10) return null
   const max = Math.max(...data, 1)
-  const gap = 6
-  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 2)
-  const maxH = height - 8
+  const min = Math.min(...data, 0)
+  const range = max - min || 1
+  const pts = data.map((v, i) =>
+    `${(i / (data.length - 1)) * width},${height - ((v - min) / range) * (height - 4) - 2}`
+  ).join(' ')
   return (
-    <Svg width={width} height={height}>
-      {/* baseline */}
-      <Line x1={0} y1={height - 4} x2={width} y2={height - 4} stroke={Colors.border} strokeWidth={1} />
-      <G>
-        {data.map((v, i) => {
-          const barH = Math.max((v / max) * maxH, 2)
-          const x = i * (barW + gap)
-          const y = height - barH - 4
-          return (
-            <Rect
-              key={i}
-              x={x} y={y}
-              width={barW} height={barH}
-              rx={3} fill={color}
-              opacity={v === 0 ? 0.25 : 0.9}
-            />
-          )
-        })}
-      </G>
+    <Svg width={width} height={height} style={{ opacity: 0.6 }}>
+      <Polyline points={pts} fill="none" stroke={color} strokeWidth={2}
+        strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   )
 }
@@ -115,6 +128,7 @@ export default function AnalyticsScreen() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [loading, setLoading] = useState(true)
   const [chartW, setChartW] = useState(0)
+  const [rightW, setRightW] = useState(0)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -164,7 +178,6 @@ export default function AnalyticsScreen() {
     const totalReads = Object.values(readMap).reduce((a, b) => a + b, 0)
     const totalLikes = Object.values(likeMap).reduce((a, b) => a + b, 0)
 
-    // group_idでまとめる（同じgroup_idを持つブロックを1エントリに集約）
     const groupMap = new Map<string, any[]>()
     const soloList: any[] = []
     for (const b of (bcs ?? [])) {
@@ -177,38 +190,24 @@ export default function AnalyticsScreen() {
     }
 
     const enriched: Broadcast[] = []
-
-    // グループ配信：先頭ブロック(block_order最小)を代表とし、統計を合算
     for (const [, blocks] of groupMap) {
       blocks.sort((a: any, b: any) => (a.block_order ?? 0) - (b.block_order ?? 0))
-      const representative = blocks[0]
+      const rep = blocks[0]
       enriched.push({
-        id: representative.id,
-        content: representative.content,
-        created_at: representative.created_at,
+        id: rep.id, content: rep.content, created_at: rep.created_at,
         read_count: blocks.reduce((s: number, b: any) => s + (readMap[b.id] ?? 0), 0),
         like_count: blocks.reduce((s: number, b: any) => s + (likeMap[b.id] ?? 0), 0),
         reply_count: blocks.reduce((s: number, b: any) => s + (replyMap[b.id] ?? 0), 0),
-        group_id: representative.group_id,
-        block_count: blocks.length,
+        group_id: rep.group_id, block_count: blocks.length,
       })
     }
-
-    // 単体配信
     for (const b of soloList) {
       enriched.push({
-        id: b.id,
-        content: b.content,
-        created_at: b.created_at,
-        read_count: readMap[b.id] ?? 0,
-        like_count: likeMap[b.id] ?? 0,
-        reply_count: replyMap[b.id] ?? 0,
-        group_id: null,
-        block_count: 1,
+        id: b.id, content: b.content, created_at: b.created_at,
+        read_count: readMap[b.id] ?? 0, like_count: likeMap[b.id] ?? 0,
+        reply_count: replyMap[b.id] ?? 0, group_id: null, block_count: 1,
       })
     }
-
-    // 日時降順にソート
     enriched.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     setStats({
@@ -216,8 +215,7 @@ export default function AnalyticsScreen() {
       followingCount: followingCount ?? 0,
       totalBroadcasts: (bcs ?? []).length,
       monthlyBroadcasts: monthlyCount ?? 0,
-      totalReads,
-      totalLikes,
+      totalReads, totalLikes,
       plan: (profile as any)?.plan ?? 'free',
     })
     setBroadcasts(enriched)
@@ -230,8 +228,7 @@ export default function AnalyticsScreen() {
     const d = new Date(iso)
     return `${d.getMonth() + 1}/${d.getDate()}`
   }
-
-  const truncate = (text: string, len = 40) =>
+  const truncate = (text: string, len = 32) =>
     text.length > len ? text.slice(0, len) + '…' : text
 
   if (loading) {
@@ -246,10 +243,10 @@ export default function AnalyticsScreen() {
   const monthlyPct = isFree ? Math.min(((stats?.monthlyBroadcasts ?? 0) / FREE_LIMIT) * 100, 100) : 100
   const monthlyNearLimit = isFree && (stats?.monthlyBroadcasts ?? 0) >= FREE_LIMIT * 0.8
 
-  // グラフ用データ（古い順に最大10件）
   const chartData = [...broadcasts].reverse().slice(-10)
   const readSeries = chartData.map(b => b.read_count)
   const likeSeries = chartData.map(b => b.like_count)
+  const miniData = readSeries.length >= 2 ? readSeries : [0, 0]
 
   return (
     <View style={styles.container}>
@@ -263,64 +260,71 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* フォロワー・フォロー */}
-        <View style={styles.row2}>
-          <View style={[styles.statCard, { flex: 1 }]}>
-            <Ionicons name="people-outline" size={20} color={Colors.accent} />
-            <Text style={styles.statValue}>{stats?.followerCount.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>フォロワー</Text>
-            {!BETA_MODE && isFree && <Text style={styles.statSub}>上限500人</Text>}
+        {/* ── 上部ヒーローエリア ── */}
+        <View style={styles.heroRow}>
+          {/* フォロワーカード（アクセントカラー） */}
+          <View style={styles.heroCard}
+            onLayout={e => setRightW(e.nativeEvent.layout.width - 32)}
+          >
+            <View style={styles.heroIconRow}>
+              <View style={styles.heroIconWrap}>
+                <Ionicons name="people" size={18} color="#fff" />
+              </View>
+              <Text style={styles.heroCardLabel}>フォロワー</Text>
+            </View>
+            <Text style={styles.heroNumber}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
+            <Text style={styles.heroSub}>フォロー中 {stats?.followingCount ?? 0}人</Text>
+            {rightW > 0 && miniData.length >= 2 && (
+              <View style={styles.heroChart}>
+                <MiniLine data={miniData} color="#fff" width={rightW} height={36} />
+              </View>
+            )}
           </View>
-          <View style={[styles.statCard, { flex: 1 }]}>
-            <Ionicons name="person-add-outline" size={20} color={Colors.accent} />
-            <Text style={styles.statValue}>{stats?.followingCount.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>フォロー中</Text>
+
+          {/* 右側 3つの小カード */}
+          <View style={styles.miniCardCol}>
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.button}20` }]}>
+                <Ionicons name="eye-outline" size={15} color={Colors.button} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.totalReads ?? 0).toLocaleString()}</Text>
+              <Text style={styles.miniLabel}>累計閲覧</Text>
+            </View>
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
+                <Ionicons name="heart-outline" size={15} color={Colors.accent} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.totalLikes ?? 0).toLocaleString()}</Text>
+              <Text style={styles.miniLabel}>累計いいね</Text>
+            </View>
+            <View style={styles.miniCard}>
+              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
+                <Ionicons name="radio-outline" size={15} color={Colors.accent} />
+              </View>
+              <Text style={styles.miniValue}>{(stats?.totalBroadcasts ?? 0).toLocaleString()}</Text>
+              <Text style={styles.miniLabel}>累計配信</Text>
+            </View>
           </View>
         </View>
 
-        {/* 累計 */}
-        <View style={styles.row3}>
-          <View style={styles.statCard}>
-            <Ionicons name="radio-outline" size={18} color={Colors.button} />
-            <Text style={styles.statValue}>{stats?.totalBroadcasts.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>累計配信</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="eye-outline" size={18} color={Colors.button} />
-            <Text style={styles.statValue}>{stats?.totalReads.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>累計閲覧数</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Ionicons name="heart-outline" size={18} color={Colors.button} />
-            <Text style={styles.statValue}>{stats?.totalLikes.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>累計いいね</Text>
-          </View>
-        </View>
-
-        {/* グラフセクション */}
+        {/* ── 閲覧数トレンドチャート ── */}
         {chartData.length >= 2 && (
-          <View
-            style={styles.section}
+          <View style={styles.chartCard}
             onLayout={e => setChartW(e.nativeEvent.layout.width - 32)}
           >
-            <Text style={styles.sectionTitle}>閲覧数推移（直近{chartData.length}配信）</Text>
-            <View style={styles.chartLabel}>
-              <Ionicons name="eye-outline" size={12} color={Colors.accent} />
-              <Text style={styles.chartLabelText}>閲覧数</Text>
+            <View style={styles.chartHeader}>
+              <View>
+                <Text style={styles.chartTitle}>閲覧数推移</Text>
+                <Text style={styles.chartSub}>直近 {chartData.length} 配信</Text>
+              </View>
+              <View style={[styles.chartBadge, { backgroundColor: `${Colors.accent}15` }]}>
+                <Ionicons name="eye-outline" size={12} color={Colors.accent} />
+                <Text style={[styles.chartBadgeText, { color: Colors.accent }]}>閲覧数</Text>
+              </View>
             </View>
             {chartW > 0 && (
-              <LineChart data={readSeries} color={Colors.accent} width={chartW} />
+              <AreaChart data={readSeries} color={Colors.accent} width={chartW} height={110} gradId="readGrad" />
             )}
-
-            <View style={[styles.chartLabel, { marginTop: 16 }]}>
-              <Ionicons name="heart-outline" size={12} color={Colors.button} />
-              <Text style={[styles.chartLabelText, { color: Colors.button }]}>いいね数</Text>
-            </View>
-            {chartW > 0 && (
-              <BarChart data={likeSeries} color={Colors.button} width={chartW} />
-            )}
-
-            {/* X軸ラベル（配信日付） */}
             <View style={styles.xLabels}>
               {chartData.map((b, i) => (
                 <Text key={i} style={styles.xLabel}>{formatDate(b.created_at)}</Text>
@@ -329,75 +333,94 @@ export default function AnalyticsScreen() {
           </View>
         )}
 
-        {/* 今月の配信（無料プランのみ進捗バー） */}
-        {!BETA_MODE && isFree && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>今月の配信</Text>
-              <Text style={[styles.monthlyCount, monthlyNearLimit && styles.monthlyCountWarn]}>
-                {stats?.monthlyBroadcasts} / {FREE_LIMIT}回
-              </Text>
+        {/* ── いいね棒グラフ ＋ 今月配信カード ── */}
+        {chartData.length >= 2 && (
+          <View style={styles.row2}>
+            <View style={[styles.chartCard, { flex: 1 }]}>
+              <View style={styles.chartHeader}>
+                <View>
+                  <Text style={styles.chartTitle}>いいね数</Text>
+                  <Text style={styles.chartSub}>直近 {chartData.length} 配信</Text>
+                </View>
+                <View style={[styles.chartBadge, { backgroundColor: `${Colors.button}15` }]}>
+                  <Ionicons name="heart-outline" size={12} color={Colors.button} />
+                  <Text style={[styles.chartBadgeText, { color: Colors.button }]}>いいね</Text>
+                </View>
+              </View>
+              {chartW > 0 && (
+                <BarChart data={likeSeries} color={Colors.button} width={chartW / 2} height={90} />
+              )}
             </View>
-            <View style={styles.progressBg}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${monthlyPct}%` as any },
-                  monthlyNearLimit && { backgroundColor: '#E53E3E' },
-                ]}
-              />
+
+            {/* 今月配信カード */}
+            <View style={styles.monthCard}>
+              <Text style={styles.monthNumber}>{stats?.monthlyBroadcasts ?? 0}</Text>
+              <Text style={styles.monthLabel}>今月の配信</Text>
+              {isFree && (
+                <>
+                  <View style={styles.monthBar}>
+                    <View style={[styles.monthBarFill,
+                      { width: `${monthlyPct}%` as any },
+                      monthlyNearLimit && { backgroundColor: '#E53E3E' },
+                    ]} />
+                  </View>
+                  <Text style={styles.monthLimitText}>上限 {FREE_LIMIT} 回</Text>
+                  {monthlyNearLimit && (
+                    <TouchableOpacity onPress={() => router.push('/plan' as any)} style={styles.upgradeBtn}>
+                      <Text style={styles.upgradeBtnText}>アップグレード</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
             </View>
-            {monthlyNearLimit && (
-              <TouchableOpacity onPress={() => router.push('/plan' as any)} style={styles.upgradeHint}>
-                <Ionicons name="trending-up-outline" size={14} color={Colors.accent} />
-                <Text style={styles.upgradeHintText}>
-                  {(stats?.monthlyBroadcasts ?? 0) >= FREE_LIMIT
-                    ? '上限に達しました。アップグレードで無制限に。'
-                    : 'まもなく上限です。アップグレードで無制限に。'}
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
-        {/* 配信一覧 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>配信ごとの実績</Text>
+        {/* ── 配信テーブル ── */}
+        <View style={styles.tableCard}>
+          <View style={styles.tableHeader}>
+            <Text style={styles.chartTitle}>配信ごとの実績</Text>
+            <Text style={styles.chartSub}>{broadcasts.length} 件</Text>
+          </View>
+
+          {/* テーブルヘッダー行 */}
+          <View style={styles.tableHeadRow}>
+            <Text style={[styles.tableHeadCell, { flex: 1 }]}>内容</Text>
+            <Text style={styles.tableHeadCell}>日時</Text>
+            <View style={styles.tableHeadStats}>
+              <Ionicons name="eye-outline" size={11} color={Colors.textLight} />
+              <Ionicons name="heart-outline" size={11} color={Colors.textLight} />
+              <Ionicons name="chatbubble-outline" size={11} color={Colors.textLight} />
+            </View>
+          </View>
+
           {broadcasts.length === 0 ? (
-            <Text style={styles.empty}>配信がまだありません</Text>
+            <View style={styles.emptyWrap}>
+              <Ionicons name="radio-outline" size={32} color={Colors.border} />
+              <Text style={styles.emptyText}>配信がまだありません</Text>
+            </View>
           ) : (
-            broadcasts.map((bc) => (
+            broadcasts.map((bc, idx) => (
               <TouchableOpacity
                 key={bc.id}
-                style={styles.bcRow}
+                style={[styles.tableRow, idx % 2 === 1 && styles.tableRowAlt]}
                 onPress={() => router.push(`/broadcast-thread/${bc.id}` as any)}
                 activeOpacity={0.7}
               >
-                <View style={styles.bcMain}>
-                  <View style={styles.bcTitleRow}>
-                    {bc.block_count > 1 && (
-                      <View style={styles.groupBadge}>
-                        <Ionicons name="layers-outline" size={10} color={Colors.accent} />
-                        <Text style={styles.groupBadgeText}>{bc.block_count}件まとめて</Text>
-                      </View>
-                    )}
-                    <Text style={styles.bcContent} numberOfLines={2}>{truncate(bc.content)}</Text>
-                  </View>
-                  <Text style={styles.bcDate}>{new Date(bc.created_at).toLocaleString('ja-JP')}</Text>
+                <View style={styles.tableCell}>
+                  {bc.block_count > 1 && (
+                    <View style={styles.groupBadge}>
+                      <Ionicons name="layers-outline" size={9} color={Colors.accent} />
+                      <Text style={styles.groupBadgeText}>{bc.block_count}件</Text>
+                    </View>
+                  )}
+                  <Text style={styles.tableCellText} numberOfLines={1}>{truncate(bc.content)}</Text>
                 </View>
-                <View style={styles.bcStats}>
-                  <View style={styles.bcStat}>
-                    <Ionicons name="eye-outline" size={13} color={Colors.textLight} />
-                    <Text style={styles.bcStatText}>{bc.read_count}</Text>
-                  </View>
-                  <View style={styles.bcStat}>
-                    <Ionicons name="heart-outline" size={13} color={Colors.textLight} />
-                    <Text style={styles.bcStatText}>{bc.like_count}</Text>
-                  </View>
-                  <View style={styles.bcStat}>
-                    <Ionicons name="chatbubble-outline" size={13} color={Colors.textLight} />
-                    <Text style={styles.bcStatText}>{bc.reply_count}</Text>
-                  </View>
+                <Text style={styles.tableDateText}>{formatDate(bc.created_at)}</Text>
+                <View style={styles.tableStats}>
+                  <Text style={styles.tableStatNum}>{bc.read_count}</Text>
+                  <Text style={styles.tableStatNum}>{bc.like_count}</Text>
+                  <Text style={styles.tableStatNum}>{bc.reply_count}</Text>
                 </View>
               </TouchableOpacity>
             ))
@@ -419,71 +442,104 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
-  content: { padding: 16, gap: 12, paddingBottom: 40 },
+  content: { padding: 16, gap: 12, paddingBottom: 48 },
 
-  row2: { flexDirection: 'row', gap: 10 },
-  row3: { flexDirection: 'row', gap: 10 },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    alignItems: 'center',
-    gap: 4,
+  // ── ヒーローエリア ──
+  heroRow: { flexDirection: 'row', gap: 10 },
+  heroCard: {
+    flex: 1, backgroundColor: Colors.accent, borderRadius: 18,
+    padding: 16, gap: 4, minHeight: 140, justifyContent: 'space-between',
   },
-  statValue: { fontSize: 26, fontWeight: '800', color: Colors.text },
-  statLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
-  statSub: { fontSize: 10, color: Colors.textLight },
-
-  section: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
-    gap: 8,
+  heroIconRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroIconWrap: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
   },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 4 },
+  heroCardLabel: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+  heroNumber: { fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+  heroChart: { marginTop: 4 },
 
-  chartLabel: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  chartLabelText: { fontSize: 11, fontWeight: '700', color: Colors.accent, textTransform: 'uppercase', letterSpacing: 0.4 },
+  miniCardCol: { width: 110, gap: 8 },
+  miniCard: {
+    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: 12, gap: 2,
+  },
+  miniIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  miniValue: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  miniLabel: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
 
-  xLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  // ── チャートカード ──
+  chartCard: {
+    backgroundColor: Colors.white, borderRadius: 16,
+    borderWidth: 1, borderColor: Colors.border,
+    padding: 16, gap: 10,
+  },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  chartTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  chartSub: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
+  chartBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  chartBadgeText: { fontSize: 10, fontWeight: '700' },
+  xLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   xLabel: { fontSize: 9, color: Colors.textLight, flex: 1, textAlign: 'center' },
 
-  monthlyCount: { fontSize: 13, fontWeight: '700', color: Colors.accent },
-  monthlyCountWarn: { color: '#E53E3E' },
-  progressBg: { height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: 8, backgroundColor: Colors.button, borderRadius: 4 },
-  upgradeHint: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.background, borderRadius: 8, padding: 10,
+  // ── 行2（いいねチャート＋今月カード） ──
+  row2: { flexDirection: 'row', gap: 10 },
+  monthCard: {
+    width: 120, backgroundColor: Colors.text, borderRadius: 16,
+    padding: 16, gap: 6, justifyContent: 'center',
   },
-  upgradeHintText: { fontSize: 12, color: Colors.accent, flex: 1, fontWeight: '500' },
+  monthNumber: { fontSize: 34, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  monthLabel: { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  monthBar: { height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden', marginTop: 4 },
+  monthBarFill: { height: 4, backgroundColor: Colors.button, borderRadius: 2 },
+  monthLimitText: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
+  upgradeBtn: {
+    marginTop: 4, backgroundColor: Colors.accent,
+    borderRadius: 8, paddingVertical: 5, paddingHorizontal: 8, alignItems: 'center',
+  },
+  upgradeBtnText: { fontSize: 9, color: '#fff', fontWeight: '700' },
 
-  empty: { fontSize: 13, color: Colors.textLight, textAlign: 'center', paddingVertical: 12 },
-  bcRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+  // ── テーブル ──
+  tableCard: {
+    backgroundColor: Colors.white, borderRadius: 16,
+    borderWidth: 1, borderColor: Colors.border,
+    overflow: 'hidden',
   },
-  bcMain: { flex: 1, gap: 3 },
-  bcTitleRow: { gap: 4 },
-  bcContent: { fontSize: 13, color: Colors.text, lineHeight: 18 },
-  bcDate: { fontSize: 11, color: Colors.textLight },
+  tableHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, paddingBottom: 12,
+  },
+  tableHeadRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: Colors.background,
+    borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.border,
+  },
+  tableHeadCell: { fontSize: 10, fontWeight: '700', color: Colors.textLight, marginRight: 12 },
+  tableHeadStats: { flexDirection: 'row', gap: 16 },
+  tableRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 14, paddingVertical: 11,
+  },
+  tableRowAlt: { backgroundColor: `${Colors.background}80` },
+  tableCell: { flex: 1, gap: 3 },
+  tableCellText: { fontSize: 12, color: Colors.text },
+  tableDateText: { fontSize: 10, color: Colors.textLight, marginRight: 12, width: 36 },
+  tableStats: { flexDirection: 'row', gap: 16 },
+  tableStatNum: { fontSize: 12, fontWeight: '600', color: Colors.text, width: 24, textAlign: 'right' },
+
   groupBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: `${Colors.accent}15`, borderRadius: 6,
-    paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: `${Colors.accent}15`, borderRadius: 4,
+    paddingHorizontal: 4, paddingVertical: 1, alignSelf: 'flex-start',
   },
-  groupBadgeText: { fontSize: 10, fontWeight: '700', color: Colors.accent },
-  bcStats: { flexDirection: 'row', gap: 10 },
-  bcStat: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  bcStatText: { fontSize: 12, color: Colors.textLight },
+  groupBadgeText: { fontSize: 9, fontWeight: '700', color: Colors.accent },
+
+  emptyWrap: { alignItems: 'center', gap: 8, paddingVertical: 32 },
+  emptyText: { fontSize: 13, color: Colors.textLight },
 })
