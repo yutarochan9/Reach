@@ -1,6 +1,14 @@
 const fs = require('fs')
 const path = require('path')
 
+// OGP・PWA 用に icon.png を dist/ ルートにコピー
+const iconSrc = path.join(__dirname, '../assets/icon.png')
+const iconDst = path.join(__dirname, '../dist/icon.png')
+if (fs.existsSync(iconSrc)) {
+  fs.copyFileSync(iconSrc, iconDst)
+  console.log('icon.png copied to dist/')
+}
+
 const indexPath = path.join(__dirname, '../dist/index.html')
 if (!fs.existsSync(indexPath)) {
   console.error('dist/index.html not found')

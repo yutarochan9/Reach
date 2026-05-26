@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
-  useWindowDimensions, ScrollView,
+  useWindowDimensions, ScrollView, Share,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -341,13 +341,15 @@ export default function TalkDetailScreen() {
     const shareText = `${snippet ? snippet + '\n\n' : ''}${senderName} さんのReachをチェック 👀`
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`
     if (isWeb && typeof window !== 'undefined') {
+      // Web: ブラウザのネイティブ共有 or X へ
       if (navigator.share) {
         navigator.share({ title: `${senderName} on Reach`, text: shareText, url: profileUrl }).catch(() => {})
       } else {
         window.open(tweetUrl, '_blank')
       }
     } else {
-      Linking.openURL(tweetUrl)
+      // ネイティブアプリ: OS 標準の共有シートを使う
+      Share.share({ message: `${shareText}\n${profileUrl}` }).catch(() => {})
     }
   }
 
