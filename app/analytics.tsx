@@ -445,9 +445,9 @@ export default function AnalyticsScreen() {
           <View style={s.thRow}>
             <Text style={[s.th, { flex: 1 }]}>内容</Text>
             <Text style={s.th}>日時</Text>
-            <Text style={[s.th, { width: 30, textAlign: 'right' }]}>👁</Text>
-            <Text style={[s.th, { width: 30, textAlign: 'right' }]}>♡</Text>
-            <Text style={[s.th, { width: 30, textAlign: 'right' }]}>💬</Text>
+            <View style={{ width: 30, alignItems: 'flex-end' }}><Ionicons name="eye-outline" size={12} color={C.muted} /></View>
+            <View style={{ width: 30, alignItems: 'flex-end' }}><Ionicons name="heart-outline" size={12} color={C.muted} /></View>
+            <View style={{ width: 30, alignItems: 'flex-end' }}><Ionicons name="chatbubble-outline" size={12} color={C.muted} /></View>
           </View>
 
           {broadcasts.length === 0 ? (

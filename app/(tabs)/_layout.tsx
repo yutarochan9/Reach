@@ -11,66 +11,6 @@ import { TalkContext } from '../contexts/TalkContext'
 import TalkDetailPanel from '../components/TalkDetailPanel'
 import IMChatPanel from '../components/IMChatPanel'
 
-const SIDEBAR_W = 68
-
-// ── デスクトップ用左サイドバー ─────────────────────────────────
-function DesktopSidebar() {
-  const pathname = usePathname()
-
-  const NAV = [
-    { route: '/',       activeIcon: 'home'       as const, icon: 'home-outline'       as const, label: 'ホーム' },
-    { route: '/talk',   activeIcon: 'chatbubble' as const, icon: 'chatbubble-outline' as const, label: 'メッセージ' },
-    { route: '/shop',   activeIcon: 'compass'    as const, icon: 'compass-outline'    as const, label: '発見' },
-    { route: '/mypage', activeIcon: 'person'     as const, icon: 'person-outline'     as const, label: 'マイページ' },
-  ]
-
-  const isActive = (route: string) => {
-    if (route === '/') return pathname === '/' || pathname === ''
-    return pathname.startsWith(route)
-  }
-
-  return (
-    <View style={sidebar.wrap}>
-      {NAV.map(item => {
-        const active = isActive(item.route)
-        return (
-          <TouchableOpacity
-            key={item.route}
-            style={sidebar.item}
-            onPress={() => router.push(item.route as any)}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={active ? item.activeIcon : item.icon}
-              size={22}
-              color={active ? Colors.accent : Colors.textLight}
-            />
-            <Text style={[sidebar.label, { color: active ? Colors.accent : Colors.textLight }]}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        )
-      })}
-
-      <TouchableOpacity
-        style={sidebar.composeBtn}
-        onPress={async () => {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) return
-          const { count } = await supabase
-            .from('broadcasts')
-            .select('id', { count: 'exact', head: true })
-            .eq('sender_id', user.id)
-          router.push((count ?? 0) === 0 ? '/broadcast-intro' : '/compose')
-        }}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={22} color={Colors.white} />
-      </TouchableOpacity>
-    </View>
-  )
-}
-
 // ── モバイル用ボトムタブバー ───────────────────────────────────
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
@@ -166,12 +106,9 @@ export default function TabLayout() {
 
   return (
     <TalkContext.Provider value={{ selectedTalkId, setSelectedTalkId, selectedDmId, setSelectedDmId, isDesktop, dmReloadKey, triggerDmReload }}>
-      <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column', backgroundColor: Colors.background }}>
+      <View style={{ flex: 1, flexDirection: showTwoCol ? 'row' : 'column', backgroundColor: Colors.background }}>
 
-        {/* 左サイドバー（デスクトップのみ） */}
-        {isDesktop && <DesktopSidebar />}
-
-        {/* タブコンテンツ（常にflex:1で残り全幅を使用） */}
+        {/* タブコンテンツ */}
         <View style={{ flex: 1, borderRightWidth: showTwoCol ? 1 : 0, borderRightColor: Colors.border }}>
           <Tabs
             tabBar={(props) => isDesktop ? <></> : <CustomTabBar {...props} />}
@@ -208,41 +145,6 @@ export default function TabLayout() {
     </TalkContext.Provider>
   )
 }
-
-// ── スタイル ─────────────────────────────────────────────────
-const sidebar = StyleSheet.create({
-  wrap: {
-    width: SIDEBAR_W,
-    backgroundColor: Colors.header,
-    borderRightWidth: 1,
-    borderRightColor: Colors.border,
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 16,
-    gap: 4,
-  },
-  item: {
-    width: SIDEBAR_W - 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    gap: 3,
-    borderRadius: 10,
-  },
-  label: {
-    fontSize: 9,
-    fontWeight: '600',
-  },
-  composeBtn: {
-    marginTop: 12,
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.accent,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-  },
-})
 
 const emptyPanel = StyleSheet.create({
   wrap: {
