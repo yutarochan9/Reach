@@ -282,7 +282,6 @@ export default function DiscoverScreen() {
                           : <View style={styles.hAvatarFb}><Text style={styles.hAvatarTxt}>{item.display_name[0]}</Text></View>
                         }
                         <Text style={styles.hName} numberOfLines={1}>{item.display_name}</Text>
-                        <EngagementLabel item={item} />
                         <TouchableOpacity
                           style={[styles.hFollowBtn, item.is_following && styles.hFollowingBtn]}
                           onPress={() => handleFollow(item.id, item.is_following)}
@@ -317,30 +316,8 @@ export default function DiscoverScreen() {
   )
 }
 
-// エンゲージメントの一番強いシグナルを1行で表示
-function EngagementLabel({ item }: { item: Creator }) {
-  if (item.tag_match_count > 0) return <Text style={styles.hSub}>タグ {item.tag_match_count}個一致</Text>
-  if (item.reply_rate > 0.02) return <Text style={styles.hSub}>返信率 {(item.reply_rate * 100).toFixed(1)}%</Text>
-  if (item.reaction_rate > 0.05) return <Text style={styles.hSub}>いいね率 {(item.reaction_rate * 100).toFixed(1)}%</Text>
-  if (item.social_count > 0) return <Text style={styles.hSub}>{item.social_count}人がフォロー中</Text>
-  if (item.broadcast_count > 0) return <Text style={styles.hSub}>月{item.broadcast_count}本配信</Text>
-  return <Text style={styles.hSub}>{item.follower_count.toLocaleString()} フォロワー</Text>
-}
 
 function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, f: boolean) => void }) {
-  // カードのサブバッジ：最も強いシグナルを1つ
-  const badge = item.tag_match_count > 0
-    ? { label: `タグ一致 ${item.tag_match_count}個`, color: '#8B5E3C' }
-    : item.reply_rate > 0.02
-    ? { label: `返信率 ${(item.reply_rate * 100).toFixed(1)}%`, color: '#7A9E7E' }
-    : item.reaction_rate > 0.05
-    ? { label: `いいね率 ${(item.reaction_rate * 100).toFixed(1)}%`, color: Colors.button }
-    : item.social_count > 0
-    ? { label: `${item.social_count}人がフォロー`, color: Colors.accent }
-    : item.broadcast_count >= 4
-    ? { label: `月${item.broadcast_count}本配信`, color: Colors.textLight }
-    : null
-
   return (
     <TouchableOpacity style={styles.card}
       onPress={() => router.push(`/creator/${item.id}` as any)} activeOpacity={0.85}>
@@ -351,11 +328,6 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
       <View style={styles.info}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={styles.name}>{item.display_name}</Text>
-          {badge && (
-            <View style={[styles.badge, { backgroundColor: `${badge.color}20` }]}>
-              <Text style={[styles.badgeTxt, { color: badge.color }]}>{badge.label}</Text>
-            </View>
-          )}
         </View>
         {item.bio && <Text style={styles.bio} numberOfLines={1}>{item.bio}</Text>}
         <Text style={styles.sub}>{item.follower_count.toLocaleString()} フォロワー</Text>
@@ -402,7 +374,7 @@ const styles = StyleSheet.create({
   hAvatarFb: { width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center' },
   hAvatarTxt: { fontSize: 22, fontWeight: '700', color: Colors.white },
   hName: { fontSize: 12, fontWeight: '700', color: Colors.text, textAlign: 'center' },
-  hSub: { fontSize: 10, color: Colors.textLight, textAlign: 'center' },
+
   hFollowBtn: { backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, width: '100%', alignItems: 'center' },
   hFollowingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.accent },
   hFollowTxt: { fontSize: 11, fontWeight: '700', color: Colors.white },
@@ -420,8 +392,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: Colors.text },
   bio: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
   sub: { fontSize: 11, color: Colors.textLight, marginTop: 3 },
-  badge: { borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
-  badgeTxt: { fontSize: 9, fontWeight: '700' },
+
   followBtn: { backgroundColor: Colors.button, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   followingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.button },
   followTxt: { color: Colors.white, fontWeight: '700', fontSize: 13 },
