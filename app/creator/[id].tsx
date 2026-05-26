@@ -12,6 +12,8 @@ const SNS_FIELDS = [
   { key: 'x', label: 'X', icon: 'logo-twitter' as const },
   { key: 'instagram', label: 'Instagram', icon: 'logo-instagram' as const },
   { key: 'youtube', label: 'YouTube', icon: 'logo-youtube' as const },
+  { key: 'tiktok', label: 'TikTok', icon: 'logo-tiktok' as const },
+  { key: 'note', label: 'note', icon: 'document-text-outline' as const },
   { key: 'website', label: 'Web', icon: 'globe-outline' as const },
 ]
 

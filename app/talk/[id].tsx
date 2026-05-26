@@ -755,7 +755,7 @@ export default function TalkDetailScreen() {
 
 const styles = StyleSheet.create({
   outerWrap: { flex: 1, flexDirection: 'row', backgroundColor: Colors.background },
-  container: { width: isWeb ? 680 : undefined, flex: isWeb ? undefined : 1, flexShrink: 0, backgroundColor: Colors.background },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
     paddingTop: isWeb ? 12 : 56, paddingHorizontal: 16, paddingBottom: 12,
@@ -773,7 +773,8 @@ const styles = StyleSheet.create({
   headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   rightPanel: {
-    flex: 1,
+    width: 320,
+    flexShrink: 0,
     backgroundColor: Colors.header,
     borderRightWidth: 1, borderRightColor: Colors.border,
   },

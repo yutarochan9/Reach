@@ -112,6 +112,8 @@ const SNS_FIELDS = [
   { key: 'x', label: 'X (Twitter)', placeholder: 'https://x.com/yourname', icon: 'logo-twitter' as const },
   { key: 'instagram', label: 'Instagram', placeholder: 'https://instagram.com/yourname', icon: 'logo-instagram' as const },
   { key: 'youtube', label: 'YouTube', placeholder: 'https://youtube.com/@yourname', icon: 'logo-youtube' as const },
+  { key: 'tiktok', label: 'TikTok', placeholder: 'https://tiktok.com/@yourname', icon: 'logo-tiktok' as const },
+  { key: 'note', label: 'note', placeholder: 'https://note.com/yourname', icon: 'document-text-outline' as const },
   { key: 'website', label: 'Webサイト', placeholder: 'https://yoursite.com', icon: 'globe-outline' as const },
 ]
 
