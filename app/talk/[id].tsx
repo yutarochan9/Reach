@@ -6,6 +6,9 @@ import {
 const isWeb = Platform.OS === 'web'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, router } from 'expo-router'
+
+// セッション内メモリキャッシュ（ナビゲーション往復で即時表示）
+const richMenuMem = new Map<string, any>()
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
@@ -45,6 +48,7 @@ export default function TalkDetailScreen() {
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
+  const [richMenuLoading, setRichMenuLoading] = useState(true)
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -59,21 +63,36 @@ export default function TalkDetailScreen() {
     return () => vv.removeEventListener('resize', update)
   }, [])
 
-  // タイル: キャッシュを即表示 → バックグラウンドで最新に更新
+  // タイル: メモリ→AsyncStorage→ネットワーク の順に即時表示
   useEffect(() => {
     const key = `rich_menu_${senderId}`
-    AsyncStorage.getItem(key).then(cached => {
-      if (cached) {
-        try { setRichMenu(JSON.parse(cached)) } catch {}
-      }
-    }).catch(() => {})
 
+    // 1. メモリキャッシュ（同セッション内は即時・同期）
+    if (richMenuMem.has(senderId)) {
+      setRichMenu(richMenuMem.get(senderId))
+      setRichMenuLoading(false)
+    } else {
+      // 2. AsyncStorageキャッシュ（アプリ再起動後も即時）
+      AsyncStorage.getItem(key).then(cached => {
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached)
+            richMenuMem.set(senderId, parsed)
+            setRichMenu(parsed)
+          } catch {}
+        }
+        setRichMenuLoading(false)
+      }).catch(() => setRichMenuLoading(false))
+    }
+
+    // 3. ネットワーク（常にバックグラウンドで最新化）
     supabase.from('rich_menus')
       .select('buttons, is_active, panel_bg_image')
       .eq('creator_id', senderId)
       .maybeSingle()
       .then(({ data: menu }) => {
         const val = menu?.is_active ? menu : null
+        richMenuMem.set(senderId, val)
         setRichMenu(val)
         if (val) AsyncStorage.setItem(key, JSON.stringify(val)).catch(() => {})
         else AsyncStorage.removeItem(key).catch(() => {})
@@ -480,7 +499,9 @@ export default function TalkDetailScreen() {
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
 
-  const TilePanel = richMenu && normalizedButtons.length > 0 ? (
+  const TilePanel = richMenuLoading ? (
+    <View style={styles.tileSkeleton} />
+  ) : richMenu && normalizedButtons.length > 0 ? (
     <View style={[
       styles.tileContainer,
       isWeb && richMenu.panel_bg_image
@@ -723,6 +744,7 @@ const styles = StyleSheet.create({
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
   tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
+  tileSkeleton: { height: 28, backgroundColor: Colors.background },
   panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   tileHandle: {
     alignItems: 'center', paddingVertical: 7,
