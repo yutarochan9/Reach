@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert,
+  useWindowDimensions, ScrollView,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -36,6 +37,8 @@ type BroadcastGroup = {
 }
 
 export default function TalkDetailScreen() {
+  const { width } = useWindowDimensions()
+  const isDesktop = isWeb && width >= 900
   const params = useLocalSearchParams<{ id: string }>()
   const senderId = Array.isArray(params.id) ? params.id[0] : params.id
   const [myId, setMyId] = useState<string | null>(null)
@@ -360,35 +363,6 @@ export default function TalkDetailScreen() {
     )
   }
 
-  const ProfileCard = !isSelf ? (
-    <View style={styles.profileCard}>
-      <TouchableOpacity onPress={() => router.push(`/creator/${senderId}` as any)} activeOpacity={0.8}>
-        <View style={styles.profileCardAvatar}>
-          {senderAvatar
-            ? <Image source={{ uri: senderAvatar }} style={styles.profileCardAvatarImg} />
-            : <Text style={styles.profileCardAvatarText}>{senderName[0]}</Text>
-          }
-        </View>
-      </TouchableOpacity>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
-        <Text style={styles.profileCardName}>{senderName}</Text>
-        {senderIsOfficial && <Ionicons name="checkmark-circle" size={16} color="#1D9BF0" />}
-      </View>
-      {senderUsername ? <Text style={styles.profileCardUsername}>@{senderUsername}</Text> : null}
-      {senderBio ? <Text style={styles.profileCardBio}>{senderBio}</Text> : null}
-      <TouchableOpacity
-        style={[styles.profileCardFollowBtn, isFollowing && styles.profileCardFollowingBtn]}
-        onPress={handleFollowToggle}
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.profileCardFollowTxt, isFollowing && styles.profileCardFollowingTxt]}>
-          {isFollowing ? 'フォロー中' : 'フォローする'}
-        </Text>
-      </TouchableOpacity>
-      <View style={styles.profileCardDivider} />
-    </View>
-  ) : null
-
   const BroadcastList = (
     <FlatList
       ref={flatListRef}
@@ -397,7 +371,6 @@ export default function TalkDetailScreen() {
       style={{ flex: 1 }}
       contentContainerStyle={styles.messageList}
       onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-      ListHeaderComponent={ProfileCard}
       ListEmptyComponent={() => (
         <View style={styles.emptyWrap}>
           <Ionicons name="radio-outline" size={48} color={Colors.border} />
@@ -632,60 +605,119 @@ export default function TalkDetailScreen() {
     )
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={[styles.container, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color={Colors.accent} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <View style={styles.headerAvatar}>
+  // デスクトップ用右パネル（プロフィール）
+  const RightPanel = isDesktop ? (
+    <View style={styles.rightPanel}>
+      <View style={styles.rightPanelHeader}>
+        <Text style={styles.rightPanelHeaderText}>プロフィール</Text>
+      </View>
+      <ScrollView contentContainerStyle={styles.rightPanelScroll}>
+        {/* アバター行（メッセージタブのリスト行スタイル） */}
+        <TouchableOpacity
+          style={styles.rpRow}
+          onPress={() => router.push(`/creator/${senderId}` as any)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.rpAvatar}>
             {senderAvatar
-              ? <Image source={{ uri: senderAvatar }} style={styles.headerAvatarImage} />
-              : <Text style={styles.headerAvatarText}>{senderName[0]}</Text>
+              ? <Image source={{ uri: senderAvatar }} style={styles.rpAvatarImg} />
+              : <Text style={styles.rpAvatarText}>{senderName[0]}</Text>
             }
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={styles.headerName}>{senderName}</Text>
-            {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+          <View style={styles.rpInfo}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.rpName}>{senderName}</Text>
+              {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+            </View>
+            {senderUsername ? <Text style={styles.rpUsername}>@{senderUsername}</Text> : null}
           </View>
-        </View>
-        <View style={{ width: 32 }} />
-      </View>
+        </TouchableOpacity>
 
-      {BroadcastList}
-      {ReactionPopup}
-      {TilePanel}
+        <View style={styles.rpDivider} />
 
-      {/* DM入力エリア（常に表示） */}
-      <View style={styles.inputArea}>
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            placeholder="DMを送る..."
-            placeholderTextColor={Colors.textLight}
-            value={imText}
-            onChangeText={setImText}
-            multiline
-          />
+        {senderBio ? (
+          <>
+            <View style={styles.rpSection}>
+              <Text style={styles.rpSectionLabel}>BIO</Text>
+              <Text style={styles.rpBio}>{senderBio}</Text>
+            </View>
+            <View style={styles.rpDivider} />
+          </>
+        ) : null}
+
+        <View style={styles.rpSection}>
           <TouchableOpacity
-            style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
-            onPress={handleSend}
-            disabled={!imText.trim()}
+            style={[styles.rpFollowBtn, isFollowing && styles.rpFollowingBtn]}
+            onPress={handleFollowToggle}
+            activeOpacity={0.8}
           >
-            <Ionicons name="send" size={18} color={Colors.white} />
+            <Text style={[styles.rpFollowTxt, isFollowing && styles.rpFollowingTxt]}>
+              {isFollowing ? 'フォロー中' : 'フォローする'}
+            </Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </ScrollView>
+    </View>
+  ) : null
+
+  return (
+    <View style={styles.outerWrap}>
+      <KeyboardAvoidingView
+        style={[styles.container, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color={Colors.accent} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <View style={styles.headerAvatar}>
+              {senderAvatar
+                ? <Image source={{ uri: senderAvatar }} style={styles.headerAvatarImage} />
+                : <Text style={styles.headerAvatarText}>{senderName[0]}</Text>
+              }
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.headerName}>{senderName}</Text>
+              {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+            </View>
+          </View>
+          <View style={{ width: 32 }} />
+        </View>
+
+        {BroadcastList}
+        {ReactionPopup}
+        {TilePanel}
+
+        {/* DM入力エリア（常に表示） */}
+        <View style={styles.inputArea}>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="DMを送る..."
+              placeholderTextColor={Colors.textLight}
+              value={imText}
+              onChangeText={setImText}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
+              onPress={handleSend}
+              disabled={!imText.trim()}
+            >
+              <Ionicons name="send" size={18} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+      {RightPanel}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, maxWidth: isWeb ? 680 : undefined, alignSelf: isWeb ? 'center' : undefined, width: '100%' },
+  outerWrap: { flex: 1, flexDirection: 'row', backgroundColor: Colors.background },
+  container: { flex: 1, backgroundColor: Colors.background, maxWidth: isWeb ? 680 : undefined, width: '100%', borderRightWidth: isWeb ? 1 : 0, borderRightColor: Colors.border },
   header: {
     backgroundColor: Colors.header,
     paddingTop: isWeb ? 12 : 56, paddingHorizontal: 16, paddingBottom: 12,
@@ -702,29 +734,44 @@ const styles = StyleSheet.create({
   headerAvatarImage: { width: 36, height: 36, borderRadius: 18 },
   headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  messageList: { padding: 16, gap: 12, paddingBottom: 32 },
-  profileCard: {
-    alignItems: 'center', paddingTop: 28, paddingBottom: 8, paddingHorizontal: 20,
+  rightPanel: {
+    width: 260,
+    backgroundColor: Colors.header,
+    borderLeftWidth: 1, borderLeftColor: Colors.border,
   },
-  profileCardAvatar: {
-    width: 72, height: 72, borderRadius: 36,
+  rightPanelHeader: {
+    paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  rightPanelHeaderText: { fontSize: 13, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5 },
+  rightPanelScroll: { paddingBottom: 32 },
+  rpRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+    backgroundColor: Colors.white,
+  },
+  rpAvatar: {
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  profileCardAvatarImg: { width: 72, height: 72, borderRadius: 36 },
-  profileCardAvatarText: { fontSize: 30, fontWeight: '700', color: Colors.white },
-  profileCardName: { fontSize: 17, fontWeight: '800', color: Colors.text },
-  profileCardUsername: { fontSize: 13, color: Colors.textLight, marginTop: 2 },
-  profileCardBio: { fontSize: 13, color: Colors.text, marginTop: 8, textAlign: 'center', lineHeight: 19 },
-  profileCardFollowBtn: {
-    marginTop: 14, paddingHorizontal: 28, paddingVertical: 9,
+  rpAvatarImg: { width: 48, height: 48, borderRadius: 24 },
+  rpAvatarText: { fontSize: 20, fontWeight: '700', color: Colors.white },
+  rpInfo: { flex: 1 },
+  rpName: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  rpUsername: { fontSize: 12, color: Colors.textLight, marginTop: 1 },
+  rpDivider: { height: 1, backgroundColor: Colors.border },
+  rpSection: { paddingHorizontal: 16, paddingVertical: 14, backgroundColor: Colors.white },
+  rpSectionLabel: { fontSize: 11, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  rpBio: { fontSize: 13, color: Colors.text, lineHeight: 19 },
+  rpFollowBtn: {
     backgroundColor: Colors.accent, borderRadius: 20,
+    paddingVertical: 9, alignItems: 'center',
   },
-  profileCardFollowingBtn: {
-    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.accent,
-  },
-  profileCardFollowTxt: { fontSize: 14, fontWeight: '700', color: Colors.white },
-  profileCardFollowingTxt: { color: Colors.accent },
-  profileCardDivider: { height: 1, backgroundColor: Colors.border, width: '100%', marginTop: 24 },
+  rpFollowingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.accent },
+  rpFollowTxt: { fontSize: 14, fontWeight: '700', color: Colors.white },
+  rpFollowingTxt: { color: Colors.accent },
+  messageList: { padding: 16, gap: 12, paddingBottom: 32 },
+
   dateDivider: { alignItems: 'center', marginVertical: 8 },
   dateText: {
     fontSize: 11, color: Colors.textLight,
