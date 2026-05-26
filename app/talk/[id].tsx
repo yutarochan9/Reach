@@ -44,6 +44,9 @@ export default function TalkDetailScreen() {
   const [senderName, setSenderName] = useState('')
   const [senderAvatar, setSenderAvatar] = useState<string | null>(null)
   const [senderIsOfficial, setSenderIsOfficial] = useState(false)
+  const [senderBio, setSenderBio] = useState<string | null>(null)
+  const [senderUsername, setSenderUsername] = useState<string | null>(null)
+  const [isFollowing, setIsFollowing] = useState(false)
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
@@ -107,18 +110,23 @@ export default function TalkDetailScreen() {
       const self = user.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }] = await Promise.all([
-        supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', senderId).single(),
+      const [{ data: profile }, { data: broadcasts }, { data: followRow }] = await Promise.all([
+        supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
           .eq('sender_id', senderId)
           .eq('status', 'published')
           .order('created_at', { ascending: true }),
+        self ? Promise.resolve({ data: null }) :
+          supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle(),
       ])
 
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
       setSenderIsOfficial((profile as any)?.is_official ?? false)
+      setSenderBio((profile as any)?.bio ?? null)
+      setSenderUsername((profile as any)?.username ?? null)
+      setIsFollowing(!!followRow)
 
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)
@@ -301,6 +309,17 @@ export default function TalkDetailScreen() {
     ])
   }
 
+  const handleFollowToggle = async () => {
+    if (!myId) return
+    if (isFollowing) {
+      await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', senderId)
+      setIsFollowing(false)
+    } else {
+      await supabase.from('follows').insert({ follower_id: myId, following_id: senderId })
+      setIsFollowing(true)
+    }
+  }
+
   const handleSend = async () => {
     if (!imText.trim() || !myId) return
     const text = imText.trim()
@@ -341,6 +360,35 @@ export default function TalkDetailScreen() {
     )
   }
 
+  const ProfileCard = !isSelf ? (
+    <View style={styles.profileCard}>
+      <TouchableOpacity onPress={() => router.push(`/creator/${senderId}` as any)} activeOpacity={0.8}>
+        <View style={styles.profileCardAvatar}>
+          {senderAvatar
+            ? <Image source={{ uri: senderAvatar }} style={styles.profileCardAvatarImg} />
+            : <Text style={styles.profileCardAvatarText}>{senderName[0]}</Text>
+          }
+        </View>
+      </TouchableOpacity>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+        <Text style={styles.profileCardName}>{senderName}</Text>
+        {senderIsOfficial && <Ionicons name="checkmark-circle" size={16} color="#1D9BF0" />}
+      </View>
+      {senderUsername ? <Text style={styles.profileCardUsername}>@{senderUsername}</Text> : null}
+      {senderBio ? <Text style={styles.profileCardBio}>{senderBio}</Text> : null}
+      <TouchableOpacity
+        style={[styles.profileCardFollowBtn, isFollowing && styles.profileCardFollowingBtn]}
+        onPress={handleFollowToggle}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.profileCardFollowTxt, isFollowing && styles.profileCardFollowingTxt]}>
+          {isFollowing ? 'フォロー中' : 'フォローする'}
+        </Text>
+      </TouchableOpacity>
+      <View style={styles.profileCardDivider} />
+    </View>
+  ) : null
+
   const BroadcastList = (
     <FlatList
       ref={flatListRef}
@@ -349,6 +397,7 @@ export default function TalkDetailScreen() {
       style={{ flex: 1 }}
       contentContainerStyle={styles.messageList}
       onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+      ListHeaderComponent={ProfileCard}
       ListEmptyComponent={() => (
         <View style={styles.emptyWrap}>
           <Ionicons name="radio-outline" size={48} color={Colors.border} />
@@ -654,6 +703,28 @@ const styles = StyleSheet.create({
   headerAvatarText: { fontSize: 16, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   messageList: { padding: 16, gap: 12, paddingBottom: 32 },
+  profileCard: {
+    alignItems: 'center', paddingTop: 28, paddingBottom: 8, paddingHorizontal: 20,
+  },
+  profileCardAvatar: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  profileCardAvatarImg: { width: 72, height: 72, borderRadius: 36 },
+  profileCardAvatarText: { fontSize: 30, fontWeight: '700', color: Colors.white },
+  profileCardName: { fontSize: 17, fontWeight: '800', color: Colors.text },
+  profileCardUsername: { fontSize: 13, color: Colors.textLight, marginTop: 2 },
+  profileCardBio: { fontSize: 13, color: Colors.text, marginTop: 8, textAlign: 'center', lineHeight: 19 },
+  profileCardFollowBtn: {
+    marginTop: 14, paddingHorizontal: 28, paddingVertical: 9,
+    backgroundColor: Colors.accent, borderRadius: 20,
+  },
+  profileCardFollowingBtn: {
+    backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.accent,
+  },
+  profileCardFollowTxt: { fontSize: 14, fontWeight: '700', color: Colors.white },
+  profileCardFollowingTxt: { color: Colors.accent },
+  profileCardDivider: { height: 1, backgroundColor: Colors.border, width: '100%', marginTop: 24 },
   dateDivider: { alignItems: 'center', marginVertical: 8 },
   dateText: {
     fontSize: 11, color: Colors.textLight,
