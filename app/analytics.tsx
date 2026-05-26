@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, Alert, Platform } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable } from 'react-native'
 import Svg, {
   Polyline, Circle, Rect, G, Line, Path,
   Defs, LinearGradient as SvgLinearGradient, Stop,
@@ -291,24 +291,14 @@ export default function AnalyticsScreen() {
   const fmtShort = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K` : String(n)
   const truncate = (s: string, n = 28) => s.length > n ? s.slice(0, n) + '…' : s
 
-  const handleDeleteBc = (bc: Broadcast) => {
+  const handleDeleteBc = async (bc: Broadcast) => {
     setMenuBc(null)
-    const doDelete = async () => {
-      if (bc.group_id) {
-        await supabase.from('broadcasts').delete().eq('group_id', bc.group_id)
-      } else {
-        await supabase.from('broadcasts').delete().eq('id', bc.id)
-      }
-      setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
-    }
-    if (Platform.OS === 'web') {
-      if (window.confirm('この配信を削除しますか？この操作は取り消せません。')) doDelete()
+    if (bc.group_id) {
+      await supabase.from('broadcasts').delete().eq('group_id', bc.group_id)
     } else {
-      Alert.alert('配信を削除', 'この配信を削除しますか？この操作は取り消せません。', [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '削除', style: 'destructive', onPress: doDelete },
-      ])
+      await supabase.from('broadcasts').delete().eq('id', bc.id)
     }
+    setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
   }
 
   if (loading) return (
