@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking, Modal, TextInput, Platform } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
+import Head from 'expo-router/head'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
@@ -155,8 +156,26 @@ export default function CreatorScreen() {
 
   const isSelf = myId === id
 
+  const ogImage = profile?.avatar_url ?? 'https://reach-pi-one.vercel.app/icon.png'
+  const ogTitle = `${profile?.display_name ?? 'クリエーター'} | Reach`
+  const ogDesc = profile?.bio ?? 'Reach でクリエーターをフォローして配信を楽しもう'
+
   return (
     <View style={styles.container}>
+      {Platform.OS === 'web' && (
+        <Head>
+          <title>{ogTitle}</title>
+          <meta property="og:title" content={ogTitle} />
+          <meta property="og:description" content={ogDesc} />
+          <meta property="og:image" content={ogImage} />
+          <meta property="og:site_name" content="Reach" />
+          <meta property="og:type" content="profile" />
+          <meta name="twitter:card" content="summary" />
+          <meta name="twitter:title" content={ogTitle} />
+          <meta name="twitter:description" content={ogDesc} />
+          <meta name="twitter:image" content={ogImage} />
+        </Head>
+      )}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />

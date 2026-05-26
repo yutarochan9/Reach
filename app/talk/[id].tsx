@@ -7,6 +7,7 @@ import {
 const isWeb = Platform.OS === 'web'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, router } from 'expo-router'
+import Head from 'expo-router/head'
 
 // セッション内メモリキャッシュ（ナビゲーション往復で即時表示）
 const richMenuMem = new Map<string, any>()
@@ -697,6 +698,17 @@ export default function TalkDetailScreen() {
 
   return (
     <View style={styles.outerWrap}>
+      {isWeb && (
+        <Head>
+          <title>{senderName ? `${senderName} | Reach` : 'Reach'}</title>
+          <meta property="og:title" content={senderName ? `${senderName} | Reach` : 'Reach'} />
+          <meta property="og:description" content={senderBio ?? 'Reach でクリエーターをフォローして配信を楽しもう'} />
+          <meta property="og:image" content={senderAvatar ?? 'https://reach-pi-one.vercel.app/icon.png'} />
+          <meta property="og:site_name" content="Reach" />
+          <meta name="twitter:card" content="summary" />
+          <meta name="twitter:image" content={senderAvatar ?? 'https://reach-pi-one.vercel.app/icon.png'} />
+        </Head>
+      )}
       {RightPanel}
       {/* 配信カラム：デスクトップは 480px 固定、モバイルは flex:1 */}
       <View style={isDesktop ? styles.broadcastsColumn : { flex: 1 }}>
