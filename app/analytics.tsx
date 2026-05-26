@@ -447,27 +447,27 @@ const styles = StyleSheet.create({
   // ── ヒーローエリア ──
   heroRow: { flexDirection: 'row', gap: 10 },
   heroCard: {
-    flex: 1, backgroundColor: Colors.accent, borderRadius: 18,
-    padding: 16, gap: 4, minHeight: 140, justifyContent: 'space-between',
+    flex: 1, backgroundColor: Colors.accent, borderRadius: 16,
+    padding: 14, gap: 2, minHeight: 110, justifyContent: 'space-between',
   },
-  heroIconRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroIconWrap: {
-    width: 30, height: 30, borderRadius: 15,
+    width: 24, height: 24, borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
   },
-  heroCardLabel: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
-  heroNumber: { fontSize: 38, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  heroSub: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+  heroCardLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+  heroNumber: { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  heroSub: { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
   heroChart: { marginTop: 4 },
 
-  miniCardCol: { width: 110, gap: 8 },
+  miniCardCol: { width: 100, gap: 6 },
   miniCard: {
-    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
+    flex: 1, backgroundColor: Colors.white, borderRadius: 12,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 12, gap: 2,
+    padding: 10, gap: 1,
   },
-  miniIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  miniValue: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  miniIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  miniValue: { fontSize: 17, fontWeight: '800', color: Colors.text },
   miniLabel: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
 
   // ── チャートカード ──
