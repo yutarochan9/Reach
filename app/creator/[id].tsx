@@ -8,12 +8,21 @@ import { BETA_MODE } from '../../constants/config'
 
 const FREE_FOLLOWER_LIMIT = 500
 
+const SNS_FIELDS = [
+  { key: 'x', label: 'X', icon: 'logo-twitter' as const },
+  { key: 'instagram', label: 'Instagram', icon: 'logo-instagram' as const },
+  { key: 'youtube', label: 'YouTube', icon: 'logo-youtube' as const },
+  { key: 'website', label: 'Web', icon: 'globe-outline' as const },
+]
+
 type Profile = {
   id: string
   display_name: string
   bio: string | null
   avatar_url: string | null
   is_official: boolean
+  username: string | null
+  sns_links: Record<string, string> | null
 }
 
 
@@ -38,7 +47,7 @@ export default function CreatorScreen() {
     setMyId(user.id)
 
     const [{ data: prof }, { data: follows }, { data: myFollow }, { data: menu }] = await Promise.all([
-      supabase.from('profiles').select('*, plan').eq('id', id).single(),
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', id),
       supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle(),
       supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', id).maybeSingle(),
@@ -172,7 +181,23 @@ export default function CreatorScreen() {
             <Text style={styles.name}>{profile.display_name}</Text>
             {profile.is_official && <Ionicons name="checkmark-circle" size={18} color="#1D9BF0" />}
           </View>
-          {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+          {profile.username && <Text style={styles.username}>@{profile.username}</Text>}
+          {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+          {profile.sns_links && SNS_FIELDS.some(f => profile.sns_links?.[f.key]) && (
+            <View style={styles.snsRow}>
+              {SNS_FIELDS.filter(f => profile.sns_links?.[f.key]).map(f => (
+                <TouchableOpacity
+                  key={f.key}
+                  style={styles.snsBtn}
+                  onPress={() => Linking.openURL(profile.sns_links![f.key])}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={f.icon} size={16} color={Colors.accent} />
+                  <Text style={styles.snsBtnText}>{f.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Text style={styles.statNum}>{followerCount.toLocaleString()}</Text>
@@ -284,7 +309,16 @@ const styles = StyleSheet.create({
   avatarImage: { width: 88, height: 88, borderRadius: 44 },
   avatarText: { fontSize: 36, fontWeight: '700', color: Colors.white },
   name: { fontSize: 20, fontWeight: '700', color: Colors.text },
-  bio: { fontSize: 14, color: Colors.textLight, textAlign: 'center' },
+  username: { fontSize: 13, color: Colors.accent, marginTop: -2 },
+  bio: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 20 },
+  snsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 4 },
+  snsBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: Colors.background, borderRadius: 20,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  snsBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
   statsRow: { flexDirection: 'row', alignItems: 'center', gap: 24, marginVertical: 4 },
   statItem: { alignItems: 'center', gap: 2 },
   statNum: { fontSize: 18, fontWeight: '700', color: Colors.text },

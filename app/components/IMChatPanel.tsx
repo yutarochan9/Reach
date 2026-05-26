@@ -302,7 +302,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         onRequestClose={() => setLongPressMsg(null)}
       >
         <Pressable style={styles.popupOverlay} onPress={() => setLongPressMsg(null)}>
-          <View style={styles.popupBox}>
+          <Pressable style={styles.popupBox} onPress={() => {}}>
             <TouchableOpacity
               style={styles.popupBtn}
               onPress={() => {
@@ -316,26 +316,18 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
             {longPressMsg?.sender_id === myId && (
               <TouchableOpacity
                 style={styles.popupBtn}
-                onPress={() => {
+                onPress={async () => {
                   const msg = longPressMsg
                   setLongPressMsg(null)
-                  Alert.alert('メッセージを削除', 'このメッセージを削除しますか？', [
-                    { text: 'キャンセル', style: 'cancel' },
-                    {
-                      text: '削除', style: 'destructive',
-                      onPress: async () => {
-                        await supabase.from('messages').delete().eq('id', msg.id)
-                        setMessages(prev => prev.filter(m => m.id !== msg.id))
-                      },
-                    },
-                  ])
+                  await supabase.from('messages').delete().eq('id', msg!.id)
+                  setMessages(prev => prev.filter(m => m.id !== msg!.id))
                 }}
               >
                 <Ionicons name="trash-outline" size={22} color="#E53E3E" />
                 <Text style={[styles.popupBtnText, { color: '#E53E3E' }]}>削除</Text>
               </TouchableOpacity>
             )}
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
 
