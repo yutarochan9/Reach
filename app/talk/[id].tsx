@@ -844,7 +844,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 20, backgroundColor: Colors.white,
   },
   rpDmTxt: { fontSize: 14, fontWeight: '600', color: Colors.accent },
-  messageList: { padding: 16, gap: 12, paddingBottom: 32 },
+  messageList: { paddingLeft: 16, paddingRight: 8, paddingTop: 16, paddingBottom: 32, gap: 12 },
 
   dateDivider: { alignItems: 'center', marginVertical: 8 },
   dateText: {
