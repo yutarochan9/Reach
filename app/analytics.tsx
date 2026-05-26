@@ -3,26 +3,25 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import Svg, {
   Polyline, Circle, Rect, G, Line, Path,
   Defs, LinearGradient as SvgLinearGradient, Stop,
-  Text as SvgText, RadialGradient,
+  Text as SvgText,
 } from 'react-native-svg'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { BETA_MODE } from '../constants/config'
 
-// ── ダークテーマカラー ──────────────────────────────────────
-const D = {
-  bg:       '#0D1117',
-  card:     '#161B22',
-  border:   '#21262D',
-  cyan:     '#39D0D8',
-  blue:     '#58A6FF',
-  purple:   '#BC8CFF',
-  orange:   '#FF8C42',
-  green:    '#3FB950',
-  text:     '#E6EDF3',
-  muted:    '#8B949E',
-  dimmed:   '#30363D',
+const C = {
+  bg:       '#EDE4D8',
+  card:     '#FFFFFF',
+  header:   '#E0D4C4',
+  border:   '#D4C4B0',
+  accent:   '#8B5E3C',
+  button:   '#C4956A',
+  text:     '#3D2B1A',
+  muted:    '#8B7355',
+  light:    '#F5EFE6',
+  danger:   '#C0392B',
+  green:    '#5A8A5A',
 }
 
 type Broadcast = {
@@ -46,40 +45,35 @@ type Stats = {
 }
 const FREE_LIMIT = 50
 
-// ── リングチャート ────────────────────────────────────────────
-function RingChart({ pct, color, size = 80, stroke = 8, label, value }:
-  { pct: number; color: string; size?: number; stroke?: number; label: string; value: string }) {
+// ── 今月配信リングチャート（MAXが明確なのでリングが成立） ──────────
+function MonthlyRing({ used, limit, color }: { used: number; limit: number; color: string }) {
+  const size = 120, stroke = 10
   const r = (size - stroke) / 2
   const circ = 2 * Math.PI * r
-  const dash = Math.max(circ * Math.min(pct, 1), 0)
+  const pct = Math.min(used / limit, 1)
+  const dash = circ * pct
   const cx = size / 2, cy = size / 2
   return (
-    <View style={{ alignItems: 'center', gap: 6 }}>
+    <View style={{ alignItems: 'center' }}>
       <Svg width={size} height={size}>
         <Defs>
-          <RadialGradient id={`rg${label}`} cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={color} stopOpacity="0.15" />
-            <Stop offset="1" stopColor={color} stopOpacity="0" />
-          </RadialGradient>
+          <SvgLinearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={color} stopOpacity="1" />
+            <Stop offset="1" stopColor={color} stopOpacity="0.6" />
+          </SvgLinearGradient>
         </Defs>
-        {/* 背景リング */}
-        <Circle cx={cx} cy={cy} r={r} fill="none" stroke={D.dimmed} strokeWidth={stroke} />
-        {/* グロー背景 */}
-        <Circle cx={cx} cy={cy} r={r} fill={`url(#rg${label})`} />
-        {/* プログレスリング */}
+        <Circle cx={cx} cy={cy} r={r} fill="none" stroke={C.border} strokeWidth={stroke} />
         <Circle
           cx={cx} cy={cy} r={r}
           fill="none"
-          stroke={color}
+          stroke="url(#ringGrad)"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}
           strokeDashoffset={circ / 4}
-          opacity={0.95}
         />
-        {/* 中央テキスト */}
-        <SvgText x={cx} y={cy - 5} textAnchor="middle" fontSize={14} fontWeight="800" fill={D.text}>{value}</SvgText>
-        <SvgText x={cx} y={cy + 10} textAnchor="middle" fontSize={9} fill={D.muted}>{label}</SvgText>
+        <SvgText x={cx} y={cy - 6} textAnchor="middle" fontSize={22} fontWeight="800" fill={C.text}>{used}</SvgText>
+        <SvgText x={cx} y={cy + 12} textAnchor="middle" fontSize={11} fill={C.muted}>/ {limit}</SvgText>
       </Svg>
     </View>
   )
@@ -92,7 +86,7 @@ function AreaChart({ data, color, width, height = 110, gradId }:
   const max = Math.max(...data, 1)
   const min = Math.min(...data, 0)
   const range = max - min || 1
-  const pX = 4, pY = 14
+  const pX = 4, pY = 16
   const w = width - pX * 2, h = height - pY * 2
   const pts = data.map((v, i) => ({
     x: pX + (i / (data.length - 1)) * w,
@@ -110,22 +104,22 @@ function AreaChart({ data, color, width, height = 110, gradId }:
     <Svg width={width} height={height}>
       <Defs>
         <SvgLinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={color} stopOpacity="0.35" />
+          <Stop offset="0" stopColor={color} stopOpacity="0.25" />
           <Stop offset="1" stopColor={color} stopOpacity="0" />
         </SvgLinearGradient>
       </Defs>
       {[0, 0.5, 1].map((t, i) => (
         <Line key={i} x1={pX} y1={pY + t * h} x2={width - pX} y2={pY + t * h}
-          stroke={D.dimmed} strokeWidth={1} strokeDasharray="3,4" />
+          stroke={C.border} strokeWidth={1} strokeDasharray="3,4" />
       ))}
       <Path d={areaPath} fill={`url(#${gradId})`} />
       <Polyline points={linePts} fill="none" stroke={color} strokeWidth={2}
         strokeLinecap="round" strokeLinejoin="round" />
       {pts.map((p, i) => (
         <G key={i}>
-          <Circle cx={p.x} cy={p.y} r={5} fill={D.card} stroke={color} strokeWidth={1.5} />
+          <Circle cx={p.x} cy={p.y} r={4} fill={C.card} stroke={color} strokeWidth={1.5} />
           {data[i] > 0 && (
-            <SvgText x={p.x} y={p.y - 8} textAnchor="middle" fontSize={9} fontWeight="700" fill={color}>
+            <SvgText x={p.x} y={p.y - 7} textAnchor="middle" fontSize={9} fontWeight="700" fill={color}>
               {data[i]}
             </SvgText>
           )}
@@ -140,7 +134,7 @@ function BarChart({ data, color, width, height = 110 }:
   { data: number[]; color: string; width: number; height?: number }) {
   if (data.length === 0 || width < 10) return null
   const max = Math.max(...data, 1)
-  const labelH = 16, baseH = 6
+  const labelH = 18, baseH = 6
   const barAreaH = height - labelH - baseH
   const slotW = width / data.length
   const barW = Math.max(slotW * 0.3, 3)
@@ -154,7 +148,7 @@ function BarChart({ data, color, width, height = 110 }:
         </SvgLinearGradient>
       </Defs>
       <Line x1={0} y1={height - baseH} x2={width} y2={height - baseH}
-        stroke={D.dimmed} strokeWidth={1} />
+        stroke={C.border} strokeWidth={1} />
       {data.map((v, i) => {
         const barH = Math.max((v / max) * barAreaH, v > 0 ? 4 : 0)
         const cx = slotW * i + slotW / 2
@@ -163,10 +157,10 @@ function BarChart({ data, color, width, height = 110 }:
         return (
           <G key={i}>
             <Rect x={barX} y={barY} width={barW} height={barH}
-              rx={barW / 2} fill="url(#barGrad)" opacity={v === 0 ? 0.1 : 1} />
+              rx={barW / 2} fill="url(#barGrad)" opacity={v === 0 ? 0.15 : 1} />
             {v > 0 && (
               <SvgText x={cx} y={barY - 3} textAnchor="middle"
-                fontSize={10} fontWeight="800" fill={color}>{v}</SvgText>
+                fontSize={9} fontWeight="700" fill={color}>{v}</SvgText>
             )}
           </G>
         )
@@ -257,31 +251,36 @@ export default function AnalyticsScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const formatDate = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}` }
-  const truncate = (s: string, n = 30) => s.length > n ? s.slice(0, n) + '…' : s
+  const truncate = (s: string, n = 28) => s.length > n ? s.slice(0, n) + '…' : s
 
   if (loading) return (
     <View style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}>
-      <ActivityIndicator color={D.cyan} />
+      <ActivityIndicator color={C.accent} />
     </View>
   )
 
   const isFree = !BETA_MODE && stats?.plan === 'free'
-  const monthlyPct = isFree ? Math.min(((stats?.monthlyBroadcasts ?? 0) / FREE_LIMIT), 1) : 1
-  const monthlyNearLimit = isFree && (stats?.monthlyBroadcasts ?? 0) >= FREE_LIMIT * 0.8
+  const monthlyUsed = stats?.monthlyBroadcasts ?? 0
+  const monthlyNearLimit = isFree && monthlyUsed >= FREE_LIMIT * 0.8
+  const monthlyAtLimit = isFree && monthlyUsed >= FREE_LIMIT
+  const ringColor = monthlyAtLimit ? C.danger : monthlyNearLimit ? '#E67E22' : C.green
 
   const chartData = [...broadcasts].reverse().slice(-10)
   const readSeries = chartData.map(b => b.read_count)
   const likeSeries = chartData.map(b => b.like_count)
 
-  const followerPct = Math.min((stats?.followerCount ?? 0) / Math.max((stats?.followerCount ?? 0) + 10, 100), 1)
-  const readPct = Math.min((stats?.totalReads ?? 0) / Math.max((stats?.totalReads ?? 0) + 10, 100), 1)
-  const likePct = Math.min((stats?.totalLikes ?? 0) / Math.max((stats?.totalLikes ?? 0) + 10, 50), 1)
+  const statItems = [
+    { label: 'フォロワー', value: stats?.followerCount ?? 0, icon: 'people-outline' as const, color: C.accent },
+    { label: '累計閲覧', value: stats?.totalReads ?? 0, icon: 'eye-outline' as const, color: C.button },
+    { label: '累計いいね', value: stats?.totalLikes ?? 0, icon: 'heart-outline' as const, color: C.accent },
+    { label: '累計配信', value: stats?.totalBroadcasts ?? 0, icon: 'radio-outline' as const, color: C.button },
+  ]
 
   return (
     <View style={s.container}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 4, width: 32 }}>
-          <Ionicons name="chevron-back" size={24} color={D.cyan} />
+          <Ionicons name="chevron-back" size={24} color={C.accent} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>分析</Text>
         <View style={{ width: 32 }} />
@@ -289,52 +288,59 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={s.content}>
 
-        {/* ── リングチャート 3連 ── */}
-        <View style={s.card}>
-          <Text style={s.cardLabel}>OVERVIEW</Text>
-          <View style={s.ringRow}>
-            <RingChart pct={followerPct} color={D.cyan} size={110} stroke={9}
-              label="フォロワー" value={(stats?.followerCount ?? 0).toString()} />
-            <RingChart pct={readPct} color={D.purple} size={110} stroke={9}
-              label="累計閲覧" value={(stats?.totalReads ?? 0).toLocaleString()} />
-            <RingChart pct={likePct} color={D.orange} size={110} stroke={9}
-              label="累計いいね" value={(stats?.totalLikes ?? 0).toString()} />
-          </View>
-        </View>
-
-        {/* ── 数値カード 3枚 ── */}
-        <View style={s.row3}>
-          {[
-            { label: '累計配信', value: stats?.totalBroadcasts ?? 0, color: D.blue, icon: 'radio-outline' },
-            { label: '今月配信', value: stats?.monthlyBroadcasts ?? 0, color: D.green, icon: 'calendar-outline', pct: monthlyPct, isFree },
-            { label: 'フォロー中', value: stats?.followingCount ?? 0, color: D.cyan, icon: 'person-add-outline' },
-          ].map(item => (
+        {/* ── 4つの数値カード ── */}
+        <View style={s.grid2}>
+          {statItems.map(item => (
             <View key={item.label} style={s.statCard}>
-              <Ionicons name={item.icon as any} size={14} color={item.color} />
-              <Text style={[s.statNum, { color: item.color }]}>{item.value.toLocaleString()}</Text>
-              <Text style={s.statLabel}>{item.label}</Text>
-              {item.pct !== undefined && item.isFree && (
-                <View style={s.miniBar}>
-                  <View style={[s.miniBarFill, { width: `${item.pct * 100}%` as any, backgroundColor: monthlyNearLimit ? '#F85149' : D.green }]} />
-                </View>
-              )}
+              <View style={s.statIconRow}>
+                <Ionicons name={item.icon} size={14} color={item.color} />
+                <Text style={[s.statLabel, { color: item.color }]}>{item.label}</Text>
+              </View>
+              <Text style={s.statNum}>{item.value.toLocaleString()}</Text>
             </View>
           ))}
         </View>
+
+        {/* ── 今月の配信（無料プランのみリング表示） ── */}
+        {isFree ? (
+          <View style={s.card}>
+            <View style={s.chartHead}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.cardSectionLabel}>今月の配信</Text>
+                <Text style={s.cardSub}>無料プラン · 月{FREE_LIMIT}件まで</Text>
+              </View>
+              <MonthlyRing used={monthlyUsed} limit={FREE_LIMIT} color={ringColor} />
+            </View>
+            {monthlyNearLimit && (
+              <TouchableOpacity onPress={() => router.push('/plan' as any)} style={[s.upgradeBar, { borderColor: `${ringColor}50` }]}>
+                <Ionicons name="flash-outline" size={13} color={ringColor} />
+                <Text style={[s.upgradeText, { color: ringColor }]}>
+                  {monthlyAtLimit ? '上限到達 — アップグレードで無制限に' : `残り${FREE_LIMIT - monthlyUsed}回 — まもなく上限`}
+                </Text>
+                <Ionicons name="chevron-forward" size={13} color={ringColor} />
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : (
+          <View style={s.card}>
+            <Text style={s.cardSectionLabel}>今月の配信</Text>
+            <Text style={s.monthlyNum}>{monthlyUsed}<Text style={s.monthlyUnit}> 件</Text></Text>
+          </View>
+        )}
 
         {/* ── 閲覧数エリアチャート ── */}
         {chartData.length >= 2 && (
           <View style={s.card} onLayout={e => setChartW(e.nativeEvent.layout.width - 32)}>
             <View style={s.chartHead}>
               <View>
-                <Text style={s.cardLabel}>READ TREND</Text>
-                <Text style={s.chartSub}>閲覧数推移 · 直近{chartData.length}配信</Text>
+                <Text style={s.cardSectionLabel}>閲覧数の推移</Text>
+                <Text style={s.cardSub}>直近 {chartData.length} 配信</Text>
               </View>
-              <View style={[s.badge, { borderColor: D.cyan }]}>
-                <Text style={[s.badgeText, { color: D.cyan }]}>閲覧数</Text>
+              <View style={[s.badge, { backgroundColor: `${C.accent}15`, borderColor: `${C.accent}40` }]}>
+                <Text style={[s.badgeText, { color: C.accent }]}>閲覧数</Text>
               </View>
             </View>
-            {chartW > 0 && <AreaChart data={readSeries} color={D.cyan} width={chartW} height={120} gradId="readGrad" />}
+            {chartW > 0 && <AreaChart data={readSeries} color={C.accent} width={chartW} height={120} gradId="readGrad" />}
             <View style={s.xLabels}>
               {chartData.map((b, i) => <Text key={i} style={s.xLabel}>{formatDate(b.created_at)}</Text>)}
             </View>
@@ -346,14 +352,14 @@ export default function AnalyticsScreen() {
           <View style={s.card}>
             <View style={s.chartHead}>
               <View>
-                <Text style={s.cardLabel}>LIKES</Text>
-                <Text style={s.chartSub}>いいね数 · 直近{chartData.length}配信</Text>
+                <Text style={s.cardSectionLabel}>いいね数</Text>
+                <Text style={s.cardSub}>直近 {chartData.length} 配信</Text>
               </View>
-              <View style={[s.badge, { borderColor: D.orange }]}>
-                <Text style={[s.badgeText, { color: D.orange }]}>いいね</Text>
+              <View style={[s.badge, { backgroundColor: `${C.button}15`, borderColor: `${C.button}40` }]}>
+                <Text style={[s.badgeText, { color: C.button }]}>いいね</Text>
               </View>
             </View>
-            {chartW > 0 && <BarChart data={likeSeries} color={D.orange} width={chartW} height={120} />}
+            {chartW > 0 && <BarChart data={likeSeries} color={C.button} width={chartW} height={120} />}
             <View style={s.xLabels}>
               {chartData.map((b, i) => <Text key={i} style={s.xLabel}>{formatDate(b.created_at)}</Text>)}
             </View>
@@ -362,32 +368,28 @@ export default function AnalyticsScreen() {
 
         {/* ── 配信テーブル ── */}
         <View style={[s.card, { padding: 0, overflow: 'hidden' }]}>
-          <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View>
-              <Text style={s.cardLabel}>BROADCASTS</Text>
-              <Text style={s.chartSub}>配信ごとの実績</Text>
-            </View>
-            <Text style={[s.badgeText, { color: D.muted }]}>{broadcasts.length} 件</Text>
+          <View style={{ padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={s.cardSectionLabel}>配信ごとの実績</Text>
+            <Text style={[s.badgeText, { color: C.muted }]}>{broadcasts.length} 件</Text>
           </View>
 
-          {/* ヘッダー行 */}
           <View style={s.thRow}>
             <Text style={[s.th, { flex: 1 }]}>内容</Text>
             <Text style={s.th}>日時</Text>
-            <Text style={[s.th, { width: 28, textAlign: 'right' }]}>👁</Text>
-            <Text style={[s.th, { width: 28, textAlign: 'right' }]}>♡</Text>
-            <Text style={[s.th, { width: 28, textAlign: 'right' }]}>💬</Text>
+            <Text style={[s.th, { width: 30, textAlign: 'right' }]}>👁</Text>
+            <Text style={[s.th, { width: 30, textAlign: 'right' }]}>♡</Text>
+            <Text style={[s.th, { width: 30, textAlign: 'right' }]}>💬</Text>
           </View>
 
           {broadcasts.length === 0 ? (
             <View style={{ alignItems: 'center', padding: 32, gap: 8 }}>
-              <Ionicons name="radio-outline" size={32} color={D.dimmed} />
-              <Text style={{ color: D.muted, fontSize: 13 }}>配信がまだありません</Text>
+              <Ionicons name="radio-outline" size={32} color={C.border} />
+              <Text style={{ color: C.muted, fontSize: 13 }}>配信がまだありません</Text>
             </View>
           ) : broadcasts.map((bc, idx) => (
             <TouchableOpacity
               key={bc.id}
-              style={[s.tdRow, idx % 2 === 0 && { backgroundColor: `${D.dimmed}30` }]}
+              style={[s.tdRow, idx % 2 !== 0 && { backgroundColor: C.light }]}
               onPress={() => router.push(`/broadcast-thread/${bc.id}` as any)}
               activeOpacity={0.7}
             >
@@ -400,22 +402,12 @@ export default function AnalyticsScreen() {
                 <Text style={s.tdText} numberOfLines={1}>{truncate(bc.content)}</Text>
               </View>
               <Text style={[s.td, { width: 36 }]}>{formatDate(bc.created_at)}</Text>
-              <Text style={[s.td, { width: 28, color: D.cyan }]}>{bc.read_count}</Text>
-              <Text style={[s.td, { width: 28, color: D.orange }]}>{bc.like_count}</Text>
-              <Text style={[s.td, { width: 28, color: D.purple }]}>{bc.reply_count}</Text>
+              <Text style={[s.td, { width: 30, color: C.accent }]}>{bc.read_count}</Text>
+              <Text style={[s.td, { width: 30, color: C.button }]}>{bc.like_count}</Text>
+              <Text style={[s.td, { width: 30, color: C.muted }]}>{bc.reply_count}</Text>
             </TouchableOpacity>
           ))}
         </View>
-
-        {monthlyNearLimit && (
-          <TouchableOpacity onPress={() => router.push('/plan' as any)} style={s.upgradeBar}>
-            <Ionicons name="flash-outline" size={14} color={D.orange} />
-            <Text style={s.upgradeText}>
-              {(stats?.monthlyBroadcasts ?? 0) >= FREE_LIMIT ? '上限到達 — アップグレードで無制限に' : `残り${FREE_LIMIT - (stats?.monthlyBroadcasts ?? 0)}回 — まもなく上限`}
-            </Text>
-            <Ionicons name="chevron-forward" size={14} color={D.orange} />
-          </TouchableOpacity>
-        )}
 
       </ScrollView>
     </View>
@@ -423,62 +415,64 @@ export default function AnalyticsScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: D.bg },
+  container: { flex: 1, backgroundColor: C.bg },
   header: {
-    backgroundColor: D.card,
+    backgroundColor: C.header,
     paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderBottomWidth: 1, borderBottomColor: D.border,
+    borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: D.text },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   content: { padding: 14, gap: 12, paddingBottom: 48 },
 
-  card: {
-    backgroundColor: D.card, borderRadius: 14,
-    borderWidth: 1, borderColor: D.border, padding: 16, gap: 12,
+  grid2: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  statCard: {
+    width: '47.5%',
+    backgroundColor: C.card, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border,
+    padding: 14, gap: 6,
   },
-  cardLabel: { fontSize: 10, fontWeight: '800', color: D.muted, letterSpacing: 1.5 },
-  chartSub: { fontSize: 12, fontWeight: '600', color: D.text, marginTop: 1 },
-  chartHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statLabel: { fontSize: 12, fontWeight: '600' },
+  statNum: { fontSize: 30, fontWeight: '800', color: C.text, letterSpacing: -1 },
+
+  card: {
+    backgroundColor: C.card, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border, padding: 16, gap: 12,
+  },
+  cardSectionLabel: { fontSize: 13, fontWeight: '700', color: C.text },
+  cardSub: { fontSize: 11, color: C.muted, marginTop: 2 },
+  chartHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   badge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 10, fontWeight: '700' },
   xLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  xLabel: { fontSize: 9, color: D.muted, flex: 1, textAlign: 'center' },
+  xLabel: { fontSize: 9, color: C.muted, flex: 1, textAlign: 'center' },
 
-  ringRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' },
-
-  row3: { flexDirection: 'row', gap: 10 },
-  statCard: {
-    flex: 1, backgroundColor: D.card, borderRadius: 12,
-    borderWidth: 1, borderColor: D.border,
-    padding: 12, gap: 3, alignItems: 'flex-start',
-  },
-  statNum: { fontSize: 28, fontWeight: '900', letterSpacing: -1 },
-  statLabel: { fontSize: 10, color: D.muted, fontWeight: '600' },
-  miniBar: { height: 3, width: '100%', backgroundColor: D.dimmed, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
-  miniBarFill: { height: 3, borderRadius: 2 },
+  monthlyNum: { fontSize: 36, fontWeight: '800', color: C.text, letterSpacing: -1 },
+  monthlyUnit: { fontSize: 16, fontWeight: '600', color: C.muted },
 
   thRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 14, paddingVertical: 8,
-    backgroundColor: D.dimmed, gap: 8,
+    backgroundColor: C.bg, gap: 8,
+    borderTopWidth: 1, borderTopColor: C.border,
   },
-  th: { fontSize: 10, fontWeight: '700', color: D.muted },
+  th: { fontSize: 10, fontWeight: '700', color: C.muted },
   tdRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
-  tdText: { fontSize: 12, color: D.text },
-  td: { fontSize: 12, fontWeight: '600', color: D.muted, textAlign: 'right' },
+  tdText: { fontSize: 12, color: C.text },
+  td: { fontSize: 12, fontWeight: '600', color: C.muted, textAlign: 'right' },
 
   groupBadge: {
     flexDirection: 'row', alignSelf: 'flex-start',
-    backgroundColor: `${D.purple}25`, borderRadius: 4,
+    backgroundColor: `${C.button}20`, borderRadius: 4,
     paddingHorizontal: 5, paddingVertical: 1,
   },
-  groupBadgeText: { fontSize: 9, fontWeight: '700', color: D.purple },
+  groupBadgeText: { fontSize: 9, fontWeight: '700', color: C.button },
 
   upgradeBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: `${D.orange}15`, borderRadius: 10, borderWidth: 1, borderColor: `${D.orange}40`,
-    padding: 12,
+    backgroundColor: C.light, borderRadius: 8, borderWidth: 1,
+    padding: 10,
   },
-  upgradeText: { flex: 1, fontSize: 12, color: D.orange, fontWeight: '600' },
+  upgradeText: { flex: 1, fontSize: 12, fontWeight: '600' },
 })
