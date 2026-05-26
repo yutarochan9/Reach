@@ -5,38 +5,14 @@ import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
 
 const FAQS = [
-  {
-    q: 'Reachは無料で使えますか？',
-    a: 'はい、現在お試し期間中のため全機能を無料でご利用いただけます。',
-  },
-  {
-    q: 'フォローするとどうなりますか？',
-    a: 'フォローしたクリエイターの配信がトーク画面に届くようになります。フォロワー限定コンテンツも受け取れます。',
-  },
-  {
-    q: 'フォローを解除するにはどうすればいいですか？',
-    a: 'クリエイターのプロフィールページからフォロー解除ができます。解除後は新しい配信が届かなくなります。',
-  },
-  {
-    q: 'DMはクリエイター以外に見られますか？',
-    a: 'いいえ。DMはクリエイターとあなたの間だけで共有されます。第三者には公開されません。',
-  },
-  {
-    q: '通知が来ません。どうすればいいですか？',
-    a: 'デバイスの設定からReachの通知を許可してください。また、アプリの設定でも通知のオン/オフを確認できます。',
-  },
-  {
-    q: 'タイルメニューとは何ですか？',
-    a: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。',
-  },
-  {
-    q: 'アカウントを削除するにはどうすればいいですか？',
-    a: 'マイページの設定からアカウント削除の申請ができます。削除後はデータの復元はできませんのでご注意ください。',
-  },
-  {
-    q: '困ったときはどこに問い合わせできますか？',
-    a: 'マイページの「お問い合わせ」からご連絡ください。通常2〜3営業日以内にご返信します。',
-  },
+  { q: 'Reachは無料で使えますか？', a: 'はい、現在お試し期間中のため全機能を無料でご利用いただけます。' },
+  { q: 'フォローするとどうなりますか？', a: 'フォローしたクリエイターの配信がトーク画面に届くようになります。フォロワー限定コンテンツも受け取れます。' },
+  { q: 'フォローを解除するにはどうすればいいですか？', a: 'クリエイターのプロフィールページからフォロー解除ができます。解除後は新しい配信が届かなくなります。' },
+  { q: 'DMはクリエイター以外に見られますか？', a: 'いいえ。DMはクリエイターとあなたの間だけで共有されます。第三者には公開されません。' },
+  { q: '通知が来ません。どうすればいいですか？', a: 'デバイスの設定からReachの通知を許可してください。また、アプリの設定でも通知のオン/オフを確認できます。' },
+  { q: 'タイルメニューとは何ですか？', a: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。' },
+  { q: 'アカウントを削除するにはどうすればいいですか？', a: 'マイページの設定からアカウント削除の申請ができます。削除後はデータの復元はできませんのでご注意ください。' },
+  { q: '困ったときはどこに問い合わせできますか？', a: 'マイページの「お問い合わせ」からご連絡ください。通常2〜3営業日以内にご返信します。' },
 ]
 
 export default function FaqScreen() {
@@ -62,23 +38,27 @@ export default function FaqScreen() {
                 onPress={() => setOpenIndex(isOpen ? null : i)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.qLabel}>Q</Text>
+                <View style={styles.qBadge}>
+                  <Text style={styles.qBadgeText}>Q</Text>
+                </View>
                 <Text style={styles.qText}>{faq.q}</Text>
-                <Ionicons
-                  name={isOpen ? 'chevron-up' : 'chevron-down'}
-                  size={18}
-                  color={Colors.textLight}
-                />
+                <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textLight} />
               </TouchableOpacity>
               {isOpen && (
                 <View style={styles.answer}>
-                  <Text style={styles.aLabel}>A</Text>
+                  <View style={[styles.qBadge, styles.aBadge]}>
+                    <Text style={[styles.qBadgeText, styles.aBadgeText]}>A</Text>
+                  </View>
                   <Text style={styles.aText}>{faq.a}</Text>
                 </View>
               )}
             </View>
           )
         })}
+
+        <View style={styles.versionRow}>
+          <Text style={styles.versionText}>Reach — お試し期間中</Text>
+        </View>
       </ScrollView>
     </View>
   )
@@ -94,29 +74,16 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
-  content: { padding: 16, paddingBottom: 48, gap: 8 },
-  item: {
-    backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
-  },
-  question: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 16,
-  },
-  qLabel: {
-    fontSize: 15, fontWeight: '800', color: Colors.accent,
-    width: 20, textAlign: 'center', flexShrink: 0,
-  },
+  content: { padding: 20, paddingBottom: 48, gap: 10 },
+  item: { backgroundColor: Colors.white, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  question: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  qBadge: { width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  qBadgeText: { fontSize: 13, fontWeight: '800', color: '#FFF' },
   qText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text, lineHeight: 20 },
-  answer: {
-    flexDirection: 'row', gap: 10,
-    paddingHorizontal: 16, paddingBottom: 16, paddingTop: 2,
-    borderTopWidth: 1, borderTopColor: Colors.border,
-    backgroundColor: Colors.background,
-  },
-  aLabel: {
-    fontSize: 15, fontWeight: '800', color: Colors.textLight,
-    width: 20, textAlign: 'center', flexShrink: 0, marginTop: 12,
-  },
-  aText: { flex: 1, fontSize: 13, color: Colors.textLight, lineHeight: 21, marginTop: 12 },
+  answer: { flexDirection: 'row', gap: 12, padding: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.background, alignItems: 'flex-start' },
+  aBadge: { backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border },
+  aBadgeText: { color: Colors.textLight },
+  aText: { flex: 1, fontSize: 13, color: Colors.textLight, lineHeight: 21 },
+  versionRow: { alignItems: 'center', marginTop: 8 },
+  versionText: { fontSize: 12, color: Colors.border },
 })
