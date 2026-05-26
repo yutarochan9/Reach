@@ -145,6 +145,7 @@ export default function RootLayout() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         if (authFlags.skipNextSignedOut) { authFlags.skipNextSignedOut = false; return }
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicPath(window.location.pathname)) return
         navigated.current = false
         router.replace('/(auth)/login')
       }
