@@ -128,7 +128,6 @@ export default function AnalyticsScreen() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [loading, setLoading] = useState(true)
   const [chartW, setChartW] = useState(0)
-  const [rightW, setRightW] = useState(0)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -246,7 +245,6 @@ export default function AnalyticsScreen() {
   const chartData = [...broadcasts].reverse().slice(-10)
   const readSeries = chartData.map(b => b.read_count)
   const likeSeries = chartData.map(b => b.like_count)
-  const miniData = readSeries.length >= 2 ? readSeries : [0, 0]
 
   return (
     <View style={styles.container}>
@@ -260,50 +258,35 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
 
-        {/* ── 上部ヒーローエリア ── */}
-        <View style={styles.heroRow}>
-          {/* フォロワーカード（アクセントカラー） */}
-          <View style={styles.heroCard}
-            onLayout={e => setRightW(e.nativeEvent.layout.width - 32)}
-          >
-            <View style={styles.heroIconRow}>
-              <View style={styles.heroIconWrap}>
-                <Ionicons name="people" size={18} color="#fff" />
-              </View>
-              <Text style={styles.heroCardLabel}>フォロワー</Text>
+        {/* ── 上部 2×2 スタットグリッド ── */}
+        <View style={styles.statGrid}>
+          <View style={[styles.miniCard, styles.accentCard]}>
+            <View style={[styles.miniIconWrap, { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+              <Ionicons name="people" size={15} color="#fff" />
             </View>
-            <Text style={styles.heroNumber}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
-            <Text style={styles.heroSub}>フォロー中 {stats?.followingCount ?? 0}人</Text>
-            {rightW > 0 && miniData.length >= 2 && (
-              <View style={styles.heroChart}>
-                <MiniLine data={miniData} color="#fff" width={rightW} height={36} />
-              </View>
-            )}
+            <Text style={[styles.miniValue, { color: '#fff' }]}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
+            <Text style={[styles.miniLabel, { color: 'rgba(255,255,255,0.8)' }]}>フォロワー</Text>
           </View>
-
-          {/* 右側 3つの小カード */}
-          <View style={styles.miniCardCol}>
-            <View style={styles.miniCard}>
-              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.button}20` }]}>
-                <Ionicons name="eye-outline" size={15} color={Colors.button} />
-              </View>
-              <Text style={styles.miniValue}>{(stats?.totalReads ?? 0).toLocaleString()}</Text>
-              <Text style={styles.miniLabel}>累計閲覧</Text>
+          <View style={styles.miniCard}>
+            <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.button}20` }]}>
+              <Ionicons name="eye-outline" size={15} color={Colors.button} />
             </View>
-            <View style={styles.miniCard}>
-              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
-                <Ionicons name="heart-outline" size={15} color={Colors.accent} />
-              </View>
-              <Text style={styles.miniValue}>{(stats?.totalLikes ?? 0).toLocaleString()}</Text>
-              <Text style={styles.miniLabel}>累計いいね</Text>
+            <Text style={styles.miniValue}>{(stats?.totalReads ?? 0).toLocaleString()}</Text>
+            <Text style={styles.miniLabel}>累計閲覧</Text>
+          </View>
+          <View style={styles.miniCard}>
+            <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
+              <Ionicons name="heart-outline" size={15} color={Colors.accent} />
             </View>
-            <View style={styles.miniCard}>
-              <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
-                <Ionicons name="radio-outline" size={15} color={Colors.accent} />
-              </View>
-              <Text style={styles.miniValue}>{(stats?.totalBroadcasts ?? 0).toLocaleString()}</Text>
-              <Text style={styles.miniLabel}>累計配信</Text>
+            <Text style={styles.miniValue}>{(stats?.totalLikes ?? 0).toLocaleString()}</Text>
+            <Text style={styles.miniLabel}>累計いいね</Text>
+          </View>
+          <View style={styles.miniCard}>
+            <View style={[styles.miniIconWrap, { backgroundColor: `${Colors.accent}20` }]}>
+              <Ionicons name="radio-outline" size={15} color={Colors.accent} />
             </View>
+            <Text style={styles.miniValue}>{(stats?.totalBroadcasts ?? 0).toLocaleString()}</Text>
+            <Text style={styles.miniLabel}>累計配信</Text>
           </View>
         </View>
 
@@ -444,28 +427,14 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   content: { padding: 16, gap: 12, paddingBottom: 48 },
 
-  // ── ヒーローエリア ──
-  heroRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
-  heroCard: {
-    width: 110, backgroundColor: Colors.accent, borderRadius: 14,
-    padding: 12, gap: 2, justifyContent: 'space-between',
-  },
-  heroIconRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  heroIconWrap: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
-  },
-  heroCardLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
-  heroNumber: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  heroSub: { fontSize: 9, color: 'rgba(255,255,255,0.7)' },
-  heroChart: { marginTop: 4 },
-
-  miniCardCol: { flex: 1, gap: 8 },
+  // ── 2×2 スタットグリッド ──
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   miniCard: {
-    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
+    width: '47%', backgroundColor: Colors.white, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border,
     padding: 14, gap: 2,
   },
+  accentCard: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   miniIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   miniValue: { fontSize: 24, fontWeight: '800', color: Colors.text },
   miniLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
