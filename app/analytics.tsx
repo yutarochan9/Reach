@@ -41,9 +41,43 @@ type Stats = {
   monthlyBroadcasts: number
   totalReads: number
   totalLikes: number
+  totalReplies: number
   plan: string
 }
 const FREE_LIMIT = 50
+
+// ── エンゲージメント率リング（MAX=100%で意味が明確） ─────────────────
+function RateRing({ pct, color, label, gradId }: { pct: number; color: string; label: string; gradId: string }) {
+  const size = 90, stroke = 9
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const clamped = Math.min(Math.max(pct, 0), 1)
+  const dash = circ * clamped
+  const cx = size / 2, cy = size / 2
+  const display = pct >= 1 ? '100%' : `${(pct * 100).toFixed(1)}%`
+  return (
+    <View style={{ alignItems: 'center', gap: 6, flex: 1 }}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <SvgLinearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={color} stopOpacity="1" />
+            <Stop offset="1" stopColor={color} stopOpacity="0.5" />
+          </SvgLinearGradient>
+        </Defs>
+        <Circle cx={cx} cy={cy} r={r} fill="none" stroke={C.border} strokeWidth={stroke} />
+        <Circle
+          cx={cx} cy={cy} r={r}
+          fill="none" stroke={`url(#${gradId})`}
+          strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={`${dash} ${circ}`}
+          strokeDashoffset={circ / 4}
+        />
+        <SvgText x={cx} y={cy + 5} textAnchor="middle" fontSize={13} fontWeight="800" fill={C.text}>{display}</SvgText>
+      </Svg>
+      <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, textAlign: 'center' }}>{label}</Text>
+    </View>
+  )
+}
 
 // ── 今月配信リングチャート（MAXが明確なのでリングが成立） ──────────
 function MonthlyRing({ used, limit, color }: { used: number; limit: number; color: string }) {
@@ -239,10 +273,12 @@ export default function AnalyticsScreen() {
     })
     enriched.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
+    const totalReplies = Object.values(replyMap).reduce((a, b) => a + b, 0)
+
     setStats({
       followerCount: followerCount ?? 0, followingCount: followingCount ?? 0,
       totalBroadcasts: (bcs ?? []).length, monthlyBroadcasts: monthlyCount ?? 0,
-      totalReads, totalLikes, plan: (profile as any)?.plan ?? 'free',
+      totalReads, totalLikes, totalReplies, plan: (profile as any)?.plan ?? 'free',
     })
     setBroadcasts(enriched)
     setLoading(false)
@@ -268,6 +304,17 @@ export default function AnalyticsScreen() {
   const chartData = [...broadcasts].reverse().slice(-10)
   const readSeries = chartData.map(b => b.read_count)
   const likeSeries = chartData.map(b => b.like_count)
+
+  const followerCount = stats?.followerCount ?? 0
+  const totalReads = stats?.totalReads ?? 0
+  const totalBroadcasts = stats?.totalBroadcasts ?? 0
+  // 既読率: 配信1件あたりの平均閲覧 ÷ フォロワー数
+  const readRate = followerCount > 0 && totalBroadcasts > 0
+    ? (totalReads / totalBroadcasts) / followerCount : 0
+  // いいね率: 累計いいね ÷ 累計閲覧
+  const likeRate = totalReads > 0 ? (stats?.totalLikes ?? 0) / totalReads : 0
+  // 返信率: 累計返信 ÷ 累計閲覧
+  const replyRate = totalReads > 0 ? (stats?.totalReplies ?? 0) / totalReads : 0
 
   const subItems = [
     { label: '累計閲覧', value: stats?.totalReads ?? 0, icon: 'eye-outline' as const, color: C.accent },
@@ -309,6 +356,19 @@ export default function AnalyticsScreen() {
             ))}
           </View>
         </View>
+
+        {/* ── エンゲージメント率 3リング ── */}
+        {totalBroadcasts > 0 && (
+          <View style={s.card}>
+            <Text style={s.cardSectionLabel}>エンゲージメント率</Text>
+            <View style={s.ringRow}>
+              <RateRing pct={readRate} color={C.accent} label="既読率" gradId="rr1" />
+              <RateRing pct={likeRate} color={C.button} label="いいね率" gradId="rr2" />
+              <RateRing pct={replyRate} color="#7A9E7E" label="返信率" gradId="rr3" />
+            </View>
+            <Text style={s.rateNote}>既読率＝平均閲覧÷フォロワー　いいね率・返信率＝閲覧数比</Text>
+          </View>
+        )}
 
         {/* ── 今月の配信（無料プランのみリング表示） ── */}
         {isFree ? (
@@ -467,6 +527,8 @@ const s = StyleSheet.create({
   xLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   xLabel: { fontSize: 9, color: C.muted, flex: 1, textAlign: 'center' },
 
+  ringRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
+  rateNote: { fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 15 },
   monthlyNum: { fontSize: 36, fontWeight: '800', color: C.text, letterSpacing: -1 },
   monthlyUnit: { fontSize: 16, fontWeight: '600', color: C.muted },
 
