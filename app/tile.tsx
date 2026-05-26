@@ -508,18 +508,6 @@ export default function RichMenuScreen() {
                     }}>
                       {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
                       {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.32)' }]} />}
-                      {!btn.bgImage && !panelBgImage && (
-                        <View style={{
-                          width: 18, height: 18, borderRadius: 9,
-                          backgroundColor: `${Colors.accent}18`,
-                          alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <Ionicons name={btn.icon as any} size={10} color={Colors.accent} />
-                        </View>
-                      )}
-                      {(btn.bgImage || panelBgImage) && (
-                        <Ionicons name={btn.icon as any} size={13} color="rgba(255,255,255,0.92)" />
-                      )}
                     </View>
                   ))}
                   {buttons.length === 0 && (
