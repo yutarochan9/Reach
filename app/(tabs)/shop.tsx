@@ -17,6 +17,7 @@ const W_REACTION_RATE = 100  // いいね率（いいね数 / 閲覧数）
 const W_FREQ          = 3    // 配信本数（30日以内、上限20本）
 const W_SOCIAL        = 4    // ソーシャル近接（1人につき）
 const W_POPULARITY    = 8    // フォロワー数（上限500でキャップ）
+const W_TAG_MATCH     = 15   // 自分のタグと一致（1タグにつき）
 
 type Creator = {
   id: string
@@ -27,9 +28,11 @@ type Creator = {
   is_following: boolean
   score: number
   social_count: number
-  broadcast_count: number   // 30日以内の配信数
-  reaction_rate: number     // いいね率
-  reply_rate: number        // 返信率
+  broadcast_count: number
+  reaction_rate: number
+  reply_rate: number
+  tags: string[]
+  tag_match_count: number   // 自分のタグとの一致数
 }
 
 export default function DiscoverScreen() {
@@ -52,12 +55,13 @@ export default function DiscoverScreen() {
     const myFollowingIds = (myFollows ?? []).map((f: any) => f.following_id)
     const myFollowingSet = new Set([user.id, ...myFollowingIds])
 
-    // 2. 候補プロフィール（未フォロー・自分以外、最大300件）
-    const { data: profiles } = await supabase
-      .from('profiles')
-      .select('id, display_name, bio, avatar_url')
-      .neq('id', user.id)
-      .limit(300)
+    // 2. 自分のプロフィール（タグ取得）と候補プロフィール（未フォロー・自分以外、最大300件）
+    const [{ data: myProfile }, { data: profiles }] = await Promise.all([
+      supabase.from('profiles').select('tags').eq('id', user.id).single(),
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, tags').neq('id', user.id).limit(300),
+    ])
+    const myTags: string[] = (myProfile as any)?.tags ?? []
+    const myTagSet = new Set(myTags.map((t: string) => t.toLowerCase()))
     if (!profiles?.length) { setLoading(false); return }
 
     const candidateIds = profiles.map((p: any) => p.id).filter((id: string) => !myFollowingSet.has(id))
@@ -139,12 +143,18 @@ export default function DiscoverScreen() {
         const reactionRate = totalReads > 0 ? st!.totalReactions / totalReads : 0
         const replyRate    = totalReads > 0 ? st!.totalReplies   / totalReads : 0
 
+        const creatorTags: string[] = (p as any).tags ?? []
+        const tagMatchCount = myTagSet.size > 0
+          ? creatorTags.filter((t: string) => myTagSet.has(t.toLowerCase())).length
+          : 0
+
         const score =
-          replyRate    * W_REPLY_RATE +
-          reactionRate * W_REACTION_RATE +
+          replyRate      * W_REPLY_RATE +
+          reactionRate   * W_REACTION_RATE +
           Math.min(bcCount, 20) * W_FREQ +
-          sc * W_SOCIAL +
-          Math.min(fc, 500) / 500 * W_POPULARITY
+          sc             * W_SOCIAL +
+          Math.min(fc, 500) / 500 * W_POPULARITY +
+          tagMatchCount  * W_TAG_MATCH
 
         return {
           ...p,
@@ -155,6 +165,8 @@ export default function DiscoverScreen() {
           broadcast_count: bcCount,
           reaction_rate: reactionRate,
           reply_rate: replyRate,
+          tags: creatorTags,
+          tag_match_count: tagMatchCount,
         }
       })
       .sort((a: Creator, b: Creator) => b.score - a.score)
@@ -189,10 +201,14 @@ export default function DiscoverScreen() {
 
   const isSearching = search.length > 0
   const searchResults = isSearching
-    ? allScored.filter(c =>
-        c.display_name.toLowerCase().includes(search.toLowerCase()) ||
-        (c.bio ?? '').toLowerCase().includes(search.toLowerCase())
-      )
+    ? allScored.filter(c => {
+        const q = search.toLowerCase().replace(/^#/, '')
+        return (
+          c.display_name.toLowerCase().includes(q) ||
+          (c.bio ?? '').toLowerCase().includes(q) ||
+          c.tags.some(t => t.toLowerCase().includes(q))
+        )
+      })
     : []
 
   const pagedList = allScored.slice(0, page * PAGE_SIZE)
@@ -295,24 +311,19 @@ export default function DiscoverScreen() {
 
 // エンゲージメントの一番強いシグナルを1行で表示
 function EngagementLabel({ item }: { item: Creator }) {
-  if (item.reply_rate > 0.02) {
-    return <Text style={styles.hSub}>返信率 {(item.reply_rate * 100).toFixed(1)}%</Text>
-  }
-  if (item.reaction_rate > 0.05) {
-    return <Text style={styles.hSub}>いいね率 {(item.reaction_rate * 100).toFixed(1)}%</Text>
-  }
-  if (item.social_count > 0) {
-    return <Text style={styles.hSub}>{item.social_count}人がフォロー中</Text>
-  }
-  if (item.broadcast_count > 0) {
-    return <Text style={styles.hSub}>月{item.broadcast_count}本配信</Text>
-  }
+  if (item.tag_match_count > 0) return <Text style={styles.hSub}>タグ {item.tag_match_count}個一致</Text>
+  if (item.reply_rate > 0.02) return <Text style={styles.hSub}>返信率 {(item.reply_rate * 100).toFixed(1)}%</Text>
+  if (item.reaction_rate > 0.05) return <Text style={styles.hSub}>いいね率 {(item.reaction_rate * 100).toFixed(1)}%</Text>
+  if (item.social_count > 0) return <Text style={styles.hSub}>{item.social_count}人がフォロー中</Text>
+  if (item.broadcast_count > 0) return <Text style={styles.hSub}>月{item.broadcast_count}本配信</Text>
   return <Text style={styles.hSub}>{item.follower_count.toLocaleString()} フォロワー</Text>
 }
 
 function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, f: boolean) => void }) {
   // カードのサブバッジ：最も強いシグナルを1つ
-  const badge = item.reply_rate > 0.02
+  const badge = item.tag_match_count > 0
+    ? { label: `タグ一致 ${item.tag_match_count}個`, color: '#8B5E3C' }
+    : item.reply_rate > 0.02
     ? { label: `返信率 ${(item.reply_rate * 100).toFixed(1)}%`, color: '#7A9E7E' }
     : item.reaction_rate > 0.05
     ? { label: `いいね率 ${(item.reaction_rate * 100).toFixed(1)}%`, color: Colors.button }

@@ -123,6 +123,8 @@ export default function MyPageScreen() {
   const [editBio, setEditBio] = useState('')
   const [editUsername, setEditUsername] = useState('')
   const [editSns, setEditSns] = useState<Record<string, string>>({})
+  const [editTags, setEditTags] = useState<string[]>([])
+  const [tagInput, setTagInput] = useState('')
   const [usernameError, setUsernameError] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
@@ -144,6 +146,8 @@ const openEdit = () => {
     setEditBio(profile?.bio ?? '')
     setEditUsername(profile?.username ?? '')
     setEditSns(profile?.sns_links ?? {})
+    setEditTags(profile?.tags ?? [])
+    setTagInput('')
     setUsernameError('')
     setEditVisible(true)
   }
@@ -175,6 +179,7 @@ const openEdit = () => {
         bio: editBio.trim() || null,
         username: trimmedUsername,
         sns_links: editSns,
+        tags: editTags,
       })
       .eq('id', user.id)
       .select().single()
@@ -394,6 +399,55 @@ const openEdit = () => {
                 />
               </View>
             ))}
+            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
+              カテゴリータグ <Text style={{ color: Colors.textLight, fontWeight: '400' }}>（最大10個・検索に使用）</Text>
+            </Text>
+            <Text style={[styles.fieldLabel, { fontSize: 11, fontWeight: '400', marginTop: 0 }]}>
+              プロフィールには表示されません。あなたの投稿内容に合うタグを登録してください。
+            </Text>
+            <View style={styles.tagInputRow}>
+              <TextInput
+                style={[styles.fieldInput, { flex: 1, paddingVertical: 10 }]}
+                value={tagInput}
+                onChangeText={v => setTagInput(v.replace(/[　\s#＃]/g, ''))}
+                placeholder="例: ビジネス、料理、旅行"
+                placeholderTextColor={Colors.textLight}
+                onSubmitEditing={() => {
+                  const t = tagInput.trim()
+                  if (t && editTags.length < 10 && !editTags.includes(t)) {
+                    setEditTags(p => [...p, t])
+                  }
+                  setTagInput('')
+                }}
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={[styles.tagAddBtn, (editTags.length >= 10 || !tagInput.trim()) && { opacity: 0.4 }]}
+                disabled={editTags.length >= 10 || !tagInput.trim()}
+                onPress={() => {
+                  const t = tagInput.trim()
+                  if (t && editTags.length < 10 && !editTags.includes(t)) {
+                    setEditTags(p => [...p, t])
+                  }
+                  setTagInput('')
+                }}
+              >
+                <Text style={styles.tagAddBtnText}>追加</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.tagList}>
+              {editTags.map(tag => (
+                <TouchableOpacity key={tag} style={styles.tagChip} onPress={() => setEditTags(p => p.filter(t => t !== tag))}>
+                  <Text style={styles.tagChipText}>#{tag}</Text>
+                  <Ionicons name="close" size={12} color={Colors.accent} />
+                </TouchableOpacity>
+              ))}
+              {editTags.length === 0 && (
+                <Text style={{ fontSize: 12, color: Colors.textLight }}>タグがまだありません</Text>
+              )}
+            </View>
+            <Text style={{ fontSize: 11, color: Colors.textLight, marginTop: 4 }}>{editTags.length}/10</Text>
+
             <View style={{ height: 40 }} />
           </ScrollView>
         </View>
@@ -533,6 +587,20 @@ const styles = StyleSheet.create({
   snsFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 4 },
   snsFieldIcon: {},
   snsFieldLabel: { fontSize: 13, color: Colors.textLight, fontWeight: '600' },
+  tagInputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  tagAddBtn: {
+    backgroundColor: Colors.accent, borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 11,
+  },
+  tagAddBtnText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
+  tagList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  tagChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: `${Colors.accent}15`, borderRadius: 20,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: `${Colors.accent}30`,
+  },
+  tagChipText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
 })
 
 const cropStyles = StyleSheet.create({
