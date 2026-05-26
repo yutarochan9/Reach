@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5 },
   stepList: { gap: 0 },
   stepRow: { flexDirection: 'row', gap: 12 },
-  stepLeft: { alignItems: 'center', width: 28 },
+  stepLeft: { alignItems: 'center', width: 28, paddingTop: 14 },
   stepBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   stepBadgeText: { fontSize: 13, fontWeight: '800', color: '#FFF' },
   stepLine: { width: 2, flex: 1, backgroundColor: Colors.border, marginVertical: 4 },
