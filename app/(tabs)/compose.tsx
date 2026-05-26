@@ -3,13 +3,13 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
   Alert, useWindowDimensions, Image, ActivityIndicator, FlatList
 } from 'react-native'
-import { BETA_MODE } from '../constants/config'
+import { BETA_MODE } from '../../constants/config'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { supabase } from '../lib/supabase'
-import { Colors } from '../constants/colors'
-import { sendPushToUsers } from '../lib/notifications'
+import { supabase } from '../../lib/supabase'
+import { Colors } from '../../constants/colors'
+import { sendPushToUsers } from '../../lib/notifications'
 
 // ─── 型定義 ────────────────────────────────────────────────
 type Block = {
@@ -798,9 +798,9 @@ export default function ComposeScreen() {
             />
             <View style={styles.toolsDivider} />
             <ToolMenuItem
-              icon="people-outline"
-              label="フォロワー管理"
-              desc="タグ付けでセグメント配信の準備"
+              icon="pricetag-outline"
+              label="セグメント配信"
+              desc="タグ付けで特定のフォロワーグループに配信"
               onPress={() => router.push('/followers' as any)}
             />
           </View>

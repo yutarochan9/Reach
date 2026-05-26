@@ -181,6 +181,7 @@ export default function TabLayout() {
             <Tabs.Screen name="talk" />
             <Tabs.Screen name="shop" />
             <Tabs.Screen name="mypage" />
+            <Tabs.Screen name="compose" />
           </Tabs>
         </View>
 

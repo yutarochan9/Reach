@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
-  Platform, Image, Animated,
+  Platform, Image, Animated, useWindowDimensions,
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { router, useFocusEffect } from 'expo-router'
@@ -190,7 +190,8 @@ export default function RichMenuScreen() {
   const [editingBtn, setEditingBtn] = useState<Partial<RichMenuButton> | null>(null)
   const [uploading, setUploading] = useState(false)
   const [draft, setDraft] = useState({ x: 0, y: 0, w: 9, h: 9 })
-  const isWebDesktop = Platform.OS === 'web'
+  const { width } = useWindowDimensions()
+  const isWide = width >= 768
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -322,7 +323,7 @@ export default function RichMenuScreen() {
           <ToggleSwitch value={isActive} onChange={setIsActive} />
         </View>
 
-        <View style={styles.twoCol}>
+        <View style={[styles.twoCol, !isWide && styles.twoColMobile]}>
 
           {/* 左：グリッドプレビュー + タイル一覧 */}
           <View style={styles.leftCol}>
@@ -469,7 +470,7 @@ export default function RichMenuScreen() {
           </View>
 
           {/* 右：プレビュー */}
-          <View style={styles.rightCol}>
+          <View style={[styles.rightCol, !isWide && styles.rightColMobile]}>
             <Text style={[styles.sectionLabel, { marginHorizontal: 0 }]}>プレビュー</Text>
             <View style={[styles.phoneFrame, { marginHorizontal: 0 }]}>
               <View style={styles.phoneHeader}>
@@ -713,8 +714,10 @@ const styles = StyleSheet.create({
   },
   bgPickerText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   twoCol: { flexDirection: 'row', paddingHorizontal: 16, gap: 12, alignItems: 'flex-start' },
+  twoColMobile: { flexDirection: 'column' },
   leftCol: { flex: 1, gap: 10 },
   rightCol: { width: 320 },
+  rightColMobile: { width: '100%' as any },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
   gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
   gridArea: { aspectRatio: 27 / 18 },
