@@ -5,30 +5,41 @@ import { Colors } from '../constants/colors'
 
 const STEPS = [
   {
-    icon: 'compass-outline' as const,
-    title: 'クリエイターを探す',
-    desc: '「発見」タブからお気に入りのクリエイターを検索してフォローしましょう。フォローすると配信が届くようになります。',
+    step: '1',
+    title: 'アカウントを作成する',
+    desc: 'メールアドレスとパスワードで登録します。登録後すぐに使い始められます。',
+    icon: 'person-add-outline' as const,
   },
   {
-    icon: 'radio-outline' as const,
-    title: '配信を受け取る',
-    desc: 'フォローしたクリエイターの配信はホーム画面に届きます。テキスト・画像・動画など様々な形式で受け取れます。',
-  },
-  {
+    step: '2',
+    title: 'クリエイターをフォローする',
+    desc: 'お気に入りのクリエイターのプロフィールページからフォローします。フォロー後、配信が届くようになります。',
     icon: 'heart-outline' as const,
-    title: 'リアクション・コメント',
-    desc: '配信にハートなどのリアクションを送ったり、コメントでクリエイターと交流できます。',
   },
   {
-    icon: 'chatbubble-outline' as const,
-    title: 'クリエイターにDMを送る',
-    desc: 'メッセージタブからクリエイターに直接DMを送ることができます。個別のやり取りが可能です。',
-  },
-  {
+    step: '3',
+    title: '配信を受け取る',
+    desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像・動画など様々な形式に対応しています。',
     icon: 'notifications-outline' as const,
-    title: '通知をオンにする',
-    desc: '設定から通知をオンにしておくと、新しい配信を見逃しません。端末の通知設定も確認してください。',
   },
+  {
+    step: '4',
+    title: 'DMで直接やり取りする',
+    desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。',
+    icon: 'chatbubble-ellipses-outline' as const,
+  },
+  {
+    step: '5',
+    title: 'タイルメニューを活用する',
+    desc: 'トーク画面下部のタイルメニューからリンクや自動返信ボタンを使えます。',
+    icon: 'grid-outline' as const,
+  },
+]
+
+const TIPS = [
+  { icon: 'shield-checkmark-outline' as const, text: 'フォロワー限定の配信はフォロー後に届きます' },
+  { icon: 'bell-outline' as const, text: '配信の通知はデバイスの設定から変更できます' },
+  { icon: 'lock-closed-outline' as const, text: 'DMの内容はクリエイターとあなただけが見られます' },
 ]
 
 export default function GuideScreen() {
@@ -43,32 +54,37 @@ export default function GuideScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <Ionicons name="sparkles" size={36} color={Colors.accent} />
-          <Text style={styles.heroTitle}>Reachへようこそ</Text>
-          <Text style={styles.heroDesc}>クリエイターの配信をリアルタイムで受け取れるアプリです。{'\n'}基本的な使い方を5ステップでご紹介します。</Text>
+        <Text style={styles.lead}>Reachの基本的な使い方を説明します。</Text>
+
+        <Text style={styles.sectionTitle}>はじめ方</Text>
+        <View style={styles.stepList}>
+          {STEPS.map((s, idx) => (
+            <View key={s.step} style={styles.stepRow}>
+              <View style={styles.stepLeft}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>{s.step}</Text>
+                </View>
+                {idx < STEPS.length - 1 && <View style={styles.stepLine} />}
+              </View>
+              <View style={styles.stepCard}>
+                <View style={styles.stepTitleRow}>
+                  <Ionicons name={s.icon} size={18} color={Colors.accent} />
+                  <Text style={styles.stepTitle}>{s.title}</Text>
+                </View>
+                <Text style={styles.stepDesc}>{s.desc}</Text>
+              </View>
+            </View>
+          ))}
         </View>
 
-        {STEPS.map((step, i) => (
-          <View key={i} style={styles.stepCard}>
-            <View style={styles.stepLeft}>
-              <View style={styles.stepNumWrap}>
-                <Text style={styles.stepNum}>{i + 1}</Text>
-              </View>
-              {i < STEPS.length - 1 && <View style={styles.stepLine} />}
+        <Text style={styles.sectionTitle}>知っておくと便利</Text>
+        <View style={styles.tipsCard}>
+          {TIPS.map((t, i) => (
+            <View key={i} style={[styles.tipRow, i < TIPS.length - 1 && styles.tipBorder]}>
+              <Ionicons name={t.icon} size={18} color={Colors.accent} />
+              <Text style={styles.tipText}>{t.text}</Text>
             </View>
-            <View style={styles.stepBody}>
-              <View style={styles.stepIconWrap}>
-                <Ionicons name={step.icon} size={20} color={Colors.accent} />
-              </View>
-              <Text style={styles.stepTitle}>{step.title}</Text>
-              <Text style={styles.stepDesc}>{step.desc}</Text>
-            </View>
-          </View>
-        ))}
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>ご不明な点はよくある質問もご覧ください</Text>
+          ))}
         </View>
       </ScrollView>
     </View>
@@ -85,60 +101,31 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
-  content: { padding: 20, paddingBottom: 48 },
-  hero: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  content: { padding: 20, paddingBottom: 48, gap: 16 },
+  lead: { fontSize: 14, color: Colors.textLight, lineHeight: 22 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5, marginTop: 4 },
+  stepList: { gap: 0 },
+  stepRow: { flexDirection: 'row', gap: 12 },
+  stepLeft: { alignItems: 'center', width: 28 },
+  stepBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  heroTitle: { fontSize: 20, fontWeight: '800', color: Colors.text },
-  heroDesc: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22 },
+  stepBadgeText: { fontSize: 13, fontWeight: '800', color: '#FFF' },
+  stepLine: { width: 2, flex: 1, backgroundColor: Colors.border, marginVertical: 4 },
   stepCard: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 4,
+    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
+    padding: 14, marginBottom: 10, gap: 6,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  stepLeft: {
-    alignItems: 'center',
-    width: 32,
-  },
-  stepNumWrap: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  stepNum: { color: Colors.white, fontWeight: '800', fontSize: 14 },
-  stepLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: Colors.border,
-    marginTop: 4,
-    marginBottom: 4,
-    minHeight: 24,
-  },
-  stepBody: {
-    flex: 1,
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  stepIconWrap: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.background,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  stepTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  stepTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
   stepDesc: { fontSize: 13, color: Colors.textLight, lineHeight: 20 },
-  footer: { alignItems: 'center', marginTop: 8 },
-  footerText: { fontSize: 13, color: Colors.textLight },
+  tipsCard: {
+    backgroundColor: Colors.white, borderRadius: 16,
+    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
+  },
+  tipRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  tipBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
+  tipText: { fontSize: 13, color: Colors.text, flex: 1, lineHeight: 20 },
 })

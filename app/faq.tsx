@@ -6,91 +6,42 @@ import { Colors } from '../constants/colors'
 
 const FAQS = [
   {
-    category: '通知・配信',
-    items: [
-      {
-        q: '通知が届きません',
-        a: '設定画面でプッシュ通知がオンになっているか確認してください。また、お使いの端末の設定アプリからReachの通知が許可されているかもご確認ください。',
-      },
-      {
-        q: 'フォローしたのに配信が届きません',
-        a: 'ホーム画面を下に引っ張って更新してみてください。クリエイターが配信を行っていない場合は何も表示されません。',
-      },
-    ],
+    q: 'Reachは無料で使えますか？',
+    a: 'はい、現在お試し期間中のため全機能を無料でご利用いただけます。',
   },
   {
-    category: 'アカウント',
-    items: [
-      {
-        q: 'パスワードを忘れました',
-        a: 'ログイン画面でメールアドレスを入力すると確認コードが送られます。コードでログイン後、設定からパスワードを変更できます。',
-      },
-      {
-        q: 'メールアドレスを変更したい',
-        a: '現在、メールアドレスの変更はサポートにお問い合わせいただく必要があります。お問い合わせフォームよりご連絡ください。',
-      },
-      {
-        q: 'アカウントを削除したい',
-        a: '設定画面の一番下にある「アカウントを削除する」から手続きができます。削除すると投稿・フォロー情報を含む全データが完全に削除されます。',
-      },
-    ],
+    q: 'フォローするとどうなりますか？',
+    a: 'フォローしたクリエイターの配信がトーク画面に届くようになります。フォロワー限定コンテンツも受け取れます。',
   },
   {
-    category: '料金・プラン',
-    items: [
-      {
-        q: 'フォロワーとして利用するのに料金はかかりますか？',
-        a: 'フォロワーとしての利用は完全無料です。配信を受け取ったり、コメント・リアクションをするのに料金はかかりません。',
-      },
-      {
-        q: 'クリエイターとして配信するには料金がかかりますか？',
-        a: '現在はお試し期間中につき、全機能を無料でご利用いただけます。正式リリース後に料金プランが適用される予定です。',
-      },
-    ],
+    q: 'フォローを解除するにはどうすればいいですか？',
+    a: 'クリエイターのプロフィールページからフォロー解除ができます。解除後は新しい配信が届かなくなります。',
   },
   {
-    category: 'その他',
-    items: [
-      {
-        q: '複数アカウントを持てますか？',
-        a: '1人につき1アカウントのご利用をお願いしています。複数アカウントの作成は利用規約違反となる場合があります。',
-      },
-      {
-        q: '不適切なコンテンツを見つけた',
-        a: '配信・コメント画面の右上メニューから通報できます。確認のうえ適切に対処いたします。',
-      },
-    ],
+    q: 'DMはクリエイター以外に見られますか？',
+    a: 'いいえ。DMはクリエイターとあなたの間だけで共有されます。第三者には公開されません。',
+  },
+  {
+    q: '通知が来ません。どうすればいいですか？',
+    a: 'デバイスの設定からReachの通知を許可してください。また、アプリの設定でも通知のオン/オフを確認できます。',
+  },
+  {
+    q: 'タイルメニューとは何ですか？',
+    a: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。',
+  },
+  {
+    q: 'アカウントを削除するにはどうすればいいですか？',
+    a: 'マイページの設定からアカウント削除の申請ができます。削除後はデータの復元はできませんのでご注意ください。',
+  },
+  {
+    q: '困ったときはどこに問い合わせできますか？',
+    a: 'マイページの「お問い合わせ」からご連絡ください。通常2〜3営業日以内にご返信します。',
   },
 ]
 
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <TouchableOpacity
-      style={styles.faqItem}
-      onPress={() => setOpen(v => !v)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.faqQ}>
-        <Text style={styles.qMark}>Q</Text>
-        <Text style={styles.qText}>{q}</Text>
-        <Ionicons
-          name={open ? 'chevron-up' : 'chevron-down'}
-          size={16}
-          color={Colors.textLight}
-        />
-      </View>
-      {open && (
-        <View style={styles.faqA}>
-          <Text style={styles.aMark}>A</Text>
-          <Text style={styles.aText}>{a}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  )
-}
-
 export default function FaqScreen() {
+  const [openIndex, setOpenIndex] = useState<number | null>(null)
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -102,23 +53,32 @@ export default function FaqScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {FAQS.map((cat) => (
-          <View key={cat.category} style={styles.category}>
-            <Text style={styles.categoryLabel}>{cat.category}</Text>
-            <View style={styles.card}>
-              {cat.items.map((item, i) => (
-                <View key={i}>
-                  {i > 0 && <View style={styles.divider} />}
-                  <FaqItem q={item.q} a={item.a} />
+        {FAQS.map((faq, i) => {
+          const isOpen = openIndex === i
+          return (
+            <View key={i} style={styles.item}>
+              <TouchableOpacity
+                style={styles.question}
+                onPress={() => setOpenIndex(isOpen ? null : i)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.qLabel}>Q</Text>
+                <Text style={styles.qText}>{faq.q}</Text>
+                <Ionicons
+                  name={isOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={Colors.textLight}
+                />
+              </TouchableOpacity>
+              {isOpen && (
+                <View style={styles.answer}>
+                  <Text style={styles.aLabel}>A</Text>
+                  <Text style={styles.aText}>{faq.a}</Text>
                 </View>
-              ))}
+              )}
             </View>
-          </View>
-        ))}
-
-        <Text style={styles.note}>
-          解決しない場合はお問い合わせフォームよりご連絡ください。
-        </Text>
+          )
+        })}
       </ScrollView>
     </View>
   )
@@ -134,37 +94,29 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
-  content: { padding: 16, paddingBottom: 48, gap: 20 },
-  category: { gap: 8 },
-  categoryLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, marginLeft: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
+  content: { padding: 16, paddingBottom: 48, gap: 8 },
+  item: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
   },
-  divider: { height: 1, backgroundColor: Colors.border },
-  faqItem: { padding: 16 },
-  faqQ: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  qMark: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: Colors.accent,
-    color: Colors.white,
-    fontWeight: '800', fontSize: 12,
-    textAlign: 'center', lineHeight: 22,
-    flexShrink: 0,
+  question: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    padding: 16,
   },
-  qText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text },
-  faqA: { flexDirection: 'row', gap: 10, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.background },
-  aMark: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: Colors.button,
-    color: Colors.white,
-    fontWeight: '800', fontSize: 12,
-    textAlign: 'center', lineHeight: 22,
-    flexShrink: 0,
+  qLabel: {
+    fontSize: 15, fontWeight: '800', color: Colors.accent,
+    width: 20, textAlign: 'center', flexShrink: 0,
   },
-  aText: { flex: 1, fontSize: 13, color: Colors.textLight, lineHeight: 20 },
-  note: { fontSize: 13, color: Colors.textLight, textAlign: 'center', lineHeight: 20 },
+  qText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text, lineHeight: 20 },
+  answer: {
+    flexDirection: 'row', gap: 10,
+    paddingHorizontal: 16, paddingBottom: 16, paddingTop: 2,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  aLabel: {
+    fontSize: 15, fontWeight: '800', color: Colors.textLight,
+    width: 20, textAlign: 'center', flexShrink: 0, marginTop: 12,
+  },
+  aText: { flex: 1, fontSize: 13, color: Colors.textLight, lineHeight: 21, marginTop: 12 },
 })

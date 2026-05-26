@@ -26,8 +26,10 @@ type RichMenuButton = {
 
 
 const REACH_PAGES = [
+  { label: '使い方ガイド', path: '/guide', icon: 'book-outline' },
   { label: 'Reachとは', path: '/about', icon: 'information-circle-outline' },
   { label: '最新情報・お知らせ', path: '/news', icon: 'newspaper-outline' },
+  { label: 'よくある質問', path: '/faq', icon: 'help-circle-outline' },
 ]
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
