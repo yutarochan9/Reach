@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, TextInput, Image, ScrollView } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, TextInput, Image } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -37,7 +37,6 @@ type Creator = {
 }
 
 export default function DiscoverScreen() {
-  const [recommended, setRecommended] = useState<Creator[]>([])
   const [allScored, setAllScored] = useState<Creator[]>([])
   const [allProfiles, setAllProfiles] = useState<Creator[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,7 +66,7 @@ export default function DiscoverScreen() {
     if (!profiles?.length) { setLoading(false); return }
 
     const candidateIds = profiles.map((p: any) => p.id).filter((id: string) => !myFollowingSet.has(id))
-    if (!candidateIds.length) { setAllScored([]); setRecommended([]); setLoading(false); return }
+    if (!candidateIds.length) { setAllScored([]); setAllProfiles([]); setLoading(false); return }
 
     const since30 = new Date(Date.now() - 30 * 86400_000).toISOString()
 
@@ -176,11 +175,6 @@ export default function DiscoverScreen() {
     // フォロー済みを除いたリスト（おすすめ・ランキング表示用）
     const scored = allScoredFull.filter(c => !c.is_following)
 
-    // 返信率 or いいね率が高い上位をおすすめカードに
-    const topRec = scored
-      .filter(c => c.reply_rate > 0 || c.reaction_rate > 0 || c.social_count > 0)
-      .slice(0, 6)
-    setRecommended(topRec)
     setAllScored(scored)
     setAllProfiles(allScoredFull)
     setPage(1)
@@ -203,7 +197,6 @@ export default function DiscoverScreen() {
       : c
     setAllScored(p => p.map(upd))
     setAllProfiles(p => p.map(upd))
-    setRecommended(p => p.map(upd))
   }
 
   const isSearching = search.length > 0
@@ -266,41 +259,11 @@ export default function DiscoverScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
           ListHeaderComponent={() => (
-            <>
-              {recommended.length > 0 && (
-                <View style={{ marginBottom: 4 }}>
-                  <View style={styles.sectionRow}>
-                    <Ionicons name="flame-outline" size={15} color={Colors.accent} />
-                    <Text style={styles.sectionTitle}>エンゲージメント高め</Text>
-                  </View>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hList}>
-                    {recommended.map(item => (
-                      <TouchableOpacity key={item.id} style={styles.hCard}
-                        onPress={() => router.push(`/creator/${item.id}` as any)} activeOpacity={0.8}>
-                        {item.avatar_url
-                          ? <Image source={{ uri: item.avatar_url }} style={styles.hAvatar} />
-                          : <View style={styles.hAvatarFb}><Text style={styles.hAvatarTxt}>{item.display_name[0]}</Text></View>
-                        }
-                        <Text style={styles.hName} numberOfLines={1}>{item.display_name}</Text>
-                        <TouchableOpacity
-                          style={[styles.hFollowBtn, item.is_following && styles.hFollowingBtn]}
-                          onPress={() => handleFollow(item.id, item.is_following)}
-                        >
-                          <Text style={[styles.hFollowTxt, item.is_following && styles.hFollowingTxt]}>
-                            {item.is_following ? 'フォロー中' : 'フォロー'}
-                          </Text>
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-              <View style={[styles.sectionRow, { paddingHorizontal: 12 }]}>
-                <Ionicons name="star-outline" size={15} color={Colors.accent} />
-                <Text style={styles.sectionTitle}>おすすめ</Text>
-                <Text style={styles.sectionCount}>{allScored.length}人</Text>
-              </View>
-            </>
+            <View style={[styles.sectionRow, { paddingHorizontal: 12 }]}>
+              <Ionicons name="star-outline" size={15} color={Colors.accent} />
+              <Text style={styles.sectionTitle}>おすすめ</Text>
+              <Text style={styles.sectionCount}>{allScored.length}人</Text>
+            </View>
           )}
           ListEmptyComponent={() => <Text style={styles.empty}>クリエイターがまだいません</Text>}
           renderItem={({ item }) => <CreatorRow item={item} onFollow={handleFollow} />}
@@ -365,20 +328,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.text, flex: 1 },
   sectionCount: { fontSize: 11, color: Colors.textLight },
 
-  hList: { paddingHorizontal: 12, gap: 10, paddingBottom: 4 },
-  hCard: {
-    width: 112, backgroundColor: Colors.white, borderRadius: 14,
-    borderWidth: 1, borderColor: Colors.border, padding: 12, alignItems: 'center', gap: 5,
-  },
-  hAvatar: { width: 52, height: 52, borderRadius: 26 },
-  hAvatarFb: { width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center' },
-  hAvatarTxt: { fontSize: 22, fontWeight: '700', color: Colors.white },
-  hName: { fontSize: 12, fontWeight: '700', color: Colors.text, textAlign: 'center' },
-
-  hFollowBtn: { backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, width: '100%', alignItems: 'center' },
-  hFollowingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.accent },
-  hFollowTxt: { fontSize: 11, fontWeight: '700', color: Colors.white },
-  hFollowingTxt: { color: Colors.accent },
 
   card: {
     backgroundColor: Colors.white, borderRadius: 14, padding: 14,
