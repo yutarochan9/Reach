@@ -46,20 +46,21 @@ export default function CreatorScreen() {
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    setMyId(user.id)
+    setMyId(user?.id ?? null)
 
-    const [{ data: prof }, { data: follows }, { data: myFollow }, { data: menu }] = await Promise.all([
+    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }] = await Promise.all([
       supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', id),
-      supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle(),
+      user
+        ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
+        : Promise.resolve({ data: null }),
       supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', id).maybeSingle(),
     ])
 
     setProfile(prof)
     setCreatorPlan(prof?.plan ?? 'free')
     setFollowerCount((follows ?? []).length)
-    setIsFollowing(!!myFollow)
+    setIsFollowing(!!(myFollowResult as any)?.data)
     setRichMenu(menu && menu.is_active ? menu : null)
     setLoading(false)
   }, [id])
@@ -160,13 +161,31 @@ export default function CreatorScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        {!isSelf && profile ? (
-          <TouchableOpacity style={styles.backButton} onPress={() => setReportModalVisible(true)} activeOpacity={0.6}>
-            <Ionicons name="flag-outline" size={22} color={Colors.textLight} />
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          <TouchableOpacity
+            style={styles.backButton}
+            activeOpacity={0.7}
+            onPress={() => {
+              const url = `https://reach-pi-one.vercel.app/creator/${id}`
+              if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+                if (navigator.share) {
+                  navigator.share({ title: profile?.display_name ?? '', url })
+                } else {
+                  navigator.clipboard?.writeText(url).then(() => window.alert('リンクをコピーしました'))
+                }
+              }
+            }}
+          >
+            <Ionicons name="share-outline" size={22} color={Colors.accent} />
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 32 }} />
-        )}
+          {!isSelf && myId && profile ? (
+            <TouchableOpacity style={styles.backButton} onPress={() => setReportModalVisible(true)} activeOpacity={0.6}>
+              <Ionicons name="flag-outline" size={22} color={Colors.textLight} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 32 }} />
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -209,29 +228,41 @@ export default function CreatorScreen() {
           </View>
           {!isSelf && (
             <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={[styles.followButton, isFollowing && styles.followingButton]}
-                onPress={handleFollow}
-              >
-                {isFollowing
-                  ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
-                  : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
-                }
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.talkButton}
-                onPress={() => router.push(`/talk/${id}` as any)}
-              >
-                <Ionicons name="chatbubbles" size={18} color={Colors.white} />
-                <Text style={styles.talkButtonText}>メッセージ</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dmButton}
-                onPress={() => router.push({ pathname: '/im/[userId]' as any, params: { userId: id } })}
-              >
-                <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
-                <Text style={styles.dmButtonText}>DM</Text>
-              </TouchableOpacity>
+              {myId ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.followButton, isFollowing && styles.followingButton]}
+                    onPress={handleFollow}
+                  >
+                    {isFollowing
+                      ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
+                      : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
+                    }
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.talkButton}
+                    onPress={() => router.push(`/talk/${id}` as any)}
+                  >
+                    <Ionicons name="chatbubbles" size={18} color={Colors.white} />
+                    <Text style={styles.talkButtonText}>メッセージ</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dmButton}
+                    onPress={() => router.push({ pathname: '/im/[userId]' as any, params: { userId: id } })}
+                  >
+                    <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
+                    <Text style={styles.dmButtonText}>DM</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.followButton}
+                  onPress={() => router.push('/(auth)/login' as any)}
+                >
+                  <Ionicons name="add" size={16} color={Colors.white} />
+                  <Text style={styles.followButtonText}>登録してフォローする</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>

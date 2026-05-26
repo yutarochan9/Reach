@@ -334,6 +334,23 @@ export default function TalkDetailScreen() {
     }
   }
 
+  const handleShare = (group: BroadcastGroup) => {
+    const textBlock = group.blocks.find(b => b.content.trim() && b.content !== '　')
+    const snippet = textBlock ? textBlock.content.slice(0, 80) : ''
+    const profileUrl = `https://reach-pi-one.vercel.app/creator/${senderId}`
+    const tweetText = snippet ? `${snippet}\n` : ''
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(profileUrl)}`
+    if (isWeb && typeof window !== 'undefined') {
+      if (navigator.share) {
+        navigator.share({ title: senderName, text: snippet, url: profileUrl }).catch(() => {})
+      } else {
+        window.open(tweetUrl, '_blank')
+      }
+    } else {
+      Linking.openURL(tweetUrl)
+    }
+  }
+
   const handleFollowToggle = async () => {
     if (!myId) return
     if (isFollowing) {
@@ -441,11 +458,18 @@ export default function TalkDetailScreen() {
                 </View>
               </View>
 
-              {/* 時刻 + ···ボタン */}
+              {/* 時刻 + シェア + ···ボタン */}
               <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
                 <Text style={styles.bubbleTime}>
                   {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                 </Text>
+                <TouchableOpacity
+                  style={styles.shareBtn}
+                  onPress={() => handleShare(group)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="share-outline" size={14} color={Colors.textLight} />
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.moreBtn}
                   onPress={() => setLongPressGroup(group)}
@@ -824,6 +848,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 2,
   },
   countBadgeText: { fontSize: 11, color: Colors.textLight },
+  shareBtn: {
+    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
   moreBtn: {
     paddingHorizontal: 8, paddingVertical: 2,
     backgroundColor: Colors.white, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,

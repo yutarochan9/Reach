@@ -88,6 +88,10 @@ const SKIP_SAVE = ['/(auth)', '/onboarding']
 const isRestorable = (p: string) =>
   p && p !== '/' && !SKIP_SAVE.some(s => p.startsWith(s))
 
+// 未ログインでも閲覧を許可するパス
+const PUBLIC_PREFIXES = ['/creator/']
+const isPublicPath = (p: string) => PUBLIC_PREFIXES.some(prefix => p.startsWith(prefix))
+
 export default function RootLayout() {
   const { width } = useWindowDimensions()
   const pathname = usePathname()
@@ -126,6 +130,8 @@ export default function RootLayout() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (navigated.current) return
       if (!session) {
+        // パブリックルートはログインなしで通過
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicPath(window.location.pathname)) return
         router.replace('/(auth)/login')
       } else {
         navigated.current = true
