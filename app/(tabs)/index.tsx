@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image } from 'react-native'
+import { useState, useCallback, useRef } from 'react'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image, TextInput } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -42,6 +42,9 @@ export default function HomeScreen() {
   const [followersOpen, setFollowersOpen] = useState(true)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<TextInput>(null)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -98,11 +101,15 @@ export default function HomeScreen() {
     )
   }
 
+  const q = searchQuery.toLowerCase()
+  const filteredCreators = q ? creators.filter(c => c.display_name.toLowerCase().includes(q)) : creators
+  const filteredFollowers = q ? followers.filter(f => f.display_name.toLowerCase().includes(q)) : followers
+
   const flatData: HomeRow[] = [
-    { type: 'section', sectionId: 'following', count: creators.length, open: followingOpen },
-    ...(followingOpen ? creators.map(c => ({ type: 'following-item' as const, data: c })) : []),
-    { type: 'section', sectionId: 'followers', count: followers.length, open: followersOpen },
-    ...(followersOpen ? followers.map(f => ({ type: 'follower-item' as const, data: f })) : []),
+    { type: 'section', sectionId: 'following', count: filteredCreators.length, open: followingOpen },
+    ...(followingOpen ? filteredCreators.map(c => ({ type: 'following-item' as const, data: c })) : []),
+    { type: 'section', sectionId: 'followers', count: filteredFollowers.length, open: followersOpen },
+    ...(followersOpen ? filteredFollowers.map(f => ({ type: 'follower-item' as const, data: f })) : []),
   ]
 
   return (
@@ -131,12 +138,33 @@ export default function HomeScreen() {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push('/(tabs)/shop' as any)}>
-              <Ionicons name="search-outline" size={22} color={Colors.accent} />
+            <TouchableOpacity style={styles.headerIconBtn} onPress={() => {
+              const next = !showSearch
+              setShowSearch(next)
+              if (!next) setSearchQuery('')
+              else setTimeout(() => searchInputRef.current?.focus(), 50)
+            }}>
+              <Ionicons name={showSearch ? 'close' : 'search-outline'} size={22} color={Colors.accent} />
             </TouchableOpacity>
           </View>
         </View>
       </View>
+
+      {showSearch && (
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={16} color={Colors.textLight} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="名前で検索..."
+            placeholderTextColor={Colors.textLight}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+        </View>
+      )}
 
       {announcements.filter(a => !dismissedIds.has(a.id)).map(a => (
         <View key={a.id} style={styles.annBanner}>
@@ -288,6 +316,17 @@ const styles = StyleSheet.create({
   headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   headerAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   list: { paddingBottom: 32 },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.header,
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  searchInput: {
+    flex: 1, fontSize: 15, color: Colors.text,
+    paddingVertical: 6, paddingHorizontal: 10,
+    backgroundColor: Colors.background, borderRadius: 10,
+  },
 
   myPostsCard: {
     flexDirection: 'row', alignItems: 'center',
