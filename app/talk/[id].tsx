@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white, borderRadius: 16, borderTopLeftRadius: 4,
     padding: 12, shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
-    alignSelf: 'flex-start', maxWidth: '100%',
+    alignSelf: 'stretch',
   },
   broadcastBubbleSelf: { backgroundColor: Colors.button },
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },

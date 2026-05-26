@@ -2,6 +2,16 @@
   "buildCommand": "npx expo export --platform web && node scripts/inject-pwa.js",
   "outputDirectory": "dist",
   "rewrites": [
+    {
+      "source": "/creator/:id",
+      "has": [{ "type": "header", "key": "user-agent", "value": "Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot|WhatsApp|Line/" }],
+      "destination": "/api/og?type=creator&id=:id"
+    },
+    {
+      "source": "/talk/:id",
+      "has": [{ "type": "header", "key": "user-agent", "value": "Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot|WhatsApp|Line/" }],
+      "destination": "/api/og?type=talk&id=:id"
+    },
     { "source": "/(.*)", "destination": "/" }
   ]
 }
