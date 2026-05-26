@@ -13,7 +13,7 @@ import { Colors } from '../constants/colors'
 type RichMenuButton = {
   id: string
   label: string
-  action: 'url' | 'code'
+  action: 'url' | 'code' | 'page'
   url: string
   code: string
   icon: string
@@ -24,6 +24,11 @@ type RichMenuButton = {
   h: number
 }
 
+
+const REACH_PAGES = [
+  { label: 'Reachとは', path: '/about', icon: 'information-circle-outline' },
+  { label: '最新情報・お知らせ', path: '/news', icon: 'newspaper-outline' },
+]
 
 const SUPABASE_URL = 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const BUCKET = 'broadcast-images'
@@ -233,6 +238,7 @@ export default function RichMenuScreen() {
     const action = editingBtn?.action ?? 'url'
     if (action === 'url' && !editingBtn?.url?.trim()) return
     if (action === 'code' && !editingBtn?.code?.trim()) return
+    if (action === 'page' && !editingBtn?.url?.trim()) return
     const updated = {
       ...editingBtn,
       action,
@@ -527,12 +533,18 @@ export default function RichMenuScreen() {
                 <Text style={styles.modalCancel}>キャンセル</Text>
               </TouchableOpacity>
               <Text style={styles.modalTitle}>タイル設定</Text>
-              <TouchableOpacity onPress={handleSaveBtn} disabled={
-                (editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim()
-              }>
-                <Text style={[styles.modalSave, (
-                  (editingBtn?.action ?? 'url') === 'url' ? !editingBtn?.url?.trim() : !editingBtn?.code?.trim()
-                ) && { opacity: 0.4 }]}>完了</Text>
+              <TouchableOpacity onPress={handleSaveBtn} disabled={(() => {
+                const a = editingBtn?.action ?? 'url'
+                if (a === 'url') return !editingBtn?.url?.trim()
+                if (a === 'page') return !editingBtn?.url?.trim()
+                return !editingBtn?.code?.trim()
+              })()}>
+                <Text style={[styles.modalSave, (() => {
+                  const a = editingBtn?.action ?? 'url'
+                  if (a === 'url') return !editingBtn?.url?.trim()
+                  if (a === 'page') return !editingBtn?.url?.trim()
+                  return !editingBtn?.code?.trim()
+                })() && { opacity: 0.4 }]}>完了</Text>
               </TouchableOpacity>
             </View>
 
@@ -572,28 +584,30 @@ export default function RichMenuScreen() {
               {/* アクション種別 */}
               <Text style={styles.fieldLabel}>アクション</Text>
               <View style={styles.actionTypeRow}>
-                {(['url', 'code'] as const).map(a => {
+                {([
+                  { key: 'url', label: 'URLを開く', icon: 'link-outline' },
+                  { key: 'page', label: 'Reachページへ', icon: 'apps-outline' },
+                  { key: 'code', label: 'ワンタップ返信', icon: 'chatbubble-ellipses-outline' },
+                ] as const).map(({ key: a, label, icon }) => {
                   const isAct = (editingBtn?.action ?? 'url') === a
                   return (
                     <TouchableOpacity
                       key={a}
                       style={[styles.actionTypeBtn, isAct && styles.actionTypeBtnActive]}
                       onPress={() => setEditingBtn(p => p ? {
-                        ...p,
-                        action: a,
-                        icon: a === 'url' ? 'link-outline' : 'chatbubble-ellipses-outline',
+                        ...p, action: a,
+                        icon: a === 'url' ? 'link-outline' : a === 'page' ? 'apps-outline' : 'chatbubble-ellipses-outline',
+                        url: a === 'page' ? (REACH_PAGES[0]?.path ?? '') : (a === 'url' ? (p.url ?? '') : ''),
                       } : p)}
                     >
-                      <Ionicons name={a === 'url' ? 'link-outline' : 'chatbubble-ellipses-outline'} size={16} color={isAct ? '#fff' : Colors.accent} />
-                      <Text style={[styles.actionTypeBtnText, isAct && { color: '#fff' }]}>
-                        {a === 'url' ? 'URLを開く' : 'ワンタップ返信'}
-                      </Text>
+                      <Ionicons name={icon} size={14} color={isAct ? '#fff' : Colors.accent} />
+                      <Text style={[styles.actionTypeBtnText, { fontSize: 11 }, isAct && { color: '#fff' }]}>{label}</Text>
                     </TouchableOpacity>
                   )
                 })}
               </View>
 
-              {(editingBtn?.action ?? 'url') === 'url' ? (
+              {(editingBtn?.action ?? 'url') === 'url' && (
                 <>
                   <Text style={styles.fieldLabel}>リンク先URL</Text>
                   <TextInput
@@ -606,7 +620,29 @@ export default function RichMenuScreen() {
                     keyboardType="url"
                   />
                 </>
-              ) : (
+              )}
+
+              {editingBtn?.action === 'page' && (
+                <>
+                  <Text style={styles.fieldLabel}>ページを選択</Text>
+                  {REACH_PAGES.map(p => {
+                    const isSelected = editingBtn?.url === p.path
+                    return (
+                      <TouchableOpacity
+                        key={p.path}
+                        style={[styles.pageOption, isSelected && styles.pageOptionActive]}
+                        onPress={() => setEditingBtn(prev => prev ? { ...prev, url: p.path, icon: p.icon } : prev)}
+                      >
+                        <Ionicons name={isSelected ? 'radio-button-on' : 'radio-button-off'} size={18} color={Colors.accent} />
+                        <Ionicons name={p.icon as any} size={16} color={Colors.accent} style={{ marginLeft: 4 }} />
+                        <Text style={styles.pageOptionText}>{p.label}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </>
+              )}
+
+              {editingBtn?.action === 'code' && (
                 <>
                   <Text style={styles.fieldLabel}>返信メッセージ</Text>
                   <TextInput
@@ -746,6 +782,13 @@ const styles = StyleSheet.create({
   },
   actionTypeBtnActive: { backgroundColor: Colors.accent },
   actionTypeBtnText: { fontSize: 13, fontWeight: '600', color: Colors.accent },
+  pageOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    padding: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  pageOptionActive: { borderColor: Colors.accent, backgroundColor: `${Colors.accent}10` },
+  pageOptionText: { fontSize: 14, color: Colors.text, fontWeight: '500' },
   iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   iconOption: {
     width: '18%', aspectRatio: 1, borderRadius: 12, borderWidth: 1, borderColor: Colors.border,

@@ -240,6 +240,8 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                   if (!code || !myId) return
                   await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: code })
                   router.push(`/im/${senderId}` as any)
+                } else if (btn.action === 'page') {
+                  router.push(btn.url as any)
                 } else if (btn.url) {
                   try {
                     const parsed = new URL(btn.url)
