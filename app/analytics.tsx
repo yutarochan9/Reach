@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, Alert, Platform } from 'react-native'
 import Svg, {
   Polyline, Circle, Rect, G, Line, Path,
   Defs, LinearGradient as SvgLinearGradient, Stop,
@@ -208,6 +208,7 @@ export default function AnalyticsScreen() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [loading, setLoading] = useState(true)
   const [chartW, setChartW] = useState(0)
+  const [menuBc, setMenuBc] = useState<Broadcast | null>(null)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -289,6 +290,26 @@ export default function AnalyticsScreen() {
   const formatDate = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}` }
   const fmtShort = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K` : String(n)
   const truncate = (s: string, n = 28) => s.length > n ? s.slice(0, n) + '…' : s
+
+  const handleDeleteBc = (bc: Broadcast) => {
+    setMenuBc(null)
+    const doDelete = async () => {
+      if (bc.group_id) {
+        await supabase.from('broadcasts').delete().eq('group_id', bc.group_id)
+      } else {
+        await supabase.from('broadcasts').delete().eq('id', bc.id)
+      }
+      setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
+    }
+    if (Platform.OS === 'web') {
+      if (window.confirm('この配信を削除しますか？この操作は取り消せません。')) doDelete()
+    } else {
+      Alert.alert('配信を削除', 'この配信を削除しますか？この操作は取り消せません。', [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '削除', style: 'destructive', onPress: doDelete },
+      ])
+    }
+  }
 
   if (loading) return (
     <View style={[s.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -441,6 +462,7 @@ export default function AnalyticsScreen() {
             <View style={{ width: 30, alignItems: 'flex-end' }}><Ionicons name="eye-outline" size={12} color={C.muted} /></View>
             <View style={{ width: 30, alignItems: 'flex-end' }}><Ionicons name="heart-outline" size={12} color={C.muted} /></View>
             <View style={{ width: 30, alignItems: 'flex-end' }}><Ionicons name="chatbubble-outline" size={12} color={C.muted} /></View>
+            <View style={{ width: 28 }} />
           </View>
 
           {broadcasts.length === 0 ? (
@@ -467,11 +489,39 @@ export default function AnalyticsScreen() {
               <Text style={[s.td, { width: 30, color: C.accent }]}>{bc.read_count}</Text>
               <Text style={[s.td, { width: 30, color: C.button }]}>{bc.like_count}</Text>
               <Text style={[s.td, { width: 30, color: C.muted }]}>{bc.reply_count}</Text>
+              <TouchableOpacity
+                style={s.menuDotBtn}
+                onPress={(e) => { e.stopPropagation?.(); setMenuBc(bc) }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="ellipsis-vertical" size={16} color={C.muted} />
+              </TouchableOpacity>
             </TouchableOpacity>
           ))}
         </View>
 
       </ScrollView>
+
+      {/* ── 配信メニュー（⋮） ── */}
+      <Modal visible={!!menuBc} transparent animationType="fade" onRequestClose={() => setMenuBc(null)}>
+        <Pressable style={s.menuOverlay} onPress={() => setMenuBc(null)}>
+          <Pressable style={s.menuCard} onPress={() => {}}>
+            <Text style={s.menuTitle} numberOfLines={1}>{truncate(menuBc?.content ?? '', 30)}</Text>
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => menuBc && router.push(`/broadcast-thread/${menuBc.id}` as any)}
+            >
+              <Ionicons name="chatbubble-outline" size={18} color={C.text} />
+              <Text style={s.menuItemText}>コメントを見る</Text>
+            </TouchableOpacity>
+            <View style={s.menuDivider} />
+            <TouchableOpacity style={s.menuItem} onPress={() => menuBc && handleDeleteBc(menuBc)}>
+              <Ionicons name="trash-outline" size={18} color={C.danger} />
+              <Text style={[s.menuItemText, { color: C.danger }]}>削除</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -554,4 +604,17 @@ const s = StyleSheet.create({
     padding: 10,
   },
   upgradeText: { flex: 1, fontSize: 12, fontWeight: '600' },
+
+  menuDotBtn: { width: 28, alignItems: 'center', justifyContent: 'center' },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 40 },
+  menuCard: {
+    backgroundColor: C.card, borderRadius: 14,
+    paddingVertical: 8, overflow: 'hidden',
+    borderWidth: 1, borderColor: C.border,
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
+  },
+  menuTitle: { fontSize: 11, color: C.muted, paddingHorizontal: 16, paddingVertical: 8 },
+  menuDivider: { height: 1, backgroundColor: C.border, marginHorizontal: 16 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  menuItemText: { fontSize: 15, fontWeight: '600', color: C.text },
 })
