@@ -29,6 +29,8 @@ type BroadcastBlock = {
 export default function BroadcastThreadScreen() {
   const { id: anchorId } = useLocalSearchParams<{ id: string }>()
   const [myId, setMyId] = useState<string | null>(null)
+  const [myName, setMyName] = useState('')
+  const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [isSelf, setIsSelf] = useState(false)
   const [broadcastSenderId, setBroadcastSenderId] = useState<string | null>(null)
   const [blocks, setBlocks] = useState<BroadcastBlock[]>([])
@@ -82,11 +84,13 @@ export default function BroadcastThreadScreen() {
 
     if (!allMsgs?.length) { setComments([]); setLoading(false); return }
 
-    const senderIds = [...new Set(allMsgs.map((m: any) => m.sender_id))]
+    const senderIds = [...new Set([user.id, ...allMsgs.map((m: any) => m.sender_id)])]
     const { data: profiles } = await supabase
       .from('profiles').select('id, display_name, avatar_url').in('id', senderIds)
     const profMap: Record<string, { name: string; avatar: string | null }> = {}
     for (const p of (profiles ?? [])) profMap[p.id] = { name: p.display_name, avatar: p.avatar_url ?? null }
+    setMyName(profMap[user.id]?.name ?? '')
+    setMyAvatar(profMap[user.id]?.avatar ?? null)
 
     const byId: Record<string, Comment> = {}
     for (const m of allMsgs as any[]) {
@@ -125,18 +129,38 @@ export default function BroadcastThreadScreen() {
       receiverId = replyToComment.sender_id !== myId ? replyToComment.sender_id : broadcastSenderId
     }
 
-    await supabase.from('messages').insert({
+    const { data: inserted } = await supabase.from('messages').insert({
       sender_id: myId,
       receiver_id: receiverId,
       content: text,
       broadcast_id: anchorId,
       parent_message_id: parentId,
-    })
+    }).select('id, created_at').single()
+
+    const newComment: Comment = {
+      id: inserted?.id ?? `tmp-${Date.now()}`,
+      content: text,
+      sender_id: myId,
+      sender_name: myName || 'あなた',
+      sender_avatar: myAvatar,
+      created_at: inserted?.created_at ?? new Date().toISOString(),
+      is_mine: true,
+      replies: [],
+    }
+
+    if (parentId) {
+      setComments(prev => prev.map(c =>
+        c.id === parentId
+          ? { ...c, replies: [...c.replies, newComment] }
+          : { ...c, replies: c.replies.map(r => r.id === parentId ? { ...r, replies: [...r.replies, newComment] } : r) }
+      ))
+    } else {
+      setComments(prev => [...prev, newComment])
+    }
 
     setReplyToComment(null)
     setSending(false)
-    await load()
-    setTimeout(() => listRef.current?.scrollToEnd(), 200)
+    setTimeout(() => listRef.current?.scrollToEnd(), 100)
   }
 
   const removeComment = (list: Comment[], id: string): Comment[] =>

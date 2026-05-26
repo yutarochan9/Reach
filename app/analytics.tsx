@@ -295,10 +295,11 @@ export default function AnalyticsScreen() {
     setMenuBc(null)
     if (bc.group_id) {
       await supabase.from('broadcasts').delete().eq('group_id', bc.group_id)
+      setBroadcasts(prev => prev.filter(b => b.group_id !== bc.group_id))
     } else {
       await supabase.from('broadcasts').delete().eq('id', bc.id)
+      setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
     }
-    setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
   }
 
   if (loading) return (
@@ -313,7 +314,7 @@ export default function AnalyticsScreen() {
   const monthlyAtLimit = isFree && monthlyUsed >= FREE_LIMIT
   const ringColor = monthlyAtLimit ? C.danger : monthlyNearLimit ? '#E67E22' : C.green
 
-  const chartData = [...broadcasts].reverse().slice(-10)
+  const chartData = broadcasts.slice(0, 10).reverse()
   const readSeries = chartData.map(b => b.read_count)
   const likeSeries = chartData.map(b => b.like_count)
 

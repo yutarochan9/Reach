@@ -56,7 +56,7 @@ export default function HomeScreen() {
     ])
 
     setMyDisplayName(profile?.display_name ?? '')
-    setMyAvatar((profile as any)?.avatar_url ?? null)
+    setMyAvatar(profile?.avatar_url ?? null)
     setUnreadNotifs(notifCount ?? 0)
 
     const followingIds = (follows ?? []).map((f: any) => f.following_id)

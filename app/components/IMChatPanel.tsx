@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable,
 } from 'react-native'
 import { router } from 'expo-router'
 import { useTalkContext } from '../contexts/TalkContext'

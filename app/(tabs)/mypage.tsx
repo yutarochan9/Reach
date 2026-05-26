@@ -133,7 +133,7 @@ export default function MyPageScreen() {
     const { data } = await supabase.auth.getUser()
     if (!data.user) return
     setUser(data.user)
-    const { data: prof } = await supabase.from('profiles').select('*').eq('id', data.user.id).single()
+    const { data: prof } = await supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', data.user.id).single()
     setProfile(prof)
   }, [])
 

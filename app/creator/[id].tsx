@@ -23,6 +23,7 @@ type Profile = {
   is_official: boolean
   username: string | null
   sns_links: Record<string, string> | null
+  plan: string
 }
 
 
@@ -54,7 +55,7 @@ export default function CreatorScreen() {
     ])
 
     setProfile(prof)
-    setCreatorPlan((prof as any)?.plan ?? 'free')
+    setCreatorPlan(prof?.plan ?? 'free')
     setFollowerCount((follows ?? []).length)
     setIsFollowing(!!myFollow)
     setRichMenu(menu && menu.is_active ? menu : null)
