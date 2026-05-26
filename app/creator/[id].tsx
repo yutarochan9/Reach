@@ -212,7 +212,29 @@ export default function CreatorScreen() {
                 <TouchableOpacity
                   key={btn.id}
                   style={styles.richMenuBtn}
-                  onPress={() => Linking.openURL(btn.url)}
+                  onPress={async () => {
+                    if (btn.action === 'code') {
+                      const { data: { user } } = await supabase.auth.getUser()
+                      const code = btn.code?.trim()
+                      if (!code || !user) return
+                      await supabase.from('messages').insert({ sender_id: user.id, receiver_id: id, content: code })
+                      router.push(`/im/${btn.creator_id ?? id}` as any)
+                    } else if (btn.action === 'page' && btn.url) {
+                      router.push(btn.url as any)
+                    } else if (btn.url) {
+                      try {
+                        const parsed = new URL(btn.url)
+                        if (Platform.OS === 'web' && parsed.origin === window.location.origin) {
+                          router.push(parsed.pathname as any)
+                        } else {
+                          Linking.openURL(btn.url)
+                        }
+                      } catch {
+                        if (btn.url.startsWith('/')) router.push(btn.url as any)
+                        else Linking.openURL(btn.url)
+                      }
+                    }
+                  }}
                   activeOpacity={0.7}
                 >
                   <Ionicons name={btn.icon ?? 'link-outline'} size={22} color={Colors.accent} />
