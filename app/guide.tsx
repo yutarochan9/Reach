@@ -8,13 +8,13 @@ const STEPS = [
   { step: '2', title: 'クリエイターをフォローする', desc: 'お気に入りのクリエイターのプロフィールページからフォローします。フォロー後、配信が届くようになります。', icon: 'heart-outline' as const },
   { step: '3', title: '配信を受け取る', desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像・動画など様々な形式に対応しています。', icon: 'notifications-outline' as const },
   { step: '4', title: 'DMで直接やり取りする', desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。', icon: 'chatbubble-ellipses-outline' as const },
-  { step: '5', title: 'タイルメニューを活用する', desc: 'トーク画面下部のタイルメニューからリンクや自動返信ボタンを使えます。', icon: 'grid-outline' as const },
 ]
 
-const TIPS = [
-  { icon: 'shield-checkmark-outline' as const, title: '限定配信', desc: 'フォロワー限定の配信はフォロー後に届きます。' },
-  { icon: 'bell-outline' as const, title: '通知設定', desc: '配信の通知はデバイスの設定から変更できます。' },
-  { icon: 'lock-closed-outline' as const, title: 'プライバシー', desc: 'DMの内容はクリエイターとあなただけが見られます。' },
+const TOOLS = [
+  { icon: 'radio-outline' as const, title: 'トーク（配信）', desc: 'クリエイターからの配信がここに届きます。テキスト・画像・動画など様々な形式に対応しています。フォロワー全員に確実に届くのが特徴です。' },
+  { icon: 'chatbubble-ellipses-outline' as const, title: 'ダイレクトメッセージ', desc: 'クリエイターと1対1でやり取りできます。質問・感想・相談など、気軽にメッセージを送りましょう。内容はあなたとクリエイターだけが見られます。' },
+  { icon: 'grid-outline' as const, title: 'タイルメニュー', desc: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。タップするだけで簡単に使えます。' },
+  { icon: 'person-outline' as const, title: 'プロフィール', desc: 'クリエイターのプロフィールページからフォロー・フォロー解除ができます。過去の配信を確認することもできます。' },
 ]
 
 export default function GuideScreen() {
@@ -59,15 +59,17 @@ export default function GuideScreen() {
           ))}
         </View>
 
-        <Text style={styles.sectionTitle}>知っておくと便利</Text>
-        <View style={styles.featureGrid}>
-          {TIPS.map((t) => (
-            <View key={t.title} style={styles.featureCard}>
-              <View style={styles.featureIconWrap}>
-                <Ionicons name={t.icon} size={22} color={Colors.accent} />
+        <Text style={styles.sectionTitle}>ツール説明</Text>
+        <View style={styles.toolList}>
+          {TOOLS.map((t) => (
+            <View key={t.title} style={styles.toolCard}>
+              <View style={styles.toolTitleRow}>
+                <View style={styles.featureIconWrap}>
+                  <Ionicons name={t.icon} size={22} color={Colors.accent} />
+                </View>
+                <Text style={styles.featureTitle}>{t.title}</Text>
               </View>
-              <Text style={styles.featureTitle}>{t.title}</Text>
-              <Text style={styles.featureDesc}>{t.desc}</Text>
+              <Text style={styles.toolDesc}>{t.desc}</Text>
             </View>
           ))}
         </View>
@@ -104,11 +106,12 @@ const styles = StyleSheet.create({
   stepTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   stepTitle: { fontSize: 13, fontWeight: '700', color: Colors.text, flex: 1 },
   stepDesc: { fontSize: 12, color: Colors.textLight, lineHeight: 18 },
-  featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  featureCard: { width: '48%', backgroundColor: Colors.white, borderRadius: 14, padding: 14, gap: 6, borderWidth: 1, borderColor: Colors.border },
-  featureIconWrap: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
-  featureTitle: { fontSize: 13, fontWeight: '700', color: Colors.text },
-  featureDesc: { fontSize: 12, color: Colors.textLight, lineHeight: 18 },
+  featureIconWrap: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  featureTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  toolList: { gap: 10 },
+  toolCard: { backgroundColor: Colors.white, borderRadius: 14, padding: 16, gap: 10, borderWidth: 1, borderColor: Colors.border },
+  toolTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  toolDesc: { fontSize: 13, color: Colors.textLight, lineHeight: 21 },
   versionRow: { alignItems: 'center', marginTop: 4 },
   versionText: { fontSize: 12, color: Colors.border },
 })
