@@ -39,6 +39,7 @@ type Creator = {
 export default function DiscoverScreen() {
   const [recommended, setRecommended] = useState<Creator[]>([])
   const [allScored, setAllScored] = useState<Creator[]>([])
+  const [allProfiles, setAllProfiles] = useState<Creator[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
@@ -131,9 +132,8 @@ export default function DiscoverScreen() {
       creatorStats[b.sender_id].totalReplies   += replyByBc[b.id] ?? 0
     }
 
-    // 6. スコアリング
-    const scored: Creator[] = profiles
-      .filter((p: any) => !myFollowingSet.has(p.id))
+    // 6. スコアリング（全ユーザー対象、is_followingを正しくセット）
+    const allScoredFull: Creator[] = profiles
       .map((p: any) => {
         const fc = followerMap[p.id] ?? 0
         const sc = socialMap[p.id] ?? 0
@@ -160,7 +160,7 @@ export default function DiscoverScreen() {
         return {
           ...p,
           follower_count: fc,
-          is_following: false,
+          is_following: myFollowingSet.has(p.id),
           score,
           social_count: sc,
           broadcast_count: bcCount,
@@ -173,12 +173,16 @@ export default function DiscoverScreen() {
       })
       .sort((a: Creator, b: Creator) => b.score - a.score)
 
+    // フォロー済みを除いたリスト（おすすめ・ランキング表示用）
+    const scored = allScoredFull.filter(c => !c.is_following)
+
     // 返信率 or いいね率が高い上位をおすすめカードに
     const topRec = scored
       .filter(c => c.reply_rate > 0 || c.reaction_rate > 0 || c.social_count > 0)
       .slice(0, 6)
     setRecommended(topRec)
     setAllScored(scored)
+    setAllProfiles(allScoredFull)
     setPage(1)
     setLoading(false)
   }, [])
@@ -198,12 +202,13 @@ export default function DiscoverScreen() {
       ? { ...c, is_following: !isFollowing, follower_count: c.follower_count + (isFollowing ? -1 : 1) }
       : c
     setAllScored(p => p.map(upd))
+    setAllProfiles(p => p.map(upd))
     setRecommended(p => p.map(upd))
   }
 
   const isSearching = search.length > 0
   const searchResults = isSearching
-    ? allScored.filter(c => {
+    ? allProfiles.filter(c => {
         const q = search.toLowerCase().replace(/^#/, '')
         return (
           c.display_name.toLowerCase().includes(q) ||
