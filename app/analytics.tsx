@@ -14,6 +14,8 @@ type Broadcast = {
   read_count: number
   like_count: number
   reply_count: number
+  group_id: string | null
+  block_count: number  // グループ内のブロック数（1=単体配信）
 }
 
 type Stats = {
@@ -132,7 +134,7 @@ export default function AnalyticsScreen() {
       supabase.from('profiles').select('plan').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id),
       supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', user.id),
-      supabase.from('broadcasts').select('id, content, created_at').eq('sender_id', user.id).eq('status', 'published').order('created_at', { ascending: false }),
+      supabase.from('broadcasts').select('id, content, created_at, group_id, block_order').eq('sender_id', user.id).eq('status', 'published').order('created_at', { ascending: false }),
       supabase.from('broadcasts').select('id', { count: 'exact', head: true })
         .eq('sender_id', user.id).eq('status', 'published')
         .gte('created_at', startOfMonth.toISOString()),
@@ -162,14 +164,52 @@ export default function AnalyticsScreen() {
     const totalReads = Object.values(readMap).reduce((a, b) => a + b, 0)
     const totalLikes = Object.values(likeMap).reduce((a, b) => a + b, 0)
 
-    const enriched: Broadcast[] = (bcs ?? []).map((b: any) => ({
-      id: b.id,
-      content: b.content,
-      created_at: b.created_at,
-      read_count: readMap[b.id] ?? 0,
-      like_count: likeMap[b.id] ?? 0,
-      reply_count: replyMap[b.id] ?? 0,
-    }))
+    // group_idでまとめる（同じgroup_idを持つブロックを1エントリに集約）
+    const groupMap = new Map<string, any[]>()
+    const soloList: any[] = []
+    for (const b of (bcs ?? [])) {
+      if (b.group_id) {
+        if (!groupMap.has(b.group_id)) groupMap.set(b.group_id, [])
+        groupMap.get(b.group_id)!.push(b)
+      } else {
+        soloList.push(b)
+      }
+    }
+
+    const enriched: Broadcast[] = []
+
+    // グループ配信：先頭ブロック(block_order最小)を代表とし、統計を合算
+    for (const [, blocks] of groupMap) {
+      blocks.sort((a: any, b: any) => (a.block_order ?? 0) - (b.block_order ?? 0))
+      const representative = blocks[0]
+      enriched.push({
+        id: representative.id,
+        content: representative.content,
+        created_at: representative.created_at,
+        read_count: blocks.reduce((s: number, b: any) => s + (readMap[b.id] ?? 0), 0),
+        like_count: blocks.reduce((s: number, b: any) => s + (likeMap[b.id] ?? 0), 0),
+        reply_count: blocks.reduce((s: number, b: any) => s + (replyMap[b.id] ?? 0), 0),
+        group_id: representative.group_id,
+        block_count: blocks.length,
+      })
+    }
+
+    // 単体配信
+    for (const b of soloList) {
+      enriched.push({
+        id: b.id,
+        content: b.content,
+        created_at: b.created_at,
+        read_count: readMap[b.id] ?? 0,
+        like_count: likeMap[b.id] ?? 0,
+        reply_count: replyMap[b.id] ?? 0,
+        group_id: null,
+        block_count: 1,
+      })
+    }
+
+    // 日時降順にソート
+    enriched.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     setStats({
       followerCount: followerCount ?? 0,
@@ -334,7 +374,15 @@ export default function AnalyticsScreen() {
                 activeOpacity={0.7}
               >
                 <View style={styles.bcMain}>
-                  <Text style={styles.bcContent}>{truncate(bc.content)}</Text>
+                  <View style={styles.bcTitleRow}>
+                    {bc.block_count > 1 && (
+                      <View style={styles.groupBadge}>
+                        <Ionicons name="layers-outline" size={10} color={Colors.accent} />
+                        <Text style={styles.groupBadgeText}>{bc.block_count}件まとめて</Text>
+                      </View>
+                    )}
+                    <Text style={styles.bcContent} numberOfLines={2}>{truncate(bc.content)}</Text>
+                  </View>
                   <Text style={styles.bcDate}>{new Date(bc.created_at).toLocaleString('ja-JP')}</Text>
                 </View>
                 <View style={styles.bcStats}>
@@ -426,8 +474,15 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.border,
   },
   bcMain: { flex: 1, gap: 3 },
+  bcTitleRow: { gap: 4 },
   bcContent: { fontSize: 13, color: Colors.text, lineHeight: 18 },
   bcDate: { fontSize: 11, color: Colors.textLight },
+  groupBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: `${Colors.accent}15`, borderRadius: 6,
+    paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start',
+  },
+  groupBadgeText: { fontSize: 10, fontWeight: '700', color: Colors.accent },
   bcStats: { flexDirection: 'row', gap: 10 },
   bcStat: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   bcStatText: { fontSize: 12, color: Colors.textLight },
