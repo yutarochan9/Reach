@@ -366,20 +366,20 @@ export default function RichMenuScreen() {
               {panelBgImage && (
                 <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
               )}
-              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+              {panelBgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.35)' }]} pointerEvents="none" />}
               <View style={styles.gridArea}>
                 {Array.from({ length: GRID_COLS + 1 }, (_, i) => (
                   <View key={`v${i}`} pointerEvents="none" style={{
                     position: 'absolute', top: 0, bottom: 0,
                     left: `${(i / GRID_COLS) * 100}%` as any,
-                    width: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
+                    width: StyleSheet.hairlineWidth, backgroundColor: panelBgImage ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.07)',
                   }} />
                 ))}
                 {Array.from({ length: GRID_ROWS + 1 }, (_, i) => (
                   <View key={`h${i}`} pointerEvents="none" style={{
                     position: 'absolute', left: 0, right: 0,
                     top: `${(i / GRID_ROWS) * 100}%` as any,
-                    height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)',
+                    height: StyleSheet.hairlineWidth, backgroundColor: panelBgImage ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.07)',
                   }} />
                 ))}
                 {/* ドラフトハイライト（重複=赤、正常=黄色） */}
@@ -493,7 +493,7 @@ export default function RichMenuScreen() {
                   {panelBgImage && (
                     <Image source={{ uri: panelBgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
                   )}
-                  <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
+                  {panelBgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.35)' }]} pointerEvents="none" />}
                   {buttons.map(btn => (
                     <View key={btn.id} pointerEvents="none" style={{
                       position: 'absolute',
@@ -502,17 +502,29 @@ export default function RichMenuScreen() {
                       width: `${(btn.w / GRID_COLS) * 100}%` as any,
                       height: `${(btn.h / GRID_ROWS) * 100}%` as any,
                       alignItems: 'center', justifyContent: 'center',
-                      borderRightWidth: 0.5, borderBottomWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)',
+                      borderWidth: 0.5,
+                      borderColor: panelBgImage ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
                       overflow: 'hidden',
                     }}>
                       {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-                      {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
-                      <Ionicons name={btn.icon as any} size={12} color="#FFF" />
+                      {btn.bgImage && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.32)' }]} />}
+                      {!btn.bgImage && !panelBgImage && (
+                        <View style={{
+                          width: 18, height: 18, borderRadius: 9,
+                          backgroundColor: `${Colors.accent}18`,
+                          alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <Ionicons name={btn.icon as any} size={10} color={Colors.accent} />
+                        </View>
+                      )}
+                      {(btn.bgImage || panelBgImage) && (
+                        <Ionicons name={btn.icon as any} size={13} color="rgba(255,255,255,0.92)" />
+                      )}
                     </View>
                   ))}
                   {buttons.length === 0 && (
                     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>タイルなし</Text>
+                      <Text style={{ fontSize: 9, color: panelBgImage ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)' }}>タイルなし</Text>
                     </View>
                   )}
                 </View>
@@ -719,7 +731,7 @@ const styles = StyleSheet.create({
   rightCol: { width: 320 },
   rightColMobile: { width: '100%' as any },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
-  gridWrapper: { backgroundColor: '#1C1C1E', overflow: 'hidden', borderRadius: 8 },
+  gridWrapper: { backgroundColor: '#F5EFE8', overflow: 'hidden', borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
   gridArea: { aspectRatio: 27 / 18 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -750,9 +762,9 @@ const styles = StyleSheet.create({
   phoneDmField: { flex: 1, height: 30, borderRadius: 15, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, justifyContent: 'center' },
   phoneDmPlaceholder: { fontSize: 11, color: Colors.textLight },
   phoneDmSend: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  previewPanel: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
-  tileHandleArea: { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
-  tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  previewPanel: { backgroundColor: '#F5EFE8', overflow: 'hidden' },
+  tileHandleArea: { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)' },
+  tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.15)' },
   previewTileArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
