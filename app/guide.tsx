@@ -37,23 +37,10 @@ export default function GuideScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.conceptCard}>
-          <Text style={styles.conceptTitle}>Reachとは</Text>
           <Text style={styles.conceptText}>
-            Reachは、クリエイターとファンをダイレクトにつなぐ配信プラットフォームです。
+            Reachの基本的な使い方を説明します。{'\n\n'}
+            アカウントを作成してクリエイターをフォローするだけで、すぐに配信を受け取れます。
           </Text>
-          <View style={styles.featureList}>
-            {[
-              { icon: 'people-outline' as const, text: '誰でもクリエイターになれる。登録してすぐ配信を始められます。' },
-              { icon: 'checkmark-circle-outline' as const, text: 'フォロワーに必ず届く。アルゴリズムに左右されない確実な配信。' },
-              { icon: 'images-outline' as const, text: 'テキスト・画像・動画など多彩なコンテンツ配信に対応。' },
-              { icon: 'flash-outline' as const, text: '自動応答・予約配信・フロー配信など、強力なツールが揃っている。' },
-            ].map((f, i) => (
-              <View key={i} style={styles.featureRow}>
-                <Ionicons name={f.icon} size={16} color={Colors.accent} />
-                <Text style={styles.featureText}>{f.text}</Text>
-              </View>
-            ))}
-          </View>
         </View>
 
         <Text style={styles.sectionTitle}>はじめ方</Text>
@@ -113,12 +100,8 @@ const styles = StyleSheet.create({
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   content: { padding: 20, paddingBottom: 48, gap: 20 },
-  conceptCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: Colors.border, gap: 12 },
-  conceptTitle: { fontSize: 16, fontWeight: '800', color: Colors.accent },
-  conceptText: { fontSize: 13, color: Colors.textLight, lineHeight: 22 },
-  featureList: { gap: 10 },
-  featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  featureText: { flex: 1, fontSize: 13, color: Colors.text, lineHeight: 20 },
+  conceptCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: Colors.border },
+  conceptText: { fontSize: 14, color: Colors.text, lineHeight: 24 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5 },
   stepList: { gap: 0 },
   stepRow: { flexDirection: 'row', gap: 12 },

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
 import { useLocalSearchParams, router } from 'expo-router'
@@ -251,6 +251,24 @@ export default function TalkDetailScreen() {
     }
   }
 
+  const handleDelete = (group: BroadcastGroup) => {
+    setLongPressGroup(null)
+    Alert.alert('配信を削除', 'この配信を削除しますか？この操作は取り消せません。', [
+      { text: 'キャンセル', style: 'cancel' },
+      {
+        text: '削除', style: 'destructive',
+        onPress: async () => {
+          if (group.group_id) {
+            await supabase.from('broadcasts').delete().eq('group_id', group.group_id)
+          } else {
+            await supabase.from('broadcasts').delete().eq('id', group.anchorId)
+          }
+          setGroups(prev => prev.filter(g => g.anchorId !== group.anchorId))
+        },
+      },
+    ])
+  }
+
   const handleSend = async () => {
     if (!imText.trim() || !myId) return
     const text = imText.trim()
@@ -417,6 +435,16 @@ export default function TalkDetailScreen() {
             </View>
             <Text style={styles.popupBtnText}>コメント（{longPressGroup?.comment_count ?? 0}）</Text>
           </TouchableOpacity>
+
+          {/* 削除（自分の配信のみ） */}
+          {isSelf && longPressGroup && (
+            <TouchableOpacity style={styles.popupBtn} onPress={() => handleDelete(longPressGroup)}>
+              <View style={[styles.popupIconWrap, { backgroundColor: '#FFF0F0' }]}>
+                <Ionicons name="trash-outline" size={22} color="#E53E3E" />
+              </View>
+              <Text style={[styles.popupBtnText, { color: '#E53E3E' }]}>削除</Text>
+            </TouchableOpacity>
+          )}
 
           {/* キャンセル */}
           <TouchableOpacity style={[styles.popupBtn, styles.popupCancelBtn]} onPress={() => setLongPressGroup(null)}>
