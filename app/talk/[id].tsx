@@ -644,47 +644,33 @@ export default function TalkDetailScreen() {
     )
   }
 
-  // デスクトップ用右パネル（プロフィール）
+  // デスクトップ用プロフィールパネル（左側・flex:1）
   const RightPanel = isDesktop ? (
     <View style={styles.rightPanel}>
-      <View style={styles.rightPanelHeader}>
-        <Text style={styles.rightPanelHeaderText}>プロフィール</Text>
-      </View>
       <ScrollView contentContainerStyle={styles.rightPanelScroll}>
-        {/* アバター行（メッセージタブのリスト行スタイル） */}
-        <TouchableOpacity
-          style={styles.rpRow}
-          onPress={() => router.push(`/creator/${senderId}` as any)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.rpAvatar}>
+        {/* 大きなアバター・名前・bio を中央配置 */}
+        <View style={styles.rpProfileSection}>
+          <TouchableOpacity
+            onPress={() => router.push(`/creator/${senderId}` as any)}
+            activeOpacity={0.85}
+          >
             {senderAvatar
-              ? <Image source={{ uri: senderAvatar }} style={styles.rpAvatarImg} />
-              : <Text style={styles.rpAvatarText}>{senderName[0]}</Text>
+              ? <Image source={{ uri: senderAvatar }} style={styles.rpAvatarLarge} />
+              : <View style={styles.rpAvatarPlaceholder}>
+                  <Text style={styles.rpAvatarPlaceholderText}>{senderName[0]}</Text>
+                </View>
             }
+          </TouchableOpacity>
+          <View style={styles.rpNameRow}>
+            <Text style={styles.rpNameLarge}>{senderName}</Text>
+            {senderIsOfficial && <Ionicons name="checkmark-circle" size={18} color="#1D9BF0" />}
           </View>
-          <View style={styles.rpInfo}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={styles.rpName}>{senderName}</Text>
-              {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
-            </View>
-            {senderUsername ? <Text style={styles.rpUsername}>@{senderUsername}</Text> : null}
-          </View>
-        </TouchableOpacity>
+          {senderUsername ? <Text style={styles.rpUsernameText}>@{senderUsername}</Text> : null}
+          {senderBio ? <Text style={styles.rpBioText}>{senderBio}</Text> : null}
+        </View>
 
-        <View style={styles.rpDivider} />
-
-        {senderBio ? (
-          <>
-            <View style={styles.rpSection}>
-              <Text style={styles.rpSectionLabel}>BIO</Text>
-              <Text style={styles.rpBio}>{senderBio}</Text>
-            </View>
-            <View style={styles.rpDivider} />
-          </>
-        ) : null}
-
-        <View style={styles.rpSection}>
+        {/* フォロー + DM ボタン */}
+        <View style={styles.rpActions}>
           <TouchableOpacity
             style={[styles.rpFollowBtn, isFollowing && styles.rpFollowingBtn]}
             onPress={handleFollowToggle}
@@ -694,6 +680,16 @@ export default function TalkDetailScreen() {
               {isFollowing ? 'フォロー中' : 'フォローする'}
             </Text>
           </TouchableOpacity>
+          {isFollowing && (
+            <TouchableOpacity
+              style={styles.rpDmBtn}
+              onPress={() => router.push(`/im/${senderId}` as any)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="chatbubble-outline" size={16} color={Colors.accent} />
+              <Text style={styles.rpDmTxt}>DM</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -702,8 +698,10 @@ export default function TalkDetailScreen() {
   return (
     <View style={styles.outerWrap}>
       {RightPanel}
+      {/* 配信カラム：デスクトップは 480px 固定、モバイルは flex:1 */}
+      <View style={isDesktop ? styles.broadcastsColumn : { flex: 1 }}>
       <KeyboardAvoidingView
-        style={[styles.container, isDesktop && { flex: 0, width: 480 }, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
+        style={[{ flex: 1 }, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
@@ -766,13 +764,14 @@ export default function TalkDetailScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   outerWrap: { flex: 1, flexDirection: 'row', backgroundColor: Colors.background },
-  container: { flex: 1, backgroundColor: Colors.background, maxWidth: '100%' },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
     paddingTop: isWeb ? 12 : 56, paddingHorizontal: 16, paddingBottom: 12,
@@ -791,40 +790,48 @@ const styles = StyleSheet.create({
   headerName: { fontSize: 15, fontWeight: '700', color: Colors.text },
   rightPanel: {
     flex: 1,
-    backgroundColor: Colors.header,
+    backgroundColor: Colors.background,
     borderRightWidth: 1, borderRightColor: Colors.border,
   },
-  rightPanelHeader: {
-    paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  rightPanelScroll: { paddingBottom: 40 },
+  broadcastsColumn: {
+    width: 480,
+    flexShrink: 0,
+    backgroundColor: Colors.background,
+    borderLeftWidth: 1, borderLeftColor: Colors.border,
+    overflow: 'hidden',
   },
-  rightPanelHeaderText: { fontSize: 13, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5 },
-  rightPanelScroll: { paddingBottom: 32 },
-  rpRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
-    backgroundColor: Colors.white,
+  rpProfileSection: {
+    alignItems: 'center',
+    paddingTop: 48, paddingHorizontal: 32, paddingBottom: 24,
   },
-  rpAvatar: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  rpAvatarLarge: { width: 88, height: 88, borderRadius: 44 },
+  rpAvatarPlaceholder: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
   },
-  rpAvatarImg: { width: 48, height: 48, borderRadius: 24 },
-  rpAvatarText: { fontSize: 20, fontWeight: '700', color: Colors.white },
-  rpInfo: { flex: 1 },
-  rpName: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  rpUsername: { fontSize: 12, color: Colors.textLight, marginTop: 1 },
-  rpDivider: { height: 1, backgroundColor: Colors.border },
-  rpSection: { paddingHorizontal: 16, paddingVertical: 14, backgroundColor: Colors.white },
-  rpSectionLabel: { fontSize: 11, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  rpBio: { fontSize: 13, color: Colors.text, lineHeight: 19 },
+  rpAvatarPlaceholderText: { fontSize: 34, fontWeight: '700', color: Colors.white },
+  rpNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 4 },
+  rpNameLarge: { fontSize: 20, fontWeight: '700', color: Colors.text },
+  rpUsernameText: { fontSize: 13, color: Colors.textLight, marginBottom: 12 },
+  rpBioText: { fontSize: 13, color: Colors.text, lineHeight: 20, textAlign: 'center', maxWidth: 340 },
+  rpActions: {
+    flexDirection: 'row', gap: 10, justifyContent: 'center',
+    paddingHorizontal: 24, paddingBottom: 32,
+  },
   rpFollowBtn: {
-    backgroundColor: Colors.accent, borderRadius: 20,
-    paddingVertical: 9, alignItems: 'center',
+    backgroundColor: Colors.accent, borderRadius: 22,
+    paddingVertical: 10, paddingHorizontal: 32, alignItems: 'center',
   },
   rpFollowingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.accent },
   rpFollowTxt: { fontSize: 14, fontWeight: '700', color: Colors.white },
   rpFollowingTxt: { color: Colors.accent },
+  rpDmBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 22,
+    paddingVertical: 10, paddingHorizontal: 20, backgroundColor: Colors.white,
+  },
+  rpDmTxt: { fontSize: 14, fontWeight: '600', color: Colors.accent },
   messageList: { padding: 16, gap: 12, paddingBottom: 32 },
 
   dateDivider: { alignItems: 'center', marginVertical: 8 },
