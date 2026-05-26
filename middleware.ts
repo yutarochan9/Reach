@@ -18,7 +18,9 @@ export default async function middleware(request: Request): Promise<Response | u
   const ua = request.headers.get('user-agent') ?? ''
 
   // 主要 SNS / メッセージアプリのクローラーを検出
-  const isBot = /Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot|WhatsApp|line\//i.test(ua)
+  // Line/ は LINE アプリ内ブラウザ(人間)にも含まれるため除外
+  // LINE の OGP クローラーは facebookexternalhit を使う
+  const isBot = /Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot/i.test(ua)
   if (!isBot) return undefined // 人間は SPA へ通過
 
   const { pathname } = new URL(request.url)
