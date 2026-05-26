@@ -321,6 +321,7 @@ export default function AnalyticsScreen() {
     { label: '累計いいね', value: stats?.totalLikes ?? 0, icon: 'heart-outline' as const, color: C.button },
     { label: '累計配信', value: stats?.totalBroadcasts ?? 0, icon: 'radio-outline' as const, color: C.accent },
     { label: 'フォロー中', value: stats?.followingCount ?? 0, icon: 'person-add-outline' as const, color: C.button },
+    { label: '今月配信', value: monthlyUsed, icon: 'calendar-outline' as const, color: C.accent },
   ]
 
   return (
@@ -335,23 +336,19 @@ export default function AnalyticsScreen() {
 
       <ScrollView contentContainerStyle={s.content}>
 
-        {/* ── 左：フォロワー大 / 右：4つのサブ stat ── */}
+        {/* ── 左：フォロワー / 右：5つの正方形カード横一列 ── */}
         <View style={s.topRow}>
           <View style={s.followerCard}>
-            <View style={s.statIconRow}>
-              <Ionicons name="people-outline" size={14} color={C.accent} />
-              <Text style={[s.statLabel, { color: C.accent }]}>フォロワー</Text>
-            </View>
+            <Ionicons name="people-outline" size={12} color={C.accent} />
             <Text style={s.followerNum}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
+            <Text style={s.followerLabel}>フォロワー</Text>
           </View>
-          <View style={s.subGrid}>
+          <View style={s.squaresRow}>
             {subItems.map(item => (
-              <View key={item.label} style={s.subCard}>
-                <View style={s.statIconRow}>
-                  <Ionicons name={item.icon} size={11} color={item.color} />
-                  <Text style={[s.subLabel, { color: item.color }]}>{item.label}</Text>
-                </View>
-                <Text style={s.subNum}>{item.value.toLocaleString()}</Text>
+              <View key={item.label} style={s.squareCard}>
+                <Ionicons name={item.icon} size={12} color={item.color} />
+                <Text style={[s.squareNum, { color: item.color }]}>{item.value.toLocaleString()}</Text>
+                <Text style={s.squareLabel}>{item.label}</Text>
               </View>
             ))}
           </View>
@@ -370,8 +367,8 @@ export default function AnalyticsScreen() {
           </View>
         )}
 
-        {/* ── 今月の配信（無料プランのみリング表示） ── */}
-        {isFree ? (
+        {/* ── 今月の配信（無料プランのみ上限リング） ── */}
+        {isFree && (
           <View style={s.card}>
             <View style={s.chartHead}>
               <View style={{ flex: 1 }}>
@@ -389,11 +386,6 @@ export default function AnalyticsScreen() {
                 <Ionicons name="chevron-forward" size={13} color={ringColor} />
               </TouchableOpacity>
             )}
-          </View>
-        ) : (
-          <View style={s.card}>
-            <Text style={s.cardSectionLabel}>今月の配信</Text>
-            <Text style={s.monthlyNum}>{monthlyUsed}<Text style={s.monthlyUnit}> 件</Text></Text>
           </View>
         )}
 
@@ -494,23 +486,25 @@ const s = StyleSheet.create({
   headerTitle: { fontSize: 17, fontWeight: '700', color: C.text },
   content: { padding: 14, gap: 12, paddingBottom: 48 },
 
-  topRow: { flexDirection: 'row', gap: 10 },
+  topRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
   followerCard: {
-    flex: 1,
+    flex: 3,
     backgroundColor: C.card, borderRadius: 14,
     borderWidth: 1, borderColor: C.border,
-    padding: 14, gap: 8, justifyContent: 'center',
+    padding: 12, gap: 4, alignItems: 'center', justifyContent: 'center',
   },
-  followerNum: { fontSize: 36, fontWeight: '800', color: C.text, letterSpacing: -1 },
-  subGrid: { flex: 2, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  subCard: {
-    width: '47%',
+  followerNum: { fontSize: 28, fontWeight: '800', color: C.text, letterSpacing: -1 },
+  followerLabel: { fontSize: 10, fontWeight: '600', color: C.accent },
+  squaresRow: { flex: 5, flexDirection: 'row', gap: 6 },
+  squareCard: {
+    flex: 1,
     backgroundColor: C.card, borderRadius: 12,
     borderWidth: 1, borderColor: C.border,
-    padding: 10, gap: 4,
+    paddingVertical: 10, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center', gap: 4,
   },
-  subLabel: { fontSize: 10, fontWeight: '600' },
-  subNum: { fontSize: 20, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
+  squareNum: { fontSize: 16, fontWeight: '800', letterSpacing: -0.5 },
+  squareLabel: { fontSize: 8, fontWeight: '600', color: C.muted, textAlign: 'center' },
   statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statLabel: { fontSize: 12, fontWeight: '600' },
   statNum: { fontSize: 30, fontWeight: '800', color: C.text, letterSpacing: -1 },
@@ -529,8 +523,6 @@ const s = StyleSheet.create({
 
   ringRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
   rateNote: { fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 15 },
-  monthlyNum: { fontSize: 36, fontWeight: '800', color: C.text, letterSpacing: -1 },
-  monthlyUnit: { fontSize: 16, fontWeight: '600', color: C.muted },
 
   thRow: {
     flexDirection: 'row', alignItems: 'center',
