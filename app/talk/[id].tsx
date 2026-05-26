@@ -58,6 +58,15 @@ export default function TalkDetailScreen() {
     return () => vv.removeEventListener('resize', update)
   }, [])
 
+  // タイルパネルを最速で表示するため、他データより先行して取得
+  useEffect(() => {
+    supabase.from('rich_menus')
+      .select('buttons, is_active, panel_bg_image')
+      .eq('creator_id', senderId)
+      .maybeSingle()
+      .then(({ data: menu }) => setRichMenu(menu?.is_active ? menu : null))
+  }, [senderId])
+
   const load = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -66,20 +75,18 @@ export default function TalkDetailScreen() {
       const self = user.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }, { data: menu }] = await Promise.all([
+      const [{ data: profile }, { data: broadcasts }] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
           .eq('sender_id', senderId)
           .eq('status', 'published')
           .order('created_at', { ascending: true }),
-        supabase.from('rich_menus').select('buttons, is_active, panel_bg_image').eq('creator_id', senderId).maybeSingle(),
       ])
 
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
       setSenderIsOfficial((profile as any)?.is_official ?? false)
-      setRichMenu(menu && menu.is_active ? menu : null)
 
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)

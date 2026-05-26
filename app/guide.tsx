@@ -12,10 +12,14 @@ const STEPS = [
 ]
 
 const TOOLS = [
-  { icon: 'radio-outline' as const, title: 'トーク（配信）', desc: 'クリエイターからの配信がここに届きます。テキスト・画像・動画など様々な形式に対応しています。フォロワー全員に確実に届くのが特徴です。' },
-  { icon: 'chatbubble-ellipses-outline' as const, title: 'ダイレクトメッセージ', desc: 'クリエイターと1対1でやり取りできます。質問・感想・相談など、気軽にメッセージを送りましょう。内容はあなたとクリエイターだけが見られます。' },
+  { icon: 'radio-outline' as const, title: '配信メッセージ', desc: 'クリエイターからの配信がここに届きます。テキスト・画像・動画など様々な形式に対応しています。フォロワー全員に確実に届くのが特徴です。' },
+  { icon: 'chatbubble-ellipses-outline' as const, title: 'ダイレクトメッセージ（DM）', desc: 'クリエイターと1対1でやり取りできます。質問・感想・相談など、気軽にメッセージを送りましょう。内容はあなたとクリエイターだけが見られます。' },
   { icon: 'grid-outline' as const, title: 'タイルメニュー', desc: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。タップするだけで簡単に使えます。' },
-  { icon: 'person-outline' as const, title: 'プロフィール', desc: 'クリエイターのプロフィールページからフォロー・フォロー解除ができます。過去の配信を確認することもできます。' },
+  { icon: 'time-outline' as const, title: '下書き・予約配信', desc: '配信内容を下書きとして保存し、指定した日時に自動送信できます。事前に準備しておくことで、計画的な情報発信が可能です。' },
+  { icon: 'archive-outline' as const, title: '過去配信', desc: '過去に送った配信メッセージの一覧を確認できます。閲覧数・いいね・返信などの実績もあわせて確認できます。' },
+  { icon: 'people-outline' as const, title: 'セグメント配信', desc: 'フォロワーを属性や条件で絞り込み、特定のグループだけに配信できます。ターゲットに合わせた情報発信が可能です。' },
+  { icon: 'flash-outline' as const, title: '自動応答', desc: 'キーワードに反応して自動でメッセージを返信する機能です。よくある質問への対応や入力促進など、さまざまな場面で活用できます。' },
+  { icon: 'git-network-outline' as const, title: 'フロー配信', desc: '複数のメッセージをシナリオとして組み合わせ、条件分岐しながら順番に届ける機能です。ストーリー性のある体験を作れます。' },
 ]
 
 export default function GuideScreen() {
