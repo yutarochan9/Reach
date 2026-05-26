@@ -443,9 +443,9 @@ export default function TalkDetailScreen() {
           {!isWeb && richMenu.panel_bg_image && (
             <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
           )}
-          <View style={styles.panelDimOverlay} pointerEvents="none" />
-          <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
-            <View style={styles.tileHandleBar} />
+          {richMenu.panel_bg_image && <View style={styles.panelDimOverlay} pointerEvents="none" />}
+          <TouchableOpacity style={[styles.tileHandle, !richMenu.panel_bg_image && { borderBottomColor: 'rgba(0,0,0,0.06)' }]} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
+            <View style={[styles.tileHandleBar, !richMenu.panel_bg_image && { backgroundColor: 'rgba(0,0,0,0.15)' }]} />
           </TouchableOpacity>
           {tileOpen && (
             <View style={styles.tileGridArea}>
@@ -460,7 +460,7 @@ export default function TalkDetailScreen() {
                     height: `${(btn.h / GRID_R) * 100}%` as any,
                     alignItems: 'center', justifyContent: 'center',
                     borderRightWidth: 0.5, borderBottomWidth: 0.5,
-                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderColor: richMenu.panel_bg_image ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
                     overflow: 'hidden',
                   }}
                   onPress={async () => {
@@ -674,16 +674,16 @@ const styles = StyleSheet.create({
   sendDisabled: { backgroundColor: '#B0B0B0' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
-  tileContainer: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
-  panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
+  tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
+  panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   tileHandle: {
     alignItems: 'center', paddingVertical: 7,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)',
   },
-  tileHandleBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
+  tileHandleBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.15)' },
   // 18:27グリッド比率で絶対配置タイルを並べるエリア
   tileGridArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
   tileBtnImgOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
-  tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFFFFF' },
+  tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: Colors.text },
 })

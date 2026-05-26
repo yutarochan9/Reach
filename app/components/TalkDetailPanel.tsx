@@ -215,9 +215,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       {tileMenu.panel_bg_image && (
         <Image source={{ uri: tileMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
       )}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} pointerEvents="none" />
-      <TouchableOpacity style={styles.tileHandle} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
-        <View style={styles.tileHandleBar} />
+      {tileMenu.panel_bg_image && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.35)' }]} pointerEvents="none" />}
+      <TouchableOpacity style={[styles.tileHandle, !tileMenu.panel_bg_image && { borderBottomColor: 'rgba(0,0,0,0.06)' }]} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
+        <View style={[styles.tileHandleBar, !tileMenu.panel_bg_image && { backgroundColor: 'rgba(0,0,0,0.15)' }]} />
       </TouchableOpacity>
       {tileOpen && (
         <View style={styles.tileGridArea}>
@@ -232,7 +232,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                 height: `${(btn.h / GRID_R) * 100}%` as any,
                 alignItems: 'center', justifyContent: 'center',
                 borderRightWidth: 0.5, borderBottomWidth: 0.5,
-                borderColor: 'rgba(255,255,255,0.1)', overflow: 'hidden',
+                borderColor: tileMenu.panel_bg_image ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', overflow: 'hidden',
               }}
               onPress={async () => {
                 if (btn.action === 'code') {
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 1 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 },
   emptyText: { fontSize: 13, color: Colors.textLight },
-  tileContainer: { backgroundColor: '#1C1C1E', overflow: 'hidden' },
+  tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
   tileHandle: { alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   tileGridArea: { aspectRatio: 27 / 18, overflow: 'hidden' },

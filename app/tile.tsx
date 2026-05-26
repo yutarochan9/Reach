@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
   rightCol: { width: 320 },
   rightColMobile: { width: '100%' as any },
   sectionLabel: { fontSize: 11, color: Colors.textLight, marginHorizontal: 16 },
-  gridWrapper: { backgroundColor: '#F5EFE8', overflow: 'hidden', borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  gridWrapper: { backgroundColor: '#FFFFFF', overflow: 'hidden', borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
   gridArea: { aspectRatio: 27 / 18 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -750,7 +750,7 @@ const styles = StyleSheet.create({
   phoneDmField: { flex: 1, height: 30, borderRadius: 15, backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 12, justifyContent: 'center' },
   phoneDmPlaceholder: { fontSize: 11, color: Colors.textLight },
   phoneDmSend: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
-  previewPanel: { backgroundColor: '#F5EFE8', overflow: 'hidden' },
+  previewPanel: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
   tileHandleArea: { alignItems: 'center', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.06)' },
   tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.15)' },
   previewTileArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
