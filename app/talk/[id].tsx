@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
   useWindowDimensions, ScrollView,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
@@ -334,24 +334,6 @@ export default function TalkDetailScreen() {
     }
   }
 
-  const handleDelete = (group: BroadcastGroup) => {
-    setLongPressGroup(null)
-    Alert.alert('配信を削除', 'この配信を削除しますか？この操作は取り消せません。', [
-      { text: 'キャンセル', style: 'cancel' },
-      {
-        text: '削除', style: 'destructive',
-        onPress: async () => {
-          if (group.group_id) {
-            await supabase.from('broadcasts').delete().eq('group_id', group.group_id)
-          } else {
-            await supabase.from('broadcasts').delete().eq('id', group.anchorId)
-          }
-          setGroups(prev => prev.filter(g => g.anchorId !== group.anchorId))
-        },
-      },
-    ])
-  }
-
   const handleFollowToggle = async () => {
     if (!myId) return
     if (isFollowing) {
@@ -441,16 +423,21 @@ export default function TalkDetailScreen() {
                 </View>
                 <View style={styles.blocksWrap}>
                   <Text style={styles.senderNameLabel}>{senderName}</Text>
-                  {group.blocks.map((block, idx) => (
-                    <View key={block.id} style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}>
-                      {block.image_url && (
-                        <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
-                      )}
-                      {block.content.trim() && block.content !== '　' && (
-                        <Text style={[styles.broadcastText, isSelf && styles.broadcastTextSelf]}>{block.content}</Text>
-                      )}
-                    </View>
-                  ))}
+                  {group.blocks.map((block, idx) => {
+                    const urlMatch = block.content.match(/(https?:\/\/[^\s]+)/)
+                    const linkUrl = urlMatch?.[1] ?? null
+                    return (
+                      <View key={block.id} style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}>
+                        {block.image_url && (
+                          <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
+                        )}
+                        {block.content.trim() && block.content !== '　' && (
+                          <Text style={[styles.broadcastText, isSelf && styles.broadcastTextSelf]}>{block.content}</Text>
+                        )}
+                        {linkUrl && <LinkPreview url={linkUrl} />}
+                      </View>
+                    )
+                  })}
                 </View>
               </View>
 
@@ -529,16 +516,6 @@ export default function TalkDetailScreen() {
             </View>
             <Text style={styles.popupBtnText}>コメント（{longPressGroup?.comment_count ?? 0}）</Text>
           </TouchableOpacity>
-
-          {/* 削除（自分の配信のみ） */}
-          {isSelf && longPressGroup && (
-            <TouchableOpacity style={styles.popupBtn} onPress={() => handleDelete(longPressGroup)}>
-              <View style={[styles.popupIconWrap, { backgroundColor: '#FFF0F0' }]}>
-                <Ionicons name="trash-outline" size={22} color="#E53E3E" />
-              </View>
-              <Text style={[styles.popupBtnText, { color: '#E53E3E' }]}>削除</Text>
-            </TouchableOpacity>
-          )}
 
           {/* キャンセル */}
           <TouchableOpacity style={[styles.popupBtn, styles.popupCancelBtn]} onPress={() => setLongPressGroup(null)}>
@@ -825,13 +802,13 @@ const styles = StyleSheet.create({
   },
   broadcastAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   broadcastAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
-  blocksWrap: { maxWidth: '80%', flexShrink: 1 },
+  blocksWrap: { flex: 1, flexShrink: 1 },
   senderNameLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 3, fontWeight: '600' },
   broadcastBubble: {
     backgroundColor: Colors.white, borderRadius: 16, borderTopLeftRadius: 4,
     padding: 12, shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start', maxWidth: '100%',
   },
   broadcastBubbleSelf: { backgroundColor: Colors.button },
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
@@ -912,4 +889,39 @@ const styles = StyleSheet.create({
   tileBtnImgOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
   tileSeparator: { width: 32, height: 2, backgroundColor: Colors.accent, marginVertical: 6 },
   tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: Colors.text },
+  ogpCard: {
+    marginTop: 8, borderRadius: 10, overflow: 'hidden',
+    borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background,
+  },
+  ogpImage: { width: '100%', height: 140 },
+  ogpBody: { padding: 10, gap: 3 },
+  ogpSite: { fontSize: 10, color: Colors.textLight },
+  ogpTitle: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  ogpDesc: { fontSize: 11, color: Colors.textLight, lineHeight: 16 },
 })
+
+function LinkPreview({ url }: { url: string }) {
+  const [ogp, setOgp] = useState<{ title: string; description: string; image: string; siteName: string } | null>(null)
+
+  useEffect(() => {
+    const apiUrl = isWeb
+      ? `/api/ogp?url=${encodeURIComponent(url)}`
+      : `https://reach-pi-one.vercel.app/api/ogp?url=${encodeURIComponent(url)}`
+    fetch(apiUrl)
+      .then(r => r.json())
+      .then(d => { if (d.title || d.image) setOgp(d) })
+      .catch(() => {})
+  }, [url])
+
+  if (!ogp) return null
+  return (
+    <TouchableOpacity style={styles.ogpCard} onPress={() => Linking.openURL(url)} activeOpacity={0.85}>
+      {ogp.image ? <Image source={{ uri: ogp.image }} style={styles.ogpImage} resizeMode="cover" /> : null}
+      <View style={styles.ogpBody}>
+        {ogp.siteName ? <Text style={styles.ogpSite}>{ogp.siteName}</Text> : null}
+        {ogp.title ? <Text style={styles.ogpTitle} numberOfLines={2}>{ogp.title}</Text> : null}
+        {ogp.description ? <Text style={styles.ogpDesc} numberOfLines={2}>{ogp.description}</Text> : null}
+      </View>
+    </TouchableOpacity>
+  )
+}
