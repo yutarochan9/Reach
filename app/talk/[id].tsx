@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking, Alert,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
@@ -58,13 +59,25 @@ export default function TalkDetailScreen() {
     return () => vv.removeEventListener('resize', update)
   }, [])
 
-  // タイルパネルを最速で表示するため、他データより先行して取得
+  // タイル: キャッシュを即表示 → バックグラウンドで最新に更新
   useEffect(() => {
+    const key = `rich_menu_${senderId}`
+    AsyncStorage.getItem(key).then(cached => {
+      if (cached) {
+        try { setRichMenu(JSON.parse(cached)) } catch {}
+      }
+    }).catch(() => {})
+
     supabase.from('rich_menus')
       .select('buttons, is_active, panel_bg_image')
       .eq('creator_id', senderId)
       .maybeSingle()
-      .then(({ data: menu }) => setRichMenu(menu?.is_active ? menu : null))
+      .then(({ data: menu }) => {
+        const val = menu?.is_active ? menu : null
+        setRichMenu(val)
+        if (val) AsyncStorage.setItem(key, JSON.stringify(val)).catch(() => {})
+        else AsyncStorage.removeItem(key).catch(() => {})
+      })
   }, [senderId])
 
   const load = useCallback(async () => {
