@@ -4,11 +4,13 @@ import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
 
 const STEPS = [
-  { step: '1', title: 'アカウントを作成する', desc: 'メールアドレスとパスワードで登録します。登録後すぐに使い始められます。', icon: 'person-add-outline' as const },
-  { step: '2', title: 'クリエイターをフォローする', desc: 'お気に入りのクリエイターのプロフィールページからフォローします。フォロー後、配信が届くようになります。', icon: 'heart-outline' as const },
-  { step: '3', title: '配信を受け取る', desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像・動画など様々な形式に対応しています。', icon: 'notifications-outline' as const },
+  { step: '1', title: 'アカウントを作成する', desc: 'メールアドレスとパスワードで登録します。登録後すぐに使い始められます。誰でも無料でクリエイターにもなれます。', icon: 'person-add-outline' as const },
+  { step: '2', title: 'クリエイターをフォローする', desc: 'お気に入りのクリエイターのプロフィールページからフォローします。フォロー後、配信が確実に届くようになります。', icon: 'heart-outline' as const },
+  { step: '3', title: '配信を受け取る', desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像・動画など様々な形式に対応しています。アルゴリズムに左右されず、必ず手元に届くのが特徴です。', icon: 'notifications-outline' as const },
   { step: '4', title: '配信にいいね・コメントをする', desc: '配信メッセージを長押しするといいね・コメントができます。クリエイターに気持ちを伝えてみましょう。', icon: 'heart-circle-outline' as const },
   { step: '5', title: 'DMで直接やり取りする', desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。', icon: 'chatbubble-ellipses-outline' as const },
+  { step: '6', title: '自分でも投稿を作成する', desc: '右下の＋ボタンからいつでも配信を作成できます。テキスト・画像・動画をまとめて送ることも可能です。フォロワー全員に確実に届けられます。', icon: 'add-circle-outline' as const },
+  { step: '7', title: 'ツールを活用する', desc: 'タイルメニュー・自動応答・予約配信・フロー配信など、配信をより便利にする機能が揃っています。設定画面から自由にカスタマイズできます。', icon: 'construct-outline' as const },
 ]
 
 const TOOLS = [
@@ -35,10 +37,23 @@ export default function GuideScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.conceptCard}>
+          <Text style={styles.conceptTitle}>Reachとは</Text>
           <Text style={styles.conceptText}>
-            Reachの基本的な使い方を説明します。{'\n\n'}
-            アカウントを作成してクリエイターをフォローするだけで、すぐに配信を受け取れます。
+            Reachは、クリエイターとファンをダイレクトにつなぐ配信プラットフォームです。
           </Text>
+          <View style={styles.featureList}>
+            {[
+              { icon: 'people-outline' as const, text: '誰でもクリエイターになれる。登録してすぐ配信を始められます。' },
+              { icon: 'checkmark-circle-outline' as const, text: 'フォロワーに必ず届く。アルゴリズムに左右されない確実な配信。' },
+              { icon: 'images-outline' as const, text: 'テキスト・画像・動画など多彩なコンテンツ配信に対応。' },
+              { icon: 'flash-outline' as const, text: '自動応答・予約配信・フロー配信など、強力なツールが揃っている。' },
+            ].map((f, i) => (
+              <View key={i} style={styles.featureRow}>
+                <Ionicons name={f.icon} size={16} color={Colors.accent} />
+                <Text style={styles.featureText}>{f.text}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>はじめ方</Text>
@@ -98,8 +113,12 @@ const styles = StyleSheet.create({
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
   content: { padding: 20, paddingBottom: 48, gap: 20 },
-  conceptCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: Colors.border },
-  conceptText: { fontSize: 14, color: Colors.text, lineHeight: 24 },
+  conceptCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: Colors.border, gap: 12 },
+  conceptTitle: { fontSize: 16, fontWeight: '800', color: Colors.accent },
+  conceptText: { fontSize: 13, color: Colors.textLight, lineHeight: 22 },
+  featureList: { gap: 10 },
+  featureRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  featureText: { flex: 1, fontSize: 13, color: Colors.text, lineHeight: 20 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5 },
   stepList: { gap: 0 },
   stepRow: { flexDirection: 'row', gap: 12 },
