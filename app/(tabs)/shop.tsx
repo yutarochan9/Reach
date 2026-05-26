@@ -33,6 +33,7 @@ type Creator = {
   reply_rate: number
   tags: string[]
   tag_match_count: number   // 自分のタグとの一致数
+  username: string | null
 }
 
 export default function DiscoverScreen() {
@@ -58,7 +59,7 @@ export default function DiscoverScreen() {
     // 2. 自分のプロフィール（タグ取得）と候補プロフィール（未フォロー・自分以外、最大300件）
     const [{ data: myProfile }, { data: profiles }] = await Promise.all([
       supabase.from('profiles').select('tags').eq('id', user.id).single(),
-      supabase.from('profiles').select('id, display_name, bio, avatar_url, tags').neq('id', user.id).limit(300),
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, tags, username').neq('id', user.id).limit(300),
     ])
     const myTags: string[] = (myProfile as any)?.tags ?? []
     const myTagSet = new Set(myTags.map((t: string) => t.toLowerCase()))
@@ -167,6 +168,7 @@ export default function DiscoverScreen() {
           reply_rate: replyRate,
           tags: creatorTags,
           tag_match_count: tagMatchCount,
+          username: (p as any).username ?? null,
         }
       })
       .sort((a: Creator, b: Creator) => b.score - a.score)
@@ -205,6 +207,7 @@ export default function DiscoverScreen() {
         const q = search.toLowerCase().replace(/^#/, '')
         return (
           c.display_name.toLowerCase().includes(q) ||
+          (c.username ?? '').toLowerCase().includes(q) ||
           (c.bio ?? '').toLowerCase().includes(q) ||
           c.tags.some(t => t.toLowerCase().includes(q))
         )
