@@ -84,6 +84,10 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   })
 }
 
+const SKIP_SAVE = ['/(auth)', '/onboarding']
+const isRestorable = (p: string) =>
+  p && p !== '/' && !SKIP_SAVE.some(s => p.startsWith(s))
+
 export default function RootLayout() {
   const { width } = useWindowDimensions()
   const pathname = usePathname()
@@ -93,15 +97,30 @@ export default function RootLayout() {
 
   const navigated = useRef(false)
 
+  // パスが変わるたびに保存（認証・オンボーディング画面は除く）
+  useEffect(() => {
+    if (isRestorable(pathname)) {
+      AsyncStorage.setItem('reach_last_path', pathname).catch(() => {})
+    }
+  }, [pathname])
+
   useEffect(() => {
     const navigateTo = async (userId: string) => {
       const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', userId).single()
       if (!prof?.display_name || prof.display_name.includes('@')) {
         router.replace('/onboarding')
-      } else {
-        const savedTab = await AsyncStorage.getItem('reach_last_tab').catch(() => null)
-        router.replace((savedTab ?? '/(tabs)/') as any)
+        return
       }
+
+      // Web: すでに有効な画面のURLにいる場合はそのまま留まる
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        const p = window.location.pathname
+        if (isRestorable(p)) return
+      }
+
+      // Native / web のルート: 保存済みパスへ復元
+      const saved = await AsyncStorage.getItem('reach_last_path').catch(() => null)
+      router.replace((saved && isRestorable(saved) ? saved : '/(tabs)/') as any)
     }
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
