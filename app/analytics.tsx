@@ -445,30 +445,30 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 12, paddingBottom: 48 },
 
   // ── ヒーローエリア ──
-  heroRow: { flexDirection: 'row', gap: 10 },
+  heroRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
   heroCard: {
-    flex: 1, backgroundColor: Colors.accent, borderRadius: 16,
-    padding: 14, gap: 2, minHeight: 110, justifyContent: 'space-between',
+    width: 110, backgroundColor: Colors.accent, borderRadius: 14,
+    padding: 12, gap: 2, justifyContent: 'space-between',
   },
-  heroIconRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  heroIconRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   heroIconWrap: {
-    width: 24, height: 24, borderRadius: 12,
+    width: 20, height: 20, borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center',
   },
-  heroCardLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
-  heroNumber: { fontSize: 28, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
-  heroSub: { fontSize: 10, color: 'rgba(255,255,255,0.7)' },
+  heroCardLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+  heroNumber: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: -0.5 },
+  heroSub: { fontSize: 9, color: 'rgba(255,255,255,0.7)' },
   heroChart: { marginTop: 4 },
 
-  miniCardCol: { width: 100, gap: 6 },
+  miniCardCol: { flex: 1, gap: 8 },
   miniCard: {
-    flex: 1, backgroundColor: Colors.white, borderRadius: 12,
+    flex: 1, backgroundColor: Colors.white, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 10, gap: 1,
+    padding: 14, gap: 2,
   },
-  miniIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  miniValue: { fontSize: 17, fontWeight: '800', color: Colors.text },
-  miniLabel: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
+  miniIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  miniValue: { fontSize: 24, fontWeight: '800', color: Colors.text },
+  miniLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
 
   // ── チャートカード ──
   chartCard: {
