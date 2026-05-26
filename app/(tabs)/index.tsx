@@ -99,7 +99,6 @@ export default function HomeScreen() {
   }
 
   const flatData: HomeRow[] = [
-    { type: 'my-posts' },
     { type: 'section', sectionId: 'following', count: creators.length, open: followingOpen },
     ...(followingOpen ? creators.map(c => ({ type: 'following-item' as const, data: c })) : []),
     { type: 'section', sectionId: 'followers', count: followers.length, open: followersOpen },
@@ -165,28 +164,10 @@ export default function HomeScreen() {
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={({ leadingItem }) => {
           if (!leadingItem) return null
-          if (leadingItem.type === 'section' || leadingItem.type === 'my-posts') return null
+          if (leadingItem.type === 'section') return null
           return <View style={styles.separator} />
         }}
         renderItem={({ item }) => {
-          if (item.type === 'my-posts') {
-            return (
-              <TouchableOpacity
-                style={styles.myPostsCard}
-                onPress={() => router.push('/analytics' as any)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.myPostsIcon}>
-                  <Ionicons name="bar-chart-outline" size={20} color={Colors.white} />
-                </View>
-                <View style={styles.myPostsText}>
-                  <Text style={styles.myPostsTitle}>あなたの投稿・分析</Text>
-                  <Text style={styles.myPostsSub}>閲覧数・いいね・配信数を確認</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
-              </TouchableOpacity>
-            )
-          }
 
           if (item.type === 'section') {
             const toggle = item.sectionId === 'following'

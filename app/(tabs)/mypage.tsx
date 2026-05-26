@@ -327,6 +327,7 @@ const openEdit = () => {
 
         <View style={styles.menuSection}>
           <MenuItem icon="create-outline" label="プロフィール編集" onPress={openEdit} />
+          <MenuItem icon="bar-chart-outline" label="分析" onPress={() => router.push('/analytics' as any)} />
           <MenuItem icon="settings-outline" label="設定" onPress={() => router.push('/settings' as any)} last />
         </View>
 
