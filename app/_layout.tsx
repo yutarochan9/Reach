@@ -89,7 +89,7 @@ const isRestorable = (p: string) =>
   p && p !== '/' && !SKIP_SAVE.some(s => p.startsWith(s))
 
 // 未ログインでも閲覧を許可するパス
-const PUBLIC_PREFIXES = ['/creator/']
+const PUBLIC_PREFIXES = ['/creator/', '/talk/']
 const isPublicPath = (p: string) => PUBLIC_PREFIXES.some(prefix => p.startsWith(prefix))
 
 export default function RootLayout() {

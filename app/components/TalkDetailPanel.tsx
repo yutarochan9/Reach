@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, Image, Modal, Pressable, Linking, StyleSheet as RN, Platform,
+  ActivityIndicator, Image, Modal, Pressable, Linking, Platform,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -158,6 +158,23 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     channelRef.current = channel
     return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current).catch(() => {}); channelRef.current = null } }
   }, [myId, senderId])
+
+  const handleShare = (group: BroadcastGroup) => {
+    const textBlock = group.blocks.find(b => b.content.trim() && b.content !== '　')
+    const snippet = textBlock ? textBlock.content.slice(0, 60) : ''
+    const profileUrl = `https://reach-pi-one.vercel.app/creator/${senderId}`
+    const shareText = `${snippet ? snippet + '\n\n' : ''}${senderName} さんのReachをチェック 👀`
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (navigator.share) {
+        navigator.share({ title: `${senderName} on Reach`, text: shareText, url: profileUrl }).catch(() => {})
+      } else {
+        window.open(tweetUrl, '_blank')
+      }
+    } else {
+      Linking.openURL(tweetUrl)
+    }
+  }
 
   const handleLike = async (group: BroadcastGroup) => {
     if (!myId || isSelf) return
@@ -352,6 +369,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                 </View>
                 <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
                   <Text style={styles.bubbleTime}>{formatTime(group.blocks[group.blocks.length - 1].created_at)}</Text>
+                  <TouchableOpacity style={styles.shareBtn} onPress={() => handleShare(group)} activeOpacity={0.7}>
+                    <Ionicons name="share-outline" size={13} color={Colors.textLight} />
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.moreBtn} onPress={() => setLongPressGroup(group)}>
                     <Text style={styles.moreBtnText}>···</Text>
                   </TouchableOpacity>
@@ -448,6 +468,11 @@ const styles = StyleSheet.create({
   broadcastText: { fontSize: 13, color: Colors.text, lineHeight: 20 },
   bubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   bubbleTime: { fontSize: 10, color: Colors.textLight },
+  shareBtn: {
+    paddingHorizontal: 6, paddingVertical: 3,
+    backgroundColor: Colors.white, borderRadius: 10, borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
   moreBtn: { paddingHorizontal: 6, paddingVertical: 2 },
   moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 1 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 },

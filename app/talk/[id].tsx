@@ -110,20 +110,20 @@ export default function TalkDetailScreen() {
   const load = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      setMyId(user.id)
-      const self = user.id === senderId
+      setMyId(user?.id ?? null)
+      const self = user?.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }, { data: followRow }] = await Promise.all([
+      const [{ data: profile }, { data: broadcasts }, myFollowResult] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
           .eq('sender_id', senderId)
           .eq('status', 'published')
           .order('created_at', { ascending: true }),
-        self ? Promise.resolve({ data: null }) :
-          supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle(),
+        user && !self
+          ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle()
+          : Promise.resolve({ data: null }),
       ])
 
       setSenderName(profile?.display_name ?? '')
@@ -131,7 +131,7 @@ export default function TalkDetailScreen() {
       setSenderIsOfficial((profile as any)?.is_official ?? false)
       setSenderBio((profile as any)?.bio ?? null)
       setSenderUsername((profile as any)?.username ?? null)
-      setIsFollowing(!!followRow)
+      setIsFollowing(!!(myFollowResult as any)?.data)
 
       const bcs = (broadcasts ?? []) as Broadcast[]
       const bcIds = bcs.map(b => b.id)
@@ -140,13 +140,11 @@ export default function TalkDetailScreen() {
         bcIds.length > 0
           ? supabase.from('reactions').select('broadcast_id, user_id').in('broadcast_id', bcIds)
           : Promise.resolve({ data: [] }),
-        bcIds.length > 0
+        bcIds.length > 0 && user
           ? supabase.from('broadcast_reads').select('broadcast_id, user_id').in('broadcast_id', bcIds)
           : Promise.resolve({ data: [] }),
         bcIds.length > 0
-          ? supabase.from('messages')
-              .select('broadcast_id')
-              .in('broadcast_id', bcIds)
+          ? supabase.from('messages').select('broadcast_id').in('broadcast_id', bcIds)
           : Promise.resolve({ data: [] }),
       ])
 
@@ -156,7 +154,7 @@ export default function TalkDetailScreen() {
       for (const r of (reactions ?? [])) {
         if (!likeMap[r.broadcast_id]) likeMap[r.broadcast_id] = { count: 0, liked: false }
         likeMap[r.broadcast_id].count++
-        if (r.user_id === user.id) likeMap[r.broadcast_id].liked = true
+        if (user && r.user_id === user.id) likeMap[r.broadcast_id].liked = true
       }
       for (const r of (reads ?? [])) readMap[r.broadcast_id] = (readMap[r.broadcast_id] ?? 0) + 1
       for (const r of (commentCounts ?? [])) countMap[(r as any).broadcast_id] = (countMap[(r as any).broadcast_id] ?? 0) + 1
@@ -185,7 +183,7 @@ export default function TalkDetailScreen() {
       })
       setGroups(result)
 
-      if (!self && bcIds.length > 0) {
+      if (user && !self && bcIds.length > 0) {
         await supabase.from('talk_reads').upsert(
           { user_id: user.id, sender_id: senderId, last_read_at: new Date().toISOString() },
           { onConflict: 'user_id,sender_id' }
@@ -319,7 +317,8 @@ export default function TalkDetailScreen() {
   }, [myId, senderId])
 
   const handleLike = async (group: BroadcastGroup) => {
-    if (!myId || isSelf) return
+    if (!myId) { router.push('/(auth)/login' as any); return }
+    if (isSelf) return
     if (group.liked) {
       await supabase.from('reactions').delete()
         .eq('broadcast_id', group.anchorId).eq('user_id', myId).eq('type', 'like')
@@ -336,13 +335,13 @@ export default function TalkDetailScreen() {
 
   const handleShare = (group: BroadcastGroup) => {
     const textBlock = group.blocks.find(b => b.content.trim() && b.content !== '　')
-    const snippet = textBlock ? textBlock.content.slice(0, 80) : ''
+    const snippet = textBlock ? textBlock.content.slice(0, 60) : ''
     const profileUrl = `https://reach-pi-one.vercel.app/creator/${senderId}`
-    const tweetText = snippet ? `${snippet}\n` : ''
-    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}&url=${encodeURIComponent(profileUrl)}`
+    const shareText = `${snippet ? snippet + '\n\n' : ''}${senderName} さんのReachをチェック 👀`
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`
     if (isWeb && typeof window !== 'undefined') {
       if (navigator.share) {
-        navigator.share({ title: senderName, text: snippet, url: profileUrl }).catch(() => {})
+        navigator.share({ title: `${senderName} on Reach`, text: shareText, url: profileUrl }).catch(() => {})
       } else {
         window.open(tweetUrl, '_blank')
       }
@@ -531,8 +530,9 @@ export default function TalkDetailScreen() {
           <TouchableOpacity
             style={styles.popupBtn}
             onPress={() => {
-              if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any)
               setLongPressGroup(null)
+              if (!myId) { router.push('/(auth)/login' as any); return }
+              if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any)
             }}
           >
             <View style={styles.popupIconWrap}>
@@ -729,26 +729,42 @@ export default function TalkDetailScreen() {
         {ReactionPopup}
         {TilePanel}
 
-        {/* DM入力エリア（常に表示） */}
-        <View style={styles.inputArea}>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="DMを送る..."
-              placeholderTextColor={Colors.textLight}
-              value={imText}
-              onChangeText={setImText}
-              multiline
-            />
+        {/* DM入力 or 未ログイン CTA */}
+        {myId ? (
+          <View style={styles.inputArea}>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.input}
+                placeholder="DMを送る..."
+                placeholderTextColor={Colors.textLight}
+                value={imText}
+                onChangeText={setImText}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
+                onPress={handleSend}
+                disabled={!imText.trim()}
+              >
+                <Ionicons name="send" size={18} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.loginCtaArea}>
+            <Text style={styles.loginCtaCaption}>
+              フォローしてDMを送るにはアカウントが必要です
+            </Text>
             <TouchableOpacity
-              style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
-              onPress={handleSend}
-              disabled={!imText.trim()}
+              style={styles.loginCtaBtn}
+              onPress={() => router.push('/(auth)/login' as any)}
+              activeOpacity={0.85}
             >
-              <Ionicons name="send" size={18} color={Colors.white} />
+              <Ionicons name="person-add-outline" size={16} color={Colors.white} />
+              <Text style={styles.loginCtaBtnText}>登録 / ログイン</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   )
@@ -903,6 +919,17 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
   },
   sendDisabled: { backgroundColor: '#B0B0B0' },
+  loginCtaArea: {
+    backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border,
+    paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', gap: 10,
+  },
+  loginCtaCaption: { fontSize: 12, color: Colors.textLight, textAlign: 'center' },
+  loginCtaBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.accent, borderRadius: 22,
+    paddingVertical: 10, paddingHorizontal: 24,
+  },
+  loginCtaBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
   tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
