@@ -81,25 +81,48 @@ function AreaChart({
 
 // ── 棒グラフ ────────────────────────────────────────────────
 function BarChart({
-  data, color, width, height = 90,
+  data, color, width, height = 110,
 }: { data: number[]; color: string; width: number; height?: number }) {
   if (data.length === 0 || width < 10) return null
   const max = Math.max(...data, 1)
-  const gap = 6
-  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 4)
-  const maxH = height - 12
+  const labelH = 16  // 数値ラベルのための余白
+  const baseH = 6    // ベースライン
+  const barAreaH = height - labelH - baseH
+  const gap = Math.max((width / data.length) * 0.55, 4)
+  const barW = Math.max((width - gap * (data.length - 1)) / data.length, 3)
+  const slimW = Math.min(barW * 0.45, 14)  // 細いバー
+
   return (
     <Svg width={width} height={height}>
-      <Line x1={0} y1={height - 4} x2={width} y2={height - 4}
-        stroke={Colors.border} strokeWidth={1.5} />
+      {/* ベースライン */}
+      <Line x1={0} y1={height - baseH} x2={width} y2={height - baseH}
+        stroke={Colors.border} strokeWidth={1} />
       {data.map((v, i) => {
-        const barH = Math.max((v / max) * maxH, 3)
+        const barH = Math.max((v / max) * barAreaH, v > 0 ? 4 : 0)
+        const cx = i * (barW + gap) + barW / 2
+        const barX = cx - slimW / 2
+        const barY = height - baseH - barH
         return (
-          <Rect key={i}
-            x={i * (barW + gap)} y={height - barH - 4}
-            width={barW} height={barH}
-            rx={4} fill={color} opacity={v === 0 ? 0.15 : 0.88}
-          />
+          <G key={i}>
+            {/* バー */}
+            <Rect
+              x={barX} y={barY}
+              width={slimW} height={barH}
+              rx={slimW / 2} fill={color}
+              opacity={v === 0 ? 0.12 : 0.9}
+            />
+            {/* 数値ラベル（0以外） */}
+            {v > 0 && (
+              <SvgText
+                x={cx} y={barY - 3}
+                textAnchor="middle"
+                fontSize={10} fontWeight="700"
+                fill={color}
+              >
+                {v}
+              </SvgText>
+            )}
+          </G>
         )
       })}
     </Svg>
@@ -428,19 +451,19 @@ const styles = StyleSheet.create({
   followerCard: {
     flex: 1, borderRadius: 12, padding: 10, gap: 2, justifyContent: 'center', alignItems: 'flex-start',
   },
-  followerValue: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: -1 },
-  followerLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
+  followerValue: { fontSize: 46, fontWeight: '900', color: '#fff', letterSpacing: -2 },
+  followerLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.8)' },
   accentCard: { backgroundColor: Colors.accent, borderColor: Colors.accent },
 
   statGrid: { flex: 3, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   miniCard: {
     width: '47%', backgroundColor: Colors.white, borderRadius: 10,
     borderWidth: 1, borderColor: Colors.border,
-    padding: 12, gap: 2,
+    padding: 14, gap: 1,
   },
-  miniIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-  miniValue: { fontSize: 22, fontWeight: '800', color: Colors.text },
-  miniLabel: { fontSize: 10, color: Colors.textLight, fontWeight: '600' },
+  miniIconWrap: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  miniValue: { fontSize: 38, fontWeight: '800', color: Colors.text, letterSpacing: -1 },
+  miniLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
   miniLimitText: { fontSize: 10, color: Colors.textLight, fontWeight: '400' },
   miniProgressBg: { height: 3, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden', marginTop: 4 },
   miniProgressFill: { height: 3, backgroundColor: Colors.button, borderRadius: 2 },
