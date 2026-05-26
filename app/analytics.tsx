@@ -48,7 +48,7 @@ const FREE_LIMIT = 50
 
 // ── エンゲージメント率リング（MAX=100%で意味が明確） ─────────────────
 function RateRing({ pct, color, label, gradId }: { pct: number; color: string; label: string; gradId: string }) {
-  const size = 90, stroke = 9
+  const size = 72, stroke = 7
   const r = (size - stroke) / 2
   const circ = 2 * Math.PI * r
   const clamped = Math.min(Math.max(pct, 0), 1)
@@ -72,7 +72,7 @@ function RateRing({ pct, color, label, gradId }: { pct: number; color: string; l
           strokeDasharray={`${dash} ${circ}`}
           strokeDashoffset={circ / 4}
         />
-        <SvgText x={cx} y={cy + 5} textAnchor="middle" fontSize={13} fontWeight="800" fill={C.text}>{display}</SvgText>
+        <SvgText x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fontWeight="800" fill={C.text}>{display}</SvgText>
       </Svg>
       <Text style={{ fontSize: 11, fontWeight: '600', color: C.muted, textAlign: 'center' }}>{label}</Text>
     </View>
@@ -287,6 +287,7 @@ export default function AnalyticsScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const formatDate = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}` }
+  const fmtShort = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K` : String(n)
   const truncate = (s: string, n = 28) => s.length > n ? s.slice(0, n) + '…' : s
 
   if (loading) return (
@@ -317,11 +318,11 @@ export default function AnalyticsScreen() {
   const replyRate = totalReads > 0 ? (stats?.totalReplies ?? 0) / totalReads : 0
 
   const subItems = [
-    { label: '累計閲覧', value: stats?.totalReads ?? 0, icon: 'eye-outline' as const, color: C.accent },
-    { label: '累計いいね', value: stats?.totalLikes ?? 0, icon: 'heart-outline' as const, color: C.button },
-    { label: '累計配信', value: stats?.totalBroadcasts ?? 0, icon: 'radio-outline' as const, color: C.accent },
-    { label: 'フォロー中', value: stats?.followingCount ?? 0, icon: 'person-add-outline' as const, color: C.button },
-    { label: '今月配信', value: monthlyUsed, icon: 'calendar-outline' as const, color: C.accent },
+    { label: '累計閲覧', value: stats?.totalReads ?? 0, icon: 'eye-outline' as const },
+    { label: '累計いいね', value: stats?.totalLikes ?? 0, icon: 'heart-outline' as const },
+    { label: '累計配信', value: stats?.totalBroadcasts ?? 0, icon: 'radio-outline' as const },
+    { label: 'フォロー中', value: stats?.followingCount ?? 0, icon: 'person-add-outline' as const },
+    { label: '今月配信', value: monthlyUsed, icon: 'calendar-outline' as const },
   ]
 
   return (
@@ -346,8 +347,8 @@ export default function AnalyticsScreen() {
           <View style={s.squaresRow}>
             {subItems.map(item => (
               <View key={item.label} style={s.squareCard}>
-                <Ionicons name={item.icon} size={12} color={item.color} />
-                <Text style={[s.squareNum, { color: item.color }]}>{item.value.toLocaleString()}</Text>
+                <Ionicons name={item.icon} size={12} color={C.accent} />
+                <Text style={s.squareNum}>{fmtShort(item.value)}</Text>
                 <Text style={s.squareLabel}>{item.label}</Text>
               </View>
             ))}
@@ -356,7 +357,7 @@ export default function AnalyticsScreen() {
 
         {/* ── エンゲージメント率 3リング ── */}
         {totalBroadcasts > 0 && (
-          <View style={s.card}>
+          <View style={s.engagementCard}>
             <Text style={s.cardSectionLabel}>エンゲージメント率</Text>
             <View style={s.ringRow}>
               <RateRing pct={readRate} color={C.accent} label="既読率" gradId="rr1" />
@@ -503,7 +504,7 @@ const s = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 4,
     alignItems: 'center', justifyContent: 'center', gap: 4,
   },
-  squareNum: { fontSize: 16, fontWeight: '800', letterSpacing: -0.5 },
+  squareNum: { fontSize: 16, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
   squareLabel: { fontSize: 8, fontWeight: '600', color: C.muted, textAlign: 'center' },
   statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statLabel: { fontSize: 12, fontWeight: '600' },
@@ -521,8 +522,13 @@ const s = StyleSheet.create({
   xLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   xLabel: { fontSize: 9, color: C.muted, flex: 1, textAlign: 'center' },
 
+  engagementCard: {
+    backgroundColor: C.card, borderRadius: 14,
+    borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 16, paddingVertical: 10, gap: 8,
+  },
   ringRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
-  rateNote: { fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 15 },
+  rateNote: { fontSize: 9, color: C.muted, textAlign: 'center', lineHeight: 14 },
 
   thRow: {
     flexDirection: 'row', alignItems: 'center',
