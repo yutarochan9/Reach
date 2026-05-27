@@ -8,7 +8,7 @@ export const config = {
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_Gtl_1E7WDa-H-r7HK5UZNg_I4R8Ta5B'
 const BASE = 'https://reach-pi-one.vercel.app'
-const REACH_ICON = `${BASE}/icon.png`
+const OG_IMAGE = `${BASE}/og-image.png`  // ビルド時生成の1200x630バナー
 
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -31,7 +31,7 @@ export default async function middleware(request: Request): Promise<Response | u
 
   let name = 'クリエーター'
   let bio = 'Reach でクリエーターをフォローして配信を楽しもう'
-  let image = REACH_ICON
+  const image = OG_IMAGE  // 常にブランドバナーを使用
 
   try {
     const res = await fetch(
@@ -43,7 +43,7 @@ export default async function middleware(request: Request): Promise<Response | u
     if (p) {
       if (p.display_name) name = p.display_name
       if (p.bio) bio = p.bio
-      if (p.avatar_url) image = p.avatar_url
+      // avatar_url は使わず常にブランドバナーで統一
     }
   } catch {}
 
@@ -61,7 +61,7 @@ export default async function middleware(request: Request): Promise<Response | u
 <meta property="og:url" content="${esc(pageUrl)}" />
 <meta property="og:site_name" content="Reach" />
 <meta property="og:type" content="profile" />
-<meta name="twitter:card" content="summary" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="${esc(title)}" />
 <meta name="twitter:description" content="${esc(bio)}" />
 <meta name="twitter:image" content="${esc(image)}" />
