@@ -4,12 +4,12 @@
   "rewrites": [
     {
       "source": "/creator/:id",
-      "has": [{ "type": "header", "key": "user-agent", "value": "Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot" }],
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot).*" }],
       "destination": "/api/og?type=creator&id=:id"
     },
     {
       "source": "/talk/:id",
-      "has": [{ "type": "header", "key": "user-agent", "value": "Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot" }],
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot).*" }],
       "destination": "/api/og?type=talk&id=:id"
     },
     { "source": "/(.*)", "destination": "/" }

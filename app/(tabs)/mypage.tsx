@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard, Linking, Platform, PanResponder } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard, Linking, Platform, PanResponder, Share } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
@@ -321,14 +321,22 @@ const openEdit = () => {
 
           <TouchableOpacity
             style={styles.shareIdBtn}
-            onPress={() => {
-              const id = profile?.username ?? displayName
-              Clipboard.setString(id)
-              Alert.alert('コピーしました', `「${id}」をクリップボードにコピーしました。`)
+            onPress={async () => {
+              if (!user) return
+              const profileUrl = `https://reach-pi-one.vercel.app/creator/${user.id}`
+              const shareText = `${profile?.display_name ?? ''} のReachをチェック 👀`
+              if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
+                navigator.share({ title: `${profile?.display_name ?? 'Reach'} | Reach`, text: shareText, url: profileUrl }).catch(() => {})
+              } else if (Platform.OS !== 'web') {
+                Share.share({ message: `${shareText}\n${profileUrl}` }).catch(() => {})
+              } else {
+                Clipboard.setString(profileUrl)
+                Alert.alert('コピーしました', 'プロフィールURLをコピーしました。')
+              }
             }}
           >
             <Ionicons name="share-social-outline" size={14} color={Colors.accent} />
-            <Text style={styles.shareIdText}>プロフィール名をコピー</Text>
+            <Text style={styles.shareIdText}>プロフィールを共有</Text>
           </TouchableOpacity>
         </View>
 

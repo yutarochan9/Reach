@@ -2,7 +2,7 @@
 // Supabase を直接叩いて HTML を生成する（/api/og への内部 fetch は不要）
 
 export const config = {
-  matcher: ['/creator/:id*', '/talk/:id*'],
+  matcher: ['/creator/(.*)', '/talk/(.*)'],
 }
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
