@@ -335,7 +335,11 @@ export default function TalkDetailScreen() {
   }
 
   const handleShare = (group: BroadcastGroup) => {
-    const textBlock = group.blocks.find(b => b.content.trim() && b.content !== '　')
+    // URL だけのブロックは除外（X でシェアしたとき YouTube 等のカードが優先されるのを防ぐ）
+    const textBlock = group.blocks.find(b => {
+      const c = b.content.trim()
+      return c && c !== '　' && !c.startsWith('http')
+    })
     const snippet = textBlock ? textBlock.content.slice(0, 60) : ''
     const profileUrl = `https://reach-pi-one.vercel.app/creator/${senderId}`
     const shareText = `${snippet ? snippet + '\n\n' : ''}${senderName} さんのReachをチェック 👀`
