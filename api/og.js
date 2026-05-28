@@ -41,8 +41,9 @@ module.exports = async (req, res) => {
 
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
+  res.setHeader('x-ogp-handler', 'og-v2-DEPLOYED_AT_2026-05-28')
   res.send(`<!DOCTYPE html>
-<!-- og.js v2 -->
+<!-- og.js v2 DEPLOYED_AT_2026-05-28 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">

@@ -1,5 +1,6 @@
-// Vercel Serverless Function: OGP HTML を返す（動的 og:image 対応）
+// Vercel Serverless Function: OGP HTML を返す（動的 og:image 対応）v3
 // プロジェクトルートの /api フォルダは vercel.json の outputDirectory に関係なく常にデプロイされる
+// DEPLOYED_AT: 2026-05-28-OGPV3
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_Gtl_1E7WDa-H-r7HK5UZNg_I4R8Ta5B'
@@ -41,8 +42,9 @@ module.exports = async (req, res) => {
 
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
+  res.setHeader('x-ogp-handler', 'ogp-v3-DEPLOYED_AT_2026-05-28')
   res.send(`<!DOCTYPE html>
-<!-- og.js v2 -->
+<!-- og.js v3 DEPLOYED_AT_2026-05-28 -->
 <html lang="ja">
 <head>
 <meta charset="utf-8">
