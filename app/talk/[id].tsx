@@ -1,13 +1,22 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
   useWindowDimensions, ScrollView, Share,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
+
+// html2canvas をモジュール読み込み時に事前ロード（iOS Safari の gesture context を保持するため）
+// ユーザーがシェアボタンを押す前にモジュールを準備しておく
+let _html2canvas: ((el: HTMLElement, opts?: any) => Promise<HTMLCanvasElement>) | null = null
+if (isWeb && typeof window !== 'undefined') {
+  import('html2canvas').then(m => { _html2canvas = m.default }).catch(() => {})
+}
+
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, router } from 'expo-router'
 import Head from 'expo-router/head'
+// react-native-view-shot / expo-sharing はネイティブ専用（将来対応）
 
 // セッション内メモリキャッシュ（ナビゲーション往復で即時表示）
 const richMenuMem = new Map<string, any>()
@@ -61,6 +70,8 @@ export default function TalkDetailScreen() {
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  // メッセージグループのDOM要素をシェア用にキャッシュ（id → DOM node）
+  const groupRefs = useRef<Map<string, any>>(new Map())
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -334,27 +345,66 @@ export default function TalkDetailScreen() {
     }
   }
 
-  const handleShare = (group: BroadcastGroup) => {
-    // URL だけのブロックは除外（X でシェアしたとき YouTube 等のカードが優先されるのを防ぐ）
-    const textBlock = group.blocks.find(b => {
-      const c = b.content.trim()
-      return c && c !== '　' && !c.startsWith('http')
-    })
-    const snippet = textBlock ? textBlock.content.slice(0, 60) : ''
-    const profileUrl = `https://reach-pi-one.vercel.app/creator/${senderId}`
-    const shareText = `${snippet ? snippet + '\n\n' : ''}${senderName} さんのReachをチェック 👀`
-    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`
+  // メッセージグループのスクリーンショットを撮って画像ファイルとして共有する。
+  // 失敗した場合（iOS gestureコンテキスト切れ・canShare非対応など）はURLシェアにフォールバック。
+  const handleShare = async (group: BroadcastGroup) => {
+    const talkUrl = `https://reach-pi-one.vercel.app/talk/${senderId}`
+
     if (isWeb && typeof window !== 'undefined') {
-      // Web: ブラウザのネイティブ共有 or X へ
-      if (navigator.share) {
-        navigator.share({ title: `${senderName} on Reach`, text: shareText, url: profileUrl }).catch(() => {})
-      } else {
-        window.open(tweetUrl, '_blank')
+      // --- Web: まず画像ファイルシェアを試みる ---
+      const el = groupRefs.current.get(group.anchorId) as HTMLElement | undefined
+      if (el && _html2canvas) {
+        try {
+          // html2canvas でメッセージバブル領域をキャプチャ（scale:2 で高解像度）
+          const canvas = await _html2canvas(el, {
+            useCORS: true,
+            allowTaint: false,
+            scale: 2,
+            backgroundColor: '#F5F5F0',
+            logging: false,
+          })
+          const blob = await new Promise<Blob>((resolve, reject) =>
+            canvas.toBlob(b => (b ? resolve(b) : reject(new Error('blob null'))), 'image/png')
+          )
+          const file = new File([blob], 'reach-share.png', { type: 'image/png' })
+          // ファイル共有に対応しているか確認してからシェア
+          if (navigator.canShare?.({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `${senderName} | Reach`,
+              // url を含めることで X にシェアしたとき投稿内にリンクも付く
+              url: talkUrl,
+            })
+            return
+          }
+        } catch (e: any) {
+          // ユーザーがキャンセルした場合はそのまま終了
+          if (e?.name === 'AbortError') return
+          // それ以外はURLシェアにフォールバック（コンソールには記録）
+          console.warn('html2canvas share failed, falling back to URL share:', e?.message)
+        }
       }
-    } else {
-      // ネイティブアプリ: OS 標準の共有シートを使う
-      Share.share({ message: `${shareText}\n${profileUrl}` }).catch(() => {})
+
+      // --- フォールバック: URLシェア（またはTwitter intent） ---
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: `${senderName} | Reach`, url: talkUrl })
+        } else {
+          window.open(
+            `https://twitter.com/intent/tweet?url=${encodeURIComponent(talkUrl)}`,
+            '_blank'
+          )
+        }
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') console.error('share error:', e)
+      }
+      return
     }
+
+    // --- ネイティブ (iOS/Android): テキスト+URLでシェア ---
+    try {
+      await Share.share({ message: `${senderName} さんのReachをチェック 👀\n${talkUrl}` })
+    } catch {}
   }
 
   const handleFollowToggle = async () => {
@@ -436,7 +486,14 @@ export default function TalkDetailScreen() {
                 </Text>
               </View>
             )}
-            <View style={styles.groupWrap}>
+            <View
+              style={styles.groupWrap}
+              ref={(ref: any) => {
+                // DOM要素をシェア用にキャッシュ（unmount時は削除）
+                if (ref) groupRefs.current.set(group.anchorId, ref)
+                else groupRefs.current.delete(group.anchorId)
+              }}
+            >
               <View style={styles.broadcastRow}>
                 <View style={styles.broadcastAvatar}>
                   {senderAvatar
@@ -450,12 +507,16 @@ export default function TalkDetailScreen() {
                     const urlMatch = block.content.match(/(https?:\/\/[^\s]+)/)
                     const linkUrl = urlMatch?.[1] ?? null
                     return (
-                      <View key={block.id} style={[styles.broadcastBubble, isSelf && styles.broadcastBubbleSelf, idx > 0 && { marginTop: 4 }]}>
+                      <View key={block.id} style={[styles.broadcastBubble, idx > 0 && { marginTop: 4 }]}>
                         {block.image_url && (
                           <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
                         )}
                         {block.content.trim() && block.content !== '　' && (
-                          <Text style={[styles.broadcastText, isSelf && styles.broadcastTextSelf]}>{block.content}</Text>
+                          <LinkifiedText
+                            text={block.content}
+                            textStyle={styles.broadcastText}
+                            linkStyle={styles.broadcastLink}
+                          />
                         )}
                         {linkUrl && <LinkPreview url={linkUrl} />}
                       </View>
@@ -874,10 +935,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
     alignSelf: 'flex-start', maxWidth: '100%',
   },
-  broadcastBubbleSelf: { backgroundColor: Colors.button },
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
-  broadcastTextSelf: { color: Colors.white },
+  broadcastLink: { color: '#1D9BF0', textDecorationLine: 'underline' },
   bubbleFooter: {
     flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap',
   },
@@ -980,6 +1040,38 @@ const styles = StyleSheet.create({
   ogpDesc: { fontSize: 11, color: Colors.textLight, lineHeight: 16 },
 })
 
+// URL を含むテキストをリンク化して表示する
+function LinkifiedText({
+  text, textStyle, linkStyle,
+}: {
+  text: string
+  textStyle: any
+  linkStyle: any
+}) {
+  const URL_RE = /(https?:\/\/[^\s]+)/g
+  const parts = text.split(URL_RE)
+  const openUrl = (url: string) => {
+    if (isWeb && typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener')
+    } else {
+      Linking.openURL(url).catch(() => {})
+    }
+  }
+  return (
+    <Text style={textStyle}>
+      {parts.map((part, i) =>
+        /^https?:\/\//.test(part) ? (
+          <Text key={i} style={linkStyle} onPress={() => openUrl(part)}>
+            {part}
+          </Text>
+        ) : (
+          part
+        )
+      )}
+    </Text>
+  )
+}
+
 function LinkPreview({ url }: { url: string }) {
   const [ogp, setOgp] = useState<{ title: string; description: string; image: string; siteName: string } | null>(null)
 
@@ -993,9 +1085,17 @@ function LinkPreview({ url }: { url: string }) {
       .catch(() => {})
   }, [url])
 
+  const openUrl = () => {
+    if (isWeb && typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener')
+    } else {
+      Linking.openURL(url).catch(() => {})
+    }
+  }
+
   if (!ogp) return null
   return (
-    <TouchableOpacity style={styles.ogpCard} onPress={() => Linking.openURL(url)} activeOpacity={0.85}>
+    <TouchableOpacity style={styles.ogpCard} onPress={openUrl} activeOpacity={0.85}>
       {ogp.image ? <Image source={{ uri: ogp.image }} style={styles.ogpImage} resizeMode="cover" /> : null}
       <View style={styles.ogpBody}>
         {ogp.siteName ? <Text style={styles.ogpSite}>{ogp.siteName}</Text> : null}

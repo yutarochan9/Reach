@@ -1,16 +1,17 @@
 {
   "buildCommand": "npx expo export --platform web && node scripts/inject-pwa.js && node scripts/gen-og-image.js",
   "outputDirectory": "dist",
+  "alias": ["reach-pi-one.vercel.app"],
   "rewrites": [
     {
       "source": "/creator/:id",
       "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot).*" }],
-      "destination": "/api/og?type=creator&id=:id"
+      "destination": "/api/ogp?type=creator&id=:id"
     },
     {
       "source": "/talk/:id",
       "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot).*" }],
-      "destination": "/api/og?type=talk&id=:id"
+      "destination": "/api/ogp?type=talk&id=:id"
     },
     { "source": "/(.*)", "destination": "/" }
   ]
