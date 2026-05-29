@@ -432,12 +432,12 @@ export default function TalkDetailScreen() {
               if (clonedFooter) clonedFooter.style.display = 'none'
 
               // コンテンツ幅を元のまま保ちつつ左右に余白を追加する
-              // box-sizing を content-box に切り替えてから padding を追加する方式にすると
-              // ブラウザのリフロー結果が安定し、アバターが左端で切れなくなる
-              const PAD_L = 80  // アバター(36px)+gap(8px)+余白で十分な左余白
+              // border-box のまま width を「元幅 + padding分」に広げることで
+              // content area = 元の幅（バブル幅が変わらない）、左右に余白が生まれる
+              // ※box-sizing を content-box に変えると html2canvas が描画できなくなるため禁止
+              const PAD_L = 80  // アバター(36px)+gap(8px)+余白を確保
               const PAD_R = 24  // メッセージ右端に余裕
-              clonedEl.style.boxSizing = 'content-box'
-              clonedEl.style.width = el.offsetWidth + 'px'
+              clonedEl.style.width = (el.offsetWidth + PAD_L + PAD_R) + 'px'
               clonedEl.style.paddingLeft = PAD_L + 'px'
               clonedEl.style.paddingRight = PAD_R + 'px'
             },

@@ -34,7 +34,7 @@ export default function SignupScreen() {
 
     setLoading(true)
     authFlags.skipNextSignedIn = true
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
     })
@@ -43,11 +43,19 @@ export default function SignupScreen() {
       setLoading(false)
       // 登録済みメールアドレスはインラインで赤文字表示
       const msg = error.message?.toLowerCase() ?? ''
-      if (msg.includes('already registered') || msg.includes('already in use') || msg.includes('user already exists')) {
+      if (msg.includes('already') || msg.includes('registered') || msg.includes('in use')) {
         setEmailError('このメールアドレスはすでに登録されています')
       } else {
         Alert.alert('エラー', error.message)
       }
+      return
+    }
+    // Supabase はセキュリティ上、既存メールの signUp でも error を返さず
+    // user = null を返す場合がある（メールアドレス列挙攻撃対策）
+    if (!signUpData.user) {
+      authFlags.skipNextSignedIn = false
+      setLoading(false)
+      setEmailError('このメールアドレスはすでに登録されています')
       return
     }
 

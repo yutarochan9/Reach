@@ -117,9 +117,11 @@ export default function RootLayout() {
       }
 
       // Web: すでに有効な画面のURLにいる場合はそのまま留まる
+      // isRestorable: タブ画面など通常の保存対象パス
+      // isPublicPath: /talk/ や /creator/ の共有リンク（保存対象外だが留まるべき）
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         const p = window.location.pathname
-        if (isRestorable(p)) return
+        if (isRestorable(p) || isPublicPath(p)) return
       }
 
       // Native / web のルート: 保存済みパスへ復元
