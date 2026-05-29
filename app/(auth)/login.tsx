@@ -39,7 +39,7 @@ export default function LoginScreen() {
     setLoading(true)
     setLoginError('')
 
-    // パスワード確認（中間のSIGNED_INはスキップ）
+    // パスワード認証（SIGNED_INイベントは手動ナビゲートするためスキップ）
     authFlags.skipNextSignedIn = true
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
@@ -64,20 +64,19 @@ export default function LoginScreen() {
       return
     }
 
-    // TOTP未登録 → メールOTPへ
-    authFlags.skipNextSignedOut = true
-    await supabase.auth.signOut()
-
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false },
-    })
-    setLoading(false)
-    if (otpError) {
-      Alert.alert('エラー', otpError.message)
-    } else {
-      setStep('otp')
+    // TOTP未登録 → パスワード認証のみで直接ログイン（メールOTP不要）
+    // _layout.tsxのSIGNED_INイベントはスキップ済みのため、ここで手動ナビゲート
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', user.id).single()
+      if (!prof?.display_name || prof.display_name.includes('@')) {
+        setLoading(false)
+        router.replace('/onboarding' as any)
+        return
+      }
     }
+    setLoading(false)
+    router.replace('/(tabs)/' as any)
   }
 
   const handleVerifyOtp = async () => {

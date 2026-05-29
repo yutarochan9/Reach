@@ -954,6 +954,14 @@ export default function TalkDetailScreen() {
           <View style={{ width: 32 }} />
         </View>
 
+        {/* サブスク登録中バナー（受け手のみ表示） */}
+        {!isSelf && isSubscriber && (
+          <View style={styles.subscriberBanner}>
+            <Ionicons name="star" size={12} color={Colors.accent} />
+            <Text style={styles.subscriberBannerText}>サブスク登録中</Text>
+          </View>
+        )}
+
         {/* flex:1 + overflow:hidden でFlatListが画面外に溢れるのを防ぎ、DM入力欄を常に最下部に固定する */}
         <View style={{ flex: 1, overflow: 'hidden' }}>
           {BroadcastList}
@@ -1066,6 +1074,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 20, backgroundColor: Colors.white,
   },
   rpDmTxt: { fontSize: 14, fontWeight: '600', color: Colors.accent },
+  subscriberBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: Colors.main, borderBottomWidth: 1, borderBottomColor: Colors.border,
+    paddingHorizontal: 16, paddingVertical: 6,
+  },
+  subscriberBannerText: { fontSize: 11, color: Colors.accent, fontWeight: '700' },
   messageList: { paddingLeft: 16, paddingRight: 4, paddingTop: 16, paddingBottom: 32, gap: 12 },
 
   dateDivider: { alignItems: 'center', marginVertical: 8 },

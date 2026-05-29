@@ -108,7 +108,11 @@ export default function SignupScreen() {
       // OTP で作成されたアカウントにパスワードを設定
       // （signUp を使わないため、ここで初めてパスワードを登録する）
       if (password) {
-        await supabase.auth.updateUser({ password })
+        const { error: pwErr } = await supabase.auth.updateUser({ password })
+        if (pwErr) {
+          console.warn('updateUser password failed:', pwErr.message)
+          // パスワード設定失敗でもプロフィール保存は続行（メール認証でも引き続きログイン可能）
+        }
       }
       await supabase.from('profiles').update({
         display_name: displayName.trim(),

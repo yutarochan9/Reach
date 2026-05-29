@@ -47,23 +47,21 @@ module.exports = async (req, res) => {
       if (rows?.[0]) { name = rows[0].display_name || name; avatar = rows[0].avatar_url }
     } catch (_) {}
 
-    // 最新配信内容
-    if (type === 'talk') {
-      try {
-        const r = await fetch(
-          `${SUPABASE_URL}/rest/v1/broadcasts?creator_id=eq.${encodeURIComponent(id)}&select=content&order=created_at.desc&limit=5`,
-          { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(4000) }
-        )
-        const rows = await r.json()
-        if (rows?.length) {
-          content = rows
-            .map(r => (r.content || '').trim())
-            .filter(c => c && c !== '　' && !c.match(/^https?:\/\//))
-            .join('\n')
-            .slice(0, 150)
-        }
-      } catch (_) {}
-    }
+    // 最新配信内容（creator / talk どちらも取得。サブスク限定・下書きは除く）
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/broadcasts?sender_id=eq.${encodeURIComponent(id)}&status=eq.published&is_subscriber_only=eq.false&select=content&order=created_at.desc&limit=5`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }, signal: AbortSignal.timeout(4000) }
+      )
+      const rows = await r.json()
+      if (rows?.length) {
+        content = rows
+          .map(r => (r.content || '').trim())
+          .filter(c => c && c !== '　' && !c.match(/^https?:\/\//))
+          .join('\n')
+          .slice(0, 150)
+      }
+    } catch (_) {}
   }
 
   const fontData = await getFont()
@@ -103,7 +101,7 @@ module.exports = async (req, res) => {
     style: {
       display: 'flex', flexDirection: 'column',
       width: '100%', height: '100%',
-      background: '#FFFFFF', padding: '64px',
+      background: '#F5EFE6', padding: '64px',
       fontFamily: fontData ? '"NotoSansJP", sans-serif' : 'sans-serif',
     }
   },
