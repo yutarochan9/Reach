@@ -834,15 +834,32 @@ export default function TalkDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>あなたの配信</Text>
           <View style={{ width: 32 }} />
         </View>
-        {BroadcastList}
+        {/* flex:1 + overflow:hidden でFlatListが溢れないよう固定し、DM欄を常に最下部に表示 */}
+        <View style={{ flex: 1, overflow: 'hidden' }}>
+          {BroadcastList}
+          {TilePanel}
+        </View>
         {ReactionPopup}
-        {TilePanel}
+        {/* フォロワー視点のプレビュー：クリエイター本人は送信不可 */}
+        <View style={[styles.inputArea, { opacity: 0.5 }]}>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="フォロワーはここからDMを送れます"
+              placeholderTextColor={Colors.textLight}
+              editable={false}
+            />
+            <View style={[styles.sendButton, styles.sendDisabled]}>
+              <Ionicons name="send" size={18} color={Colors.white} />
+            </View>
+          </View>
+        </View>
       </View>
     )
   }
@@ -919,7 +936,7 @@ export default function TalkDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -937,9 +954,12 @@ export default function TalkDetailScreen() {
           <View style={{ width: 32 }} />
         </View>
 
-        {BroadcastList}
+        {/* flex:1 + overflow:hidden でFlatListが画面外に溢れるのを防ぎ、DM入力欄を常に最下部に固定する */}
+        <View style={{ flex: 1, overflow: 'hidden' }}>
+          {BroadcastList}
+          {TilePanel}
+        </View>
         {ReactionPopup}
-        {TilePanel}
 
         {/* DM入力 or 未ログイン CTA */}
         {myId ? (

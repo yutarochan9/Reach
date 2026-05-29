@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, useWindowDimensions } from 'react-native'
 import Svg, {
   Polyline, Circle, Rect, G, Line, Path,
   Defs, LinearGradient as SvgLinearGradient, Stop,
@@ -207,6 +207,8 @@ export default function AnalyticsScreen() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [loading, setLoading] = useState(true)
+  const { width } = useWindowDimensions()
+  const isMobile = width < 900
   const [chartW, setChartW] = useState(0)
   const [menuBc, setMenuBc] = useState<Broadcast | null>(null)
 
@@ -340,7 +342,10 @@ export default function AnalyticsScreen() {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={{ padding: 4, width: 32 }}>
+        <TouchableOpacity
+          onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)}
+          style={{ padding: 4, width: 32 }}
+        >
           <Ionicons name="chevron-back" size={24} color={C.accent} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>分析</Text>
@@ -356,9 +361,10 @@ export default function AnalyticsScreen() {
             <Text style={s.followerNum}>{(stats?.followerCount ?? 0).toLocaleString()}</Text>
             <Text style={s.followerLabel}>フォロワー</Text>
           </View>
-          <View style={s.squaresRow}>
+          {/* スマホのみ flexWrap で2段表示、PCは1列のまま */}
+          <View style={[s.squaresRow, isMobile && s.squaresRowMobile]}>
             {subItems.map(item => (
-              <View key={item.label} style={s.squareCard}>
+              <View key={item.label} style={[s.squareCard, isMobile && s.squareCardMobile]}>
                 <Ionicons name={item.icon} size={12} color={C.accent} />
                 <Text style={s.squareNum}>{fmtShort(item.value)}</Text>
                 <Text style={s.squareLabel}>{item.label}</Text>
@@ -538,6 +544,8 @@ const s = StyleSheet.create({
   followerNum: { fontSize: 28, fontWeight: '800', color: C.text, letterSpacing: -1 },
   followerLabel: { fontSize: 10, fontWeight: '600', color: C.accent },
   squaresRow: { flex: 5, flexDirection: 'row', gap: 6 },
+  // スマホ: flexWrap で3+2の2段レイアウト
+  squaresRowMobile: { flexWrap: 'wrap' },
   squareCard: {
     flex: 1,
     backgroundColor: C.card, borderRadius: 12,
@@ -545,6 +553,8 @@ const s = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 4,
     alignItems: 'center', justifyContent: 'center', gap: 4,
   },
+  // スマホ: 1行に3枚（30%ずつ）→ 3+2の2段
+  squareCardMobile: { flex: 0, flexBasis: '30%' },
   squareNum: { fontSize: 16, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
   squareLabel: { fontSize: 8, fontWeight: '600', color: C.muted, textAlign: 'center' },
   statIconRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Platform } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
+const isWeb = Platform.OS === 'web'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
@@ -112,7 +113,7 @@ export default function NotificationsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>通知</Text>
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: isWeb ? 12 : 56,
     paddingHorizontal: 16,
     paddingBottom: 14,
     flexDirection: 'row',

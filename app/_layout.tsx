@@ -124,7 +124,11 @@ export default function RootLayout() {
 
       // Native / web のルート: 保存済みパスへ復元
       const saved = await AsyncStorage.getItem('reach_last_path').catch(() => null)
-      router.replace((saved && isRestorable(saved) ? saved : '/(tabs)/') as any)
+      // 過去のバグで保存された無効パス（例: /(tabs)/home）は破棄してホームへ
+      const INVALID_SAVED = ['/(tabs)/home', '/(tabs)/compose']
+      const validSaved = saved && isRestorable(saved) && !INVALID_SAVED.includes(saved) ? saved : null
+      if (!validSaved && saved) AsyncStorage.removeItem('reach_last_path').catch(() => {})
+      router.replace((validSaved ?? '/(tabs)/') as any)
     }
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
