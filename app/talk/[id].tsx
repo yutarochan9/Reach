@@ -373,17 +373,16 @@ export default function TalkDetailScreen() {
     }
   }
 
-  // スクリーンショットを Supabase Storage にアップロードして公開 URL を返す。
-  // アップロードした PNG は OGP の og:image として使われる。
-  // EXPO_PUBLIC_SUPABASE_STORAGE_JWT は JWT 形式の anon key
-  // （sb_publishable_ は Storage API では使えないため専用変数を使う）
-  const uploadShareImage = async (blob: Blob): Promise<string | null> => {
+  // スクリーンショットを Supabase Storage にアップロードする。
+  // URL短縮のため公開URLでなくタイムスタンプのみ使い、シェアURLは ?s=<ts> で構築する。
+  // middleware.ts が ?s= を読んで Storage URL を再構築して og:image に使う。
+  const uploadShareImage = async (blob: Blob, ts: number): Promise<boolean> => {
     try {
       const jwt = process.env.EXPO_PUBLIC_SUPABASE_STORAGE_JWT
-      if (!jwt) return null
+      if (!jwt) return false
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
       // ファイル名は「送信者ID-タイムスタンプ.png」（重複しない一意な名前）
-      const fileName = `${senderId}-${Date.now()}.png`
+      const fileName = `${senderId}-${ts}.png`
       const res = await fetch(
         `${supabaseUrl}/storage/v1/object/share-images/${fileName}`,
         {
@@ -395,11 +394,9 @@ export default function TalkDetailScreen() {
           body: blob,
         }
       )
-      if (!res.ok) return null
-      // 公開 URL は Storage の public endpoint から取得
-      return `${supabaseUrl}/storage/v1/object/public/share-images/${fileName}`
+      return res.ok
     } catch {
-      return null
+      return false
     }
   }
 
@@ -435,11 +432,12 @@ export default function TalkDetailScreen() {
               if (clonedFooter) clonedFooter.style.display = 'none'
 
               // コンテンツ幅を元のまま保ちつつ左右に余白を追加する
-              // border-box のまま width を「元幅 + padding分」に広げることで
-              // content area = 元の幅（バブル幅が変わらない）、左右に余白が生まれる
-              const PAD_L = 56  // アバターが左端で切れないよう
-              const PAD_R = 20  // メッセージ右端に余裕
-              clonedEl.style.width = (el.offsetWidth + PAD_L + PAD_R) + 'px'
+              // box-sizing を content-box に切り替えてから padding を追加する方式にすると
+              // ブラウザのリフロー結果が安定し、アバターが左端で切れなくなる
+              const PAD_L = 80  // アバター(36px)+gap(8px)+余白で十分な左余白
+              const PAD_R = 24  // メッセージ右端に余裕
+              clonedEl.style.boxSizing = 'content-box'
+              clonedEl.style.width = el.offsetWidth + 'px'
               clonedEl.style.paddingLeft = PAD_L + 'px'
               clonedEl.style.paddingRight = PAD_R + 'px'
             },
@@ -476,16 +474,14 @@ export default function TalkDetailScreen() {
             framed.toBlob(b => (b ? resolve(b) : reject(new Error('blob null'))), 'image/png')
           )
 
-          // Supabase Storage にアップロードして og:image 用の公開 URL を取得
-          const ogImgUrl = await uploadShareImage(blob)
+          // タイムスタンプでファイル名を一意化しアップロード
+          // シェアURLは ?s=<タイムスタンプ> のみ（短い）で、
+          // middleware.ts がタイムスタンプとcreator IDからStorage URLを再構築する
+          const ts = Date.now()
+          const uploaded = await uploadShareImage(blob, ts)
 
-          // シェア URL: og_img クエリパラメータで og:image を動的に指定
-          // middleware.ts がこのパラメータを読んで OGP HTML を生成する
-          // ※ファイル(PNG)を直接シェアすると X は画像添付として扱いOGPカードが出ないため
-          //   URL のみシェアして X bot にクロールさせる方式を採用
-          const shareUrl = ogImgUrl
-            ? `${talkUrl}?og_img=${encodeURIComponent(ogImgUrl)}`
-            : talkUrl
+          // URL シェア → SNS bot がクロール → OGP カードにスクショが表示される
+          const shareUrl = uploaded ? `${talkUrl}?s=${ts}` : talkUrl
 
           // URL シェア → X bot がクロール → OGP カードにスクショが表示される
           if (navigator.share) {
@@ -936,9 +932,13 @@ export default function TalkDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={24} color={Colors.accent} />
-          </TouchableOpacity>
+          {/* 未ログイン閲覧時はホームへの戻るボタンを非表示（ホームはログイン必須のため） */}
+          {myId
+            ? <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
+                <Ionicons name="chevron-back" size={24} color={Colors.accent} />
+              </TouchableOpacity>
+            : <View style={{ width: 32 }} />
+          }
           <View style={styles.headerCenter}>
             <View style={styles.headerAvatar}>
               {senderAvatar

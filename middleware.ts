@@ -49,12 +49,16 @@ export default async function middleware(request: Request): Promise<Response | u
     }
   } catch {}
 
-  // og_img クエリパラメータがある場合はそれを og:image として使用する。
-  // これはユーザーがシェアボタンを押したときに Supabase Storage にアップロードした
-  // メッセージバブルのスクリーンショット URL。なければデフォルトの動的生成カードを使う。
+  // シェア画像の og:image を決定する（優先順位順）
+  // ?s=<timestamp>  : 短縮形式（新）。Storage URL を再構築する
+  // ?og_img=<url>   : 旧形式（後方互換）
+  // なければデフォルトの動的生成カード
   const { searchParams } = new URL(request.url)
+  const sParam = searchParams.get('s')
   const ogImgParam = searchParams.get('og_img')
-  const image = ogImgParam ?? ogImageUrl(id, type)
+  const image = sParam
+    ? `${SUPABASE_URL}/storage/v1/object/public/share-images/${id}-${sParam}.png`
+    : ogImgParam ?? ogImageUrl(id, type)
 
   const pageUrl = type === 'talk' ? `${BASE}/talk/${id}` : `${BASE}/creator/${id}`
   const title = `${name} | Reach`

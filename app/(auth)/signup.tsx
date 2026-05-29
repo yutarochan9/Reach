@@ -18,9 +18,11 @@ export default function SignupScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [otp, setOtp] = useState('')
   const [usernameError, setUsernameError] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleRegister = async () => {
+    setEmailError('')
     if (!email.trim() || !password) {
       Alert.alert('入力エラー', 'すべての項目を入力してください')
       return
@@ -39,7 +41,13 @@ export default function SignupScreen() {
     if (error) {
       authFlags.skipNextSignedIn = false
       setLoading(false)
-      Alert.alert('エラー', error.message)
+      // 登録済みメールアドレスはインラインで赤文字表示
+      const msg = error.message?.toLowerCase() ?? ''
+      if (msg.includes('already registered') || msg.includes('already in use') || msg.includes('user already exists')) {
+        setEmailError('このメールアドレスはすでに登録されています')
+      } else {
+        Alert.alert('エラー', error.message)
+      }
       return
     }
 
@@ -144,19 +152,20 @@ export default function SignupScreen() {
               <Text style={styles.cardTitle}>サインアップ</Text>
               <Text style={styles.cardSub}>アカウントを作成してはじめましょう</Text>
 
-              <View style={styles.inputWrap}>
-                <Ionicons name="mail-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
+              <View style={[styles.inputWrap, emailError ? styles.inputWrapError : null]}>
+                <Ionicons name="mail-outline" size={18} color={emailError ? '#E53E3E' : Colors.textLight} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.textLight}
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={v => { setEmail(v); setEmailError('') }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
               </View>
+              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
               <View style={styles.inputWrap}>
                 <Ionicons name="lock-closed-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />

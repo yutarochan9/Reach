@@ -68,33 +68,59 @@ module.exports = async (req, res) => {
 
   const fontData = await getFont()
 
-  // カード要素（1200×630）
+  // アバター画像を base64 で取得（satori は外部URLをサポートしているが
+  // タイムアウトや CORS の問題を避けるため data URI に変換して渡す）
+  let avatarDataUri = null
+  if (avatar) {
+    try {
+      const r = await fetch(avatar, { signal: AbortSignal.timeout(3000) })
+      if (r.ok) {
+        const buf = await r.arrayBuffer()
+        const b64 = Buffer.from(buf).toString('base64')
+        const mime = r.headers.get('content-type') || 'image/jpeg'
+        avatarDataUri = `data:${mime};base64,${b64}`
+      }
+    } catch (_) {}
+  }
+
+  // アバター要素（画像ありなら img、なければ頭文字サークル）
+  const avatarEl = avatarDataUri
+    ? h('img', {
+        src: avatarDataUri,
+        width: '96', height: '96',
+        style: { width: '96px', height: '96px', borderRadius: '50%', objectFit: 'cover' },
+      })
+    : h('div', {
+        style: {
+          width: '96px', height: '96px', borderRadius: '50%',
+          background: '#B85042', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', color: 'white', fontSize: '40px', fontWeight: '700',
+        }
+      }, name[0] || 'R')
+
+  // カード要素（1200×630 = X/OGP標準サイズ）
   const card = h('div', {
     style: {
       display: 'flex', flexDirection: 'column',
       width: '100%', height: '100%',
-      background: '#FFFFFF', padding: '60px',
+      background: '#FFFFFF', padding: '64px',
       fontFamily: fontData ? '"NotoSansJP", sans-serif' : 'sans-serif',
     }
   },
-    // ヘッダー（アバター画像は使わず頭文字のみ: satoriが外部画像fetchで失敗するのを避ける）
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '18px', marginBottom: '28px' } },
-      h('div', {
-        style: {
-          width: '64px', height: '64px', borderRadius: '50%',
-          background: '#B85042', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', color: 'white', fontSize: '28px', fontWeight: '700',
-        }
-      }, name[0] || 'R'),
-      h('div', { style: { fontSize: '28px', fontWeight: '700', color: '#222222', flex: '1' } }, name),
-      h('div', { style: { fontSize: '20px', color: '#AAAAAA' } }, 'Reach')
+    // ヘッダー（アバター + 名前）
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' } },
+      avatarEl,
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', flex: '1' } },
+        h('div', { style: { fontSize: '36px', fontWeight: '700', color: '#1A1A1A' } }, name),
+        h('div', { style: { fontSize: '20px', color: '#AAAAAA' } }, 'Reach')
+      ),
     ),
     // 区切り線
-    h('div', { style: { height: '1px', background: '#EEEEEE', marginBottom: '36px' } }),
+    h('div', { style: { height: '2px', background: '#F0F0F0', marginBottom: '32px' } }),
     // 本文
     h('div', {
       style: {
-        flex: '1', fontSize: '40px', lineHeight: '1.65', color: '#1A1A1A',
+        flex: '1', fontSize: '36px', lineHeight: '1.7', color: '#1A1A1A',
         overflow: 'hidden', display: 'flex', flexDirection: 'column',
         justifyContent: content ? 'flex-start' : 'center',
         alignItems: content ? 'flex-start' : 'center',
@@ -102,8 +128,8 @@ module.exports = async (req, res) => {
     }, content || h('span', { style: { fontSize: '28px', color: '#CCCCCC' } }, '配信をチェック')),
     // フッター
     h('div', { style: { display: 'flex', flexDirection: 'column' } },
-      h('div', { style: { height: '1px', background: '#EEEEEE', marginBottom: '14px' } }),
-      h('div', { style: { fontSize: '16px', color: '#CCCCCC' } }, 'reach-pi-one.vercel.app')
+      h('div', { style: { height: '1px', background: '#EEEEEE', marginBottom: '16px' } }),
+      h('div', { style: { fontSize: '18px', color: '#CCCCCC' } }, 'reach-pi-one.vercel.app')
     )
   )
 
