@@ -64,8 +64,36 @@ export default function LoginScreen() {
       return
     }
 
-    // TOTP未登録 → パスワード認証のみで直接ログイン（メールOTP不要）
-    // _layout.tsxのSIGNED_INイベントはスキップ済みのため、ここで手動ナビゲート
+    // TOTP未登録 → メールOTP二段階認証へ
+    authFlags.skipNextSignedOut = true
+    await supabase.auth.signOut()
+
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { shouldCreateUser: false },
+    })
+    setLoading(false)
+    if (otpError) {
+      Alert.alert('エラー', otpError.message)
+    } else {
+      setStep('otp')
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    if (otp.length < 6) return
+    setLoading(true)
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: otp.trim(),
+      type: 'email',
+    })
+    if (error) {
+      setLoading(false)
+      Alert.alert('認証エラー', '認証コードが正しくありません。もう一度確認してください。')
+      return
+    }
+    // 認証成功 → 明示的にナビゲート（_layout.tsxのSIGNED_INイベントに依存しない）
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', user.id).single()
@@ -77,21 +105,6 @@ export default function LoginScreen() {
     }
     setLoading(false)
     router.replace('/(tabs)/' as any)
-  }
-
-  const handleVerifyOtp = async () => {
-    if (otp.length < 6) return
-    setLoading(true)
-    const { error } = await supabase.auth.verifyOtp({
-      email: email.trim(),
-      token: otp.trim(),
-      type: 'email',
-    })
-    setLoading(false)
-    if (error) {
-      Alert.alert('認証エラー', '認証コードが正しくありません。もう一度確認してください。')
-    }
-    // 成功時は_layout.tsxのSIGNED_INイベントがタブ画面に遷移
   }
 
   const handleVerifyTotp = async () => {

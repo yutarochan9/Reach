@@ -535,6 +535,35 @@ export default function TalkDetailScreen() {
     }
   }
 
+  // メンバーシップ加入 / 退会
+  const handleMembershipToggle = async () => {
+    if (!myId) { router.push('/(auth)/login' as any); return }
+    if (isSelf) return
+    if (isSubscriber) {
+      // 退会：subscriptions レコードを削除
+      await supabase.from('subscriptions')
+        .delete()
+        .eq('subscriber_id', myId)
+        .eq('creator_id', senderId)
+      setIsSubscriber(false)
+      // サブスク限定メッセージをリストから除外
+      setGroups(prev => prev.filter(g => !g.is_subscriber_only))
+    } else {
+      // 加入：subscriptions にレコード挿入
+      const { error } = await supabase.from('subscriptions').insert({
+        subscriber_id: myId,
+        creator_id: senderId,
+        status: 'active',
+      })
+      if (error) {
+        Alert.alert('エラー', error.message)
+      } else {
+        setIsSubscriber(true)
+        load() // メンバーシップ限定メッセージを含め再読込
+      }
+    }
+  }
+
   const handleSend = async () => {
     if (!imText.trim() || !myId) return
     const text = imText.trim()
@@ -624,7 +653,7 @@ export default function TalkDetailScreen() {
                     {group.is_subscriber_only && (
                       <View style={styles.subscriberBadge}>
                         <Ionicons name="lock-closed" size={10} color={Colors.white} />
-                        <Text style={styles.subscriberBadgeText}>サブスク</Text>
+                        <Text style={styles.subscriberBadgeText}>メンバーシップ</Text>
                       </View>
                     )}
                   </View>
@@ -907,6 +936,31 @@ export default function TalkDetailScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* メンバーシップセクション（自分以外に表示） */}
+        {!isSelf && myId && (
+          <View style={styles.rpMembershipSection}>
+            <Text style={styles.rpMembershipTitle}>メンバーシップ</Text>
+            {isSubscriber ? (
+              <View style={styles.rpMembershipActiveRow}>
+                <Ionicons name="star" size={14} color={Colors.accent} />
+                <Text style={styles.rpMembershipActiveTxt}>登録中</Text>
+                <TouchableOpacity onPress={handleMembershipToggle} style={styles.rpMembershipLeaveBtn}>
+                  <Text style={styles.rpMembershipLeaveTxt}>退会</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.rpMembershipJoinBtn}
+                onPress={handleMembershipToggle}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="star-outline" size={15} color={Colors.white} />
+                <Text style={styles.rpMembershipJoinTxt}>メンバーシップに加入</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   ) : null
@@ -958,7 +1012,7 @@ export default function TalkDetailScreen() {
         {!isSelf && isSubscriber && (
           <View style={styles.subscriberBanner}>
             <Ionicons name="star" size={12} color={Colors.accent} />
-            <Text style={styles.subscriberBannerText}>サブスク登録中</Text>
+            <Text style={styles.subscriberBannerText}>メンバーシップ登録中</Text>
           </View>
         )}
 
@@ -1074,6 +1128,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 20, backgroundColor: Colors.white,
   },
   rpDmTxt: { fontSize: 14, fontWeight: '600', color: Colors.accent },
+  rpMembershipSection: {
+    paddingHorizontal: 24, paddingBottom: 24, gap: 10,
+  },
+  rpMembershipTitle: { fontSize: 12, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5 },
+  rpMembershipActiveRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.main, borderRadius: 12, padding: 12,
+  },
+  rpMembershipActiveTxt: { fontSize: 14, fontWeight: '700', color: Colors.accent, flex: 1 },
+  rpMembershipLeaveBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  rpMembershipLeaveTxt: { fontSize: 12, color: Colors.textLight },
+  rpMembershipJoinBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: Colors.accent, borderRadius: 22,
+    paddingVertical: 12, paddingHorizontal: 20,
+  },
+  rpMembershipJoinTxt: { fontSize: 14, fontWeight: '700', color: Colors.white },
   subscriberBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: Colors.main, borderBottomWidth: 1, borderBottomColor: Colors.border,

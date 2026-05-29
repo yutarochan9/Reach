@@ -132,13 +132,28 @@ export default function MyPageScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [cropVisible, setCropVisible] = useState(false)
   const [cropUri, setCropUri] = useState<string | null>(null)
+  // 参加中のメンバーシップ（加入しているクリエーター一覧）
+  const [memberships, setMemberships] = useState<{ creator_id: string; display_name: string; avatar_url: string | null }[]>([])
 
   const load = useCallback(async () => {
     const { data } = await supabase.auth.getUser()
     if (!data.user) return
     setUser(data.user)
-    const { data: prof } = await supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', data.user.id).single()
+    const [{ data: prof }, { data: subs }] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', data.user.id).single(),
+      supabase.from('subscriptions')
+        .select('creator_id, profiles!subscriptions_creator_id_fkey(display_name, avatar_url)')
+        .eq('subscriber_id', data.user.id)
+        .eq('status', 'active'),
+    ])
     setProfile(prof)
+    if (subs) {
+      setMemberships(subs.map((s: any) => ({
+        creator_id: s.creator_id,
+        display_name: s.profiles?.display_name ?? 'クリエーター',
+        avatar_url: s.profiles?.avatar_url ?? null,
+      })))
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -338,6 +353,36 @@ const openEdit = () => {
             <Ionicons name="share-social-outline" size={14} color={Colors.accent} />
             <Text style={styles.shareIdText}>プロフィールを共有</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* 参加中のメンバーシップ */}
+        <View style={styles.membershipSection}>
+          <Text style={styles.membershipSectionTitle}>メンバーシップ</Text>
+          {memberships.length === 0 ? (
+            <Text style={styles.membershipEmpty}>参加中のメンバーシップはありません</Text>
+          ) : (
+            memberships.map(m => (
+              <TouchableOpacity
+                key={m.creator_id}
+                style={styles.membershipRow}
+                onPress={() => router.push(`/talk/${m.creator_id}` as any)}
+                activeOpacity={0.75}
+              >
+                {m.avatar_url
+                  ? <Image source={{ uri: m.avatar_url }} style={styles.membershipAvatar} />
+                  : <View style={styles.membershipAvatarPlaceholder}>
+                      <Text style={styles.membershipAvatarText}>{m.display_name[0]}</Text>
+                    </View>
+                }
+                <Text style={styles.membershipName}>{m.display_name}</Text>
+                <View style={styles.membershipBadge}>
+                  <Ionicons name="star" size={10} color={Colors.accent} />
+                  <Text style={styles.membershipBadgeText}>登録中</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={Colors.textLight} />
+              </TouchableOpacity>
+            ))
+          )}
         </View>
 
         <View style={styles.menuSection}>
@@ -540,6 +585,33 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   shareIdText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  membershipSection: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    padding: 16,
+    gap: 10,
+  },
+  membershipSectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight, letterSpacing: 0.5 },
+  membershipEmpty: { fontSize: 13, color: Colors.textLight, textAlign: 'center', paddingVertical: 8 },
+  membershipRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 8, borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  membershipAvatar: { width: 36, height: 36, borderRadius: 18 },
+  membershipAvatarPlaceholder: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
+  },
+  membershipAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  membershipName: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.text },
+  membershipBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.main, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
+  },
+  membershipBadgeText: { fontSize: 10, fontWeight: '700', color: Colors.accent },
   menuSection: {
     backgroundColor: Colors.white,
     borderRadius: 16,

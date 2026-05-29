@@ -377,7 +377,7 @@ export default function ComposeScreen() {
         >
           <Ionicons name="lock-closed-outline" size={15} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
-            {isSubscriberOnly ? '限定' : '全員'}
+            {isSubscriberOnly ? 'MB限定' : '全員'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -463,8 +463,8 @@ export default function ComposeScreen() {
         <View style={styles.optionCard}>
           <Text style={styles.optionTitle}>配信の公開範囲</Text>
           {[
-            { value: false, label: '全フォロワー', desc: '無料・サブスク両方のフォロワーに配信する' },
-            { value: true,  label: 'サブスク限定', desc: 'サブスクリプション登録者のみに配信する' },
+            { value: false, label: '全フォロワー', desc: '全フォロワーに配信する' },
+            { value: true,  label: 'メンバーシップ限定', desc: 'メンバーシップ登録者のみに配信する' },
           ].map(opt => (
             <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, isSubscriberOnly === opt.value && styles.optionRowActive]}
               onPress={() => { setIsSubscriberOnly(opt.value); setShowSubscriber(false) }}>
