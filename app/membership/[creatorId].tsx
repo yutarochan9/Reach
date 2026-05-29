@@ -14,17 +14,22 @@ type Profile = {
   bio: string | null
   avatar_url: string | null
   membership_price: number | null
+  membership_benefits: string[] | null
+  membership_welcome: string | null
 }
 
 const DEFAULT_PRICE = 500
 
-// メンバーシップの特典リスト
-const BENEFITS = [
+const DEFAULT_BENEFITS = [
   { icon: 'lock-closed-outline' as const, title: 'メンバーシップ限定配信', desc: 'メンバー専用の限定コンテンツをすべて閲覧できます' },
   { icon: 'star-outline' as const, title: '優先サポート', desc: 'クリエーターへの優先アクセスが得られます' },
   { icon: 'heart-outline' as const, title: 'コミュニティ参加', desc: 'メンバー限定のコミュニティに参加できます' },
   { icon: 'notifications-outline' as const, title: '最新情報をいち早く', desc: '最新の配信をいち早くお届けします' },
 ]
+
+const BENEFIT_ICONS = [
+  'lock-closed-outline', 'star-outline', 'heart-outline', 'notifications-outline',
+] as const
 
 export default function MembershipPage() {
   const { creatorId } = useLocalSearchParams<{ creatorId: string }>()
@@ -38,7 +43,7 @@ export default function MembershipPage() {
       setMyId(user?.id ?? null)
       const { data } = await supabase
         .from('profiles')
-        .select('id, display_name, bio, avatar_url, membership_price')
+        .select('id, display_name, bio, avatar_url, membership_price, membership_benefits, membership_welcome')
         .eq('id', creatorId)
         .single()
       setProfile(data)
@@ -58,6 +63,15 @@ export default function MembershipPage() {
   if (!profile) return null
 
   const price = profile.membership_price ?? DEFAULT_PRICE
+
+  // DB設定の特典があればそれを使う、なければデフォルト
+  const benefits = profile.membership_benefits && profile.membership_benefits.length > 0
+    ? profile.membership_benefits.map((title, i) => ({
+        icon: BENEFIT_ICONS[i % BENEFIT_ICONS.length],
+        title,
+        desc: '',
+      }))
+    : DEFAULT_BENEFITS
 
   const handleJoin = () => {
     if (!myId) { router.push('/(auth)/login' as any); return }
@@ -102,7 +116,7 @@ export default function MembershipPage() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>メンバーシップ特典</Text>
           <View style={styles.benefitsList}>
-            {BENEFITS.map((b, i) => (
+            {benefits.map((b, i) => (
               <View key={i} style={[styles.benefitRow, i > 0 && styles.benefitDivider]}>
                 <View style={styles.benefitIcon}>
                   <Ionicons name={b.icon} size={20} color={Colors.accent} />

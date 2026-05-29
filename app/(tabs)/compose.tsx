@@ -841,6 +841,16 @@ export default function ComposeScreen() {
             />
           </View>
 
+          <Text style={styles.toolsSectionLabel}>マネタイズ</Text>
+          <View style={styles.toolsSection}>
+            <ToolMenuItem
+              icon="star-outline"
+              label="メンバーシップ"
+              desc="月額課金でメンバーシップページを作成する"
+              onPress={() => router.push('/membership-settings' as any)}
+            />
+          </View>
+
           <Text style={styles.toolsSectionLabel}>プロ機能</Text>
           <View style={styles.toolsSection}>
             <ToolMenuItem
