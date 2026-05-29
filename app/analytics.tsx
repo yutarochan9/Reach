@@ -206,6 +206,7 @@ function BarChart({ data, color, width, height = 110 }:
 export default function AnalyticsScreen() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
+  const [membershipBroadcastCount, setMembershipBroadcastCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const { width } = useWindowDimensions()
   const isMobile = width < 900
@@ -221,7 +222,7 @@ export default function AnalyticsScreen() {
 
     const [
       { data: profile }, { count: followerCount }, { count: followingCount },
-      { data: bcs }, { count: monthlyCount },
+      { data: bcs }, { count: monthlyCount }, { count: membershipCount },
     ] = await Promise.all([
       supabase.from('profiles').select('plan').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id),
@@ -231,7 +232,10 @@ export default function AnalyticsScreen() {
       supabase.from('broadcasts').select('id', { count: 'exact', head: true })
         .eq('sender_id', user.id).eq('status', 'published')
         .gte('created_at', startOfMonth.toISOString()),
+      supabase.from('broadcasts').select('id', { count: 'exact', head: true })
+        .eq('sender_id', user.id).eq('status', 'published').eq('is_subscriber_only', true),
     ])
+    setMembershipBroadcastCount(membershipCount ?? 0)
 
     const bcIds = (bcs ?? []).map((b: any) => b.id)
     const [{ data: reactions }, { data: reads }, { data: replies }] = await Promise.all([
@@ -445,6 +449,30 @@ export default function AnalyticsScreen() {
             </View>
           </View>
         )}
+
+        {/* ── メンバーシップ ── */}
+        <View style={s.card}>
+          <View style={s.chartHead}>
+            <View>
+              <Text style={s.cardSectionLabel}>メンバーシップ</Text>
+              <Text style={s.cardSub}>メンバーシップ限定配信</Text>
+            </View>
+            <View style={[s.badge, { backgroundColor: `${C.button}15`, borderColor: `${C.button}40` }]}>
+              <Text style={[s.badgeText, { color: C.button }]}>限定配信</Text>
+            </View>
+          </View>
+          {membershipBroadcastCount === 0 ? (
+            <Text style={{ fontSize: 13, color: C.muted, textAlign: 'center', paddingVertical: 4 }}>
+              メンバーシップ配信していません
+            </Text>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="lock-closed" size={16} color={C.button} />
+              <Text style={{ fontSize: 24, fontWeight: '800', color: C.text }}>{membershipBroadcastCount}</Text>
+              <Text style={{ fontSize: 13, color: C.muted }}>件の限定配信</Text>
+            </View>
+          )}
+        </View>
 
         {/* ── 配信テーブル ── */}
         <View style={[s.card, { padding: 0, overflow: 'hidden' }]}>

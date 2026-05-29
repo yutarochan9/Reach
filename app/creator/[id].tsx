@@ -40,6 +40,7 @@ export default function CreatorScreen() {
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [isSubscriber, setIsSubscriber] = useState(false)
   const [reportModalVisible, setReportModalVisible] = useState(false)
   const [reportReason, setReportReason] = useState<string | null>(null)
   const [reportDetails, setReportDetails] = useState('')
@@ -49,13 +50,16 @@ export default function CreatorScreen() {
     const { data: { user } } = await supabase.auth.getUser()
     setMyId(user?.id ?? null)
 
-    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }] = await Promise.all([
+    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }, mySubResult] = await Promise.all([
       supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', id),
       user
         ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
         : Promise.resolve({ data: null }),
       supabase.from('rich_menus').select('buttons, is_active').eq('creator_id', id).maybeSingle(),
+      user
+        ? supabase.from('subscriptions').select('subscriber_id').eq('subscriber_id', user.id).eq('creator_id', id).eq('status', 'active').maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
 
     setProfile(prof)
@@ -63,8 +67,20 @@ export default function CreatorScreen() {
     setFollowerCount((follows ?? []).length)
     setIsFollowing(!!(myFollowResult as any)?.data)
     setRichMenu(menu && menu.is_active ? menu : null)
+    setIsSubscriber(!!(mySubResult as any)?.data)
     setLoading(false)
   }, [id])
+
+  const handleMembershipToggle = async () => {
+    if (!myId) { router.push('/(auth)/login' as any); return }
+    if (isSubscriber) {
+      await supabase.from('subscriptions').delete().eq('subscriber_id', myId).eq('creator_id', id)
+      setIsSubscriber(false)
+    } else {
+      const { error } = await supabase.from('subscriptions').insert({ subscriber_id: myId, creator_id: id, status: 'active' })
+      if (error) { Alert.alert('エラー', error.message) } else { setIsSubscriber(true) }
+    }
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -272,6 +288,15 @@ export default function CreatorScreen() {
                     <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
                     <Text style={styles.dmButtonText}>DM</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.membershipButton, isSubscriber && styles.membershipButtonActive]}
+                    onPress={handleMembershipToggle}
+                  >
+                    <Ionicons name="star" size={16} color={isSubscriber ? Colors.accent : Colors.white} />
+                    <Text style={[styles.membershipButtonText, isSubscriber && styles.membershipButtonTextActive]}>
+                      {isSubscriber ? '登録中' : 'MB加入'}
+                    </Text>
+                  </TouchableOpacity>
                 </>
               ) : (
                 <TouchableOpacity
@@ -401,6 +426,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: Colors.accent,
   },
   dmButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  membershipButton: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: Colors.button,
+    borderRadius: 12, paddingVertical: 11,
+  },
+  membershipButtonActive: {
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
+  },
+  membershipButtonText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
+  membershipButtonTextActive: { color: Colors.accent },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginTop: 16, alignSelf: 'flex-start' },
   richMenuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', marginTop: 8 },
   richMenuBtn: {

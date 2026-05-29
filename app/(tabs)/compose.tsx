@@ -217,7 +217,7 @@ export default function ComposeScreen() {
     if (result.canceled || !result.assets[0]) return
 
     const asset = result.assets[0]
-    updateBlock(blockId, { imageUri: asset.uri, uploading: true })
+    updateBlock(blockId, { imageUri: asset.uri, uploading: true, text: '' })
 
     try {
       const mimeType = asset.mimeType ?? 'image/jpeg'
@@ -528,14 +528,16 @@ export default function ComposeScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <TextInput
-            style={styles.textarea}
-            placeholder="メッセージを入力..."
-            placeholderTextColor={Colors.textLight}
-            value={block.text}
-            onChangeText={t => updateBlock(block.id, { text: t })}
-            multiline maxLength={500} textAlignVertical="top"
-          />
+          {!block.imageUri && (
+            <TextInput
+              style={styles.textarea}
+              placeholder="メッセージを入力..."
+              placeholderTextColor={Colors.textLight}
+              value={block.text}
+              onChangeText={t => updateBlock(block.id, { text: t })}
+              multiline maxLength={500} textAlignVertical="top"
+            />
+          )}
           {block.imageUri && (
             <View style={styles.imagePreviewWrap}>
               <Image source={{ uri: block.imageUri }} style={styles.imagePreview} resizeMode="cover" />
