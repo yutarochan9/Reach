@@ -49,8 +49,12 @@ export default async function middleware(request: Request): Promise<Response | u
     }
   } catch {}
 
-  // 動的 OGP 画像URL（/api/og-image が配信内容カードを生成）
-  const image = ogImageUrl(id, type)
+  // og_img クエリパラメータがある場合はそれを og:image として使用する。
+  // これはユーザーがシェアボタンを押したときに Supabase Storage にアップロードした
+  // メッセージバブルのスクリーンショット URL。なければデフォルトの動的生成カードを使う。
+  const { searchParams } = new URL(request.url)
+  const ogImgParam = searchParams.get('og_img')
+  const image = ogImgParam ?? ogImageUrl(id, type)
 
   const pageUrl = type === 'talk' ? `${BASE}/talk/${id}` : `${BASE}/creator/${id}`
   const title = `${name} | Reach`

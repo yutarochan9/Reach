@@ -33,6 +33,7 @@ type Broadcast = {
   block_order: number
   group_id: string | null
   public_reactions: boolean
+  is_subscriber_only: boolean
 }
 
 type BroadcastGroup = {
@@ -44,6 +45,7 @@ type BroadcastGroup = {
   read_count: number
   public_reactions: boolean
   comment_count: number
+  is_subscriber_only: boolean
 }
 
 export default function TalkDetailScreen() {
@@ -60,6 +62,7 @@ export default function TalkDetailScreen() {
   const [senderBio, setSenderBio] = useState<string | null>(null)
   const [senderUsername, setSenderUsername] = useState<string | null>(null)
   const [isFollowing, setIsFollowing] = useState(false)
+  const [isSubscriber, setIsSubscriber] = useState(false)
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
@@ -72,6 +75,8 @@ export default function TalkDetailScreen() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   // メッセージグループのDOM要素をシェア用にキャッシュ（id → DOM node）
   const groupRefs = useRef<Map<string, any>>(new Map())
+  // フッター（タイムスタンプ+シェアボタン）のDOM要素キャッシュ（キャプチャ前に非表示にする）
+  const footerRefs = useRef<Map<string, any>>(new Map())
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -126,15 +131,18 @@ export default function TalkDetailScreen() {
       const self = user?.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }, myFollowResult] = await Promise.all([
+      const [{ data: profile }, { data: broadcasts }, myFollowResult, mySubscribeResult] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username').eq('id', senderId).single(),
         supabase.from('broadcasts')
-          .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
+          .select('id, content, image_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId)
           .eq('status', 'published')
           .order('created_at', { ascending: true }),
         user && !self
           ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle()
+          : Promise.resolve({ data: null }),
+        user && !self
+          ? supabase.from('subscriptions').select('id').eq('subscriber_id', user.id).eq('creator_id', senderId).eq('status', 'active').maybeSingle()
           : Promise.resolve({ data: null }),
       ])
 
@@ -144,8 +152,12 @@ export default function TalkDetailScreen() {
       setSenderBio((profile as any)?.bio ?? null)
       setSenderUsername((profile as any)?.username ?? null)
       setIsFollowing(!!(myFollowResult as any)?.data)
+      const subscribed = !!(mySubscribeResult as any)?.data
+      setIsSubscriber(subscribed)
 
-      const bcs = (broadcasts ?? []) as Broadcast[]
+      // サブスク限定配信は、クリエイター本人またはサブスク登録者のみ表示
+      const allBcs = (broadcasts ?? []) as Broadcast[]
+      const bcs = self || subscribed ? allBcs : allBcs.filter(b => !b.is_subscriber_only)
       const bcIds = bcs.map(b => b.id)
 
       const [{ data: reactions }, { data: reads }, { data: commentCounts }] = await Promise.all([
@@ -191,6 +203,7 @@ export default function TalkDetailScreen() {
           read_count: readMap[anchor.id] ?? 0,
           public_reactions: anchor.public_reactions,
           comment_count: countMap[anchor.id] ?? 0,
+          is_subscriber_only: anchor.is_subscriber_only ?? false,
         }
       })
       setGroups(result)
@@ -273,10 +286,13 @@ export default function TalkDetailScreen() {
         try {
           const bc = payload.new as any
           if (bc.status !== 'published') return
+          // サブスク限定配信は非サブスクユーザーには表示しない
+          if (bc.is_subscriber_only && !isSelf && !isSubscriber) return
           const newBlock: Broadcast = {
             id: bc.id, content: bc.content, image_url: bc.image_url ?? null,
             created_at: bc.created_at, block_order: bc.block_order,
             group_id: bc.group_id ?? null, public_reactions: bc.public_reactions ?? false,
+            is_subscriber_only: bc.is_subscriber_only ?? false,
           }
           setGroups(prev => {
             if (bc.group_id) {
@@ -293,6 +309,7 @@ export default function TalkDetailScreen() {
               anchorId: bc.id, group_id: bc.group_id ?? null, blocks: [newBlock],
               like_count: 0, liked: false, read_count: 0,
               public_reactions: bc.public_reactions ?? false, comment_count: 0,
+              is_subscriber_only: bc.is_subscriber_only ?? false,
             }]
           })
           setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
@@ -345,47 +362,140 @@ export default function TalkDetailScreen() {
     }
   }
 
-  // メッセージグループのスクリーンショットを撮って画像ファイルとして共有する。
-  // 失敗した場合（iOS gestureコンテキスト切れ・canShare非対応など）はURLシェアにフォールバック。
+  // スクリーンショットを Supabase Storage にアップロードして公開 URL を返す。
+  // アップロードした PNG は OGP の og:image として使われる。
+  // EXPO_PUBLIC_SUPABASE_STORAGE_JWT は JWT 形式の anon key
+  // （sb_publishable_ は Storage API では使えないため専用変数を使う）
+  const uploadShareImage = async (blob: Blob): Promise<string | null> => {
+    try {
+      const jwt = process.env.EXPO_PUBLIC_SUPABASE_STORAGE_JWT
+      if (!jwt) return null
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
+      // ファイル名は「送信者ID-タイムスタンプ.png」（重複しない一意な名前）
+      const fileName = `${senderId}-${Date.now()}.png`
+      const res = await fetch(
+        `${supabaseUrl}/storage/v1/object/share-images/${fileName}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            'Content-Type': 'image/png',
+          },
+          body: blob,
+        }
+      )
+      if (!res.ok) return null
+      // 公開 URL は Storage の public endpoint から取得
+      return `${supabaseUrl}/storage/v1/object/public/share-images/${fileName}`
+    } catch {
+      return null
+    }
+  }
+
+  // メッセージグループのスクリーンショットを撮って Supabase にアップロード後、
+  // og:image 付きのシェア URL を作成して共有する。
+  // アップロード失敗時はURLシェア（OGP はデフォルトのReachロゴ）にフォールバック。
   const handleShare = async (group: BroadcastGroup) => {
     const talkUrl = `https://reach-pi-one.vercel.app/talk/${senderId}`
 
     if (isWeb && typeof window !== 'undefined') {
-      // --- Web: まず画像ファイルシェアを試みる ---
+      // --- Web: スクリーンショット → Supabase アップロード → OGP 付き URL シェア ---
       const el = groupRefs.current.get(group.anchorId) as HTMLElement | undefined
       if (el && _html2canvas) {
         try {
-          // html2canvas でメッセージバブル領域をキャプチャ（scale:2 で高解像度）
-          const canvas = await _html2canvas(el, {
+          // --- onclone でクローン DOM を操作（ライブ DOM は一切変えない → ガクつきなし）---
+          // footerRef の DOM id を使ってクローン内の対応要素を特定する
+          const footerEl = footerRefs.current.get(group.anchorId) as HTMLElement | undefined
+          // フッターに一時的な id を付けてクローン内で検索できるようにする
+          const FOOTER_CLONE_ID = '__reach_share_footer__'
+          if (footerEl) footerEl.id = FOOTER_CLONE_ID
+
+          // html2canvas でメッセージバブル領域をキャプチャ
+          // onclone: キャプチャ用クローンDOMだけを変更する（実画面は変化しない）
+          const rawCanvas = await _html2canvas(el, {
             useCORS: true,
             allowTaint: false,
             scale: 2,
-            backgroundColor: '#F5F5F0',
+            backgroundColor: null, // 透明にして後でフレームを自前で追加
             logging: false,
+            onclone: (_doc: Document, clonedEl: HTMLElement) => {
+              // フッターを非表示（タイムスタンプ・シェアボタン・···）
+              const clonedFooter = clonedEl.querySelector(`#${FOOTER_CLONE_ID}`) as HTMLElement | null
+              if (clonedFooter) clonedFooter.style.display = 'none'
+
+              // コンテンツ幅を元のまま保ちつつ左右に余白を追加する
+              // border-box のまま width を「元幅 + padding分」に広げることで
+              // content area = 元の幅（バブル幅が変わらない）、左右に余白が生まれる
+              const PAD_L = 56  // アバターが左端で切れないよう
+              const PAD_R = 20  // メッセージ右端に余裕
+              clonedEl.style.width = (el.offsetWidth + PAD_L + PAD_R) + 'px'
+              clonedEl.style.paddingLeft = PAD_L + 'px'
+              clonedEl.style.paddingRight = PAD_R + 'px'
+            },
           })
+
+          // 付けた一時 id を削除
+          if (footerEl) footerEl.removeAttribute('id')
+
+          // --- 固定サイズのフレームキャンバスを作成 ---
+          // 縦は固定（長いメッセージははみ出してクリップ）、横はアプリの幅に合わせる
+          const SCALE = 2
+          const PAD_T = 16 * SCALE      // 上パディング（少し余白）
+          // 固定コンテンツ高さ = 150px（3/4 of 200）。左・下は端まで切り捨て
+          const FIXED_CONTENT_H = 175 * SCALE
+
+          const framed = document.createElement('canvas')
+          framed.width  = rawCanvas.width   // 左右はそのまま（onclone側で余白確保済み）
+          framed.height = FIXED_CONTENT_H + PAD_T
+          const ctx = framed.getContext('2d')!
+
+          // 背景（アプリのベース色）
+          ctx.fillStyle = '#F5F5F0'
+          ctx.fillRect(0, 0, framed.width, framed.height)
+
+          // コンテンツ領域をクリップして固定高さ内だけ描画（下ははみ出してカット）
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(0, PAD_T, rawCanvas.width, FIXED_CONTENT_H)
+          ctx.clip()
+          ctx.drawImage(rawCanvas, 0, PAD_T)
+          ctx.restore()
+
           const blob = await new Promise<Blob>((resolve, reject) =>
-            canvas.toBlob(b => (b ? resolve(b) : reject(new Error('blob null'))), 'image/png')
+            framed.toBlob(b => (b ? resolve(b) : reject(new Error('blob null'))), 'image/png')
           )
-          const file = new File([blob], 'reach-share.png', { type: 'image/png' })
-          // ファイル共有に対応しているか確認してからシェア
-          if (navigator.canShare?.({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: `${senderName} | Reach`,
-              // url を含めることで X にシェアしたとき投稿内にリンクも付く
-              url: talkUrl,
-            })
+
+          // Supabase Storage にアップロードして og:image 用の公開 URL を取得
+          const ogImgUrl = await uploadShareImage(blob)
+
+          // シェア URL: og_img クエリパラメータで og:image を動的に指定
+          // middleware.ts がこのパラメータを読んで OGP HTML を生成する
+          // ※ファイル(PNG)を直接シェアすると X は画像添付として扱いOGPカードが出ないため
+          //   URL のみシェアして X bot にクロールさせる方式を採用
+          const shareUrl = ogImgUrl
+            ? `${talkUrl}?og_img=${encodeURIComponent(ogImgUrl)}`
+            : talkUrl
+
+          // URL シェア → X bot がクロール → OGP カードにスクショが表示される
+          if (navigator.share) {
+            await navigator.share({ title: `${senderName} | Reach`, url: shareUrl })
             return
           }
+          // Web Share API 自体非対応 → Twitter intent で開く
+          window.open(
+            `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}`,
+            '_blank'
+          )
+          return
         } catch (e: any) {
           // ユーザーがキャンセルした場合はそのまま終了
           if (e?.name === 'AbortError') return
           // それ以外はURLシェアにフォールバック（コンソールには記録）
-          console.warn('html2canvas share failed, falling back to URL share:', e?.message)
+          console.warn('screenshot share failed, falling back to URL share:', e?.message)
         }
       }
 
-      // --- フォールバック: URLシェア（またはTwitter intent） ---
+      // --- フォールバック: 通常 URL シェア（OGP は Reach ロゴ） ---
       try {
         if (navigator.share) {
           await navigator.share({ title: `${senderName} | Reach`, url: talkUrl })
@@ -502,7 +612,15 @@ export default function TalkDetailScreen() {
                   }
                 </View>
                 <View style={styles.blocksWrap}>
-                  <Text style={styles.senderNameLabel}>{senderName}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.senderNameLabel}>{senderName}</Text>
+                    {group.is_subscriber_only && (
+                      <View style={styles.subscriberBadge}>
+                        <Ionicons name="lock-closed" size={10} color={Colors.white} />
+                        <Text style={styles.subscriberBadgeText}>サブスク</Text>
+                      </View>
+                    )}
+                  </View>
                   {group.blocks.map((block, idx) => {
                     const urlMatch = block.content.match(/(https?:\/\/[^\s]+)/)
                     const linkUrl = urlMatch?.[1] ?? null
@@ -525,8 +643,14 @@ export default function TalkDetailScreen() {
                 </View>
               </View>
 
-              {/* 時刻 + シェア + ···ボタン */}
-              <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
+              {/* 時刻 + シェア + ···ボタン（footerRefs でスクショから除外） */}
+              <View
+                style={[styles.bubbleFooter, { paddingLeft: 44 }]}
+                ref={(ref: any) => {
+                  if (ref) footerRefs.current.set(group.anchorId, ref)
+                  else footerRefs.current.delete(group.anchorId)
+                }}
+              >
                 <Text style={styles.bubbleTime}>
                   {formatTime(group.blocks[group.blocks.length - 1].created_at)}
                 </Text>
@@ -699,7 +823,7 @@ export default function TalkDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>あなたの配信</Text>
@@ -784,7 +908,7 @@ export default function TalkDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
@@ -929,11 +1053,17 @@ const styles = StyleSheet.create({
   broadcastAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   blocksWrap: { flex: 1, flexShrink: 1 },
   senderNameLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 3, fontWeight: '600' },
+  subscriberBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.accent, borderRadius: 4,
+    paddingHorizontal: 5, paddingVertical: 2, marginBottom: 3,
+  },
+  subscriberBadgeText: { fontSize: 9, color: Colors.white, fontWeight: '700' },
   broadcastBubble: {
     backgroundColor: Colors.white, borderRadius: 16, borderTopLeftRadius: 4,
     padding: 12, shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
-    alignSelf: 'flex-start', maxWidth: '100%',
+    alignSelf: 'flex-start', maxWidth: '70%',
   },
   broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },

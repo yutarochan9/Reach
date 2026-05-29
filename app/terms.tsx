@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
@@ -6,7 +6,8 @@ import { Colors } from '../constants/colors'
 const LAST_UPDATED = '2026年5月24日'
 const SERVICE_NAME = 'Reach'
 const COMPANY = 'Reach運営事務局'
-const CONTACT_EMAIL = 'support@reach-app.jp'
+const CONTACT_X = '@Reach_X_PR'
+const CONTACT_X_URL = 'https://x.com/Reach_X_PR'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -34,7 +35,7 @@ export default function TermsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>利用規約</Text>
@@ -133,7 +134,10 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="第13条　お問い合わせ">
-          <Body>{`本規約に関するお問い合わせは、以下の窓口までご連絡ください。\n\n${COMPANY}\nメール：${CONTACT_EMAIL}`}</Body>
+          <Body>{`本規約に関するお問い合わせは、以下の窓口までご連絡ください。\n\n${COMPANY}`}</Body>
+          <TouchableOpacity onPress={() => Linking.openURL(CONTACT_X_URL)}>
+            <Text style={styles.contactLink}>X（DM）：{CONTACT_X}</Text>
+          </TouchableOpacity>
         </Section>
       </ScrollView>
     </View>
@@ -157,4 +161,5 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', gap: 4, paddingLeft: 4 },
   itemNum: { fontSize: 13, color: Colors.textLight, minWidth: 36 },
   itemText: { fontSize: 13, color: Colors.text, lineHeight: 22, flex: 1 },
+  contactLink: { fontSize: 13, color: '#1D9BF0', textDecorationLine: 'underline', marginTop: 4 },
 })

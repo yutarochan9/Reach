@@ -62,6 +62,8 @@ export default function ComposeScreen() {
   const [showTarget, setShowTarget] = useState(false)
   const [showReaction, setShowReaction] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
+  const [showSubscriber, setShowSubscriber] = useState(false)
+  const [isSubscriberOnly, setIsSubscriberOnly] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
   const [publicReactions, setPublicReactions] = useState(false)
   const [visibleToNew, setVisibleToNew] = useState(true)
@@ -292,6 +294,7 @@ export default function ComposeScreen() {
       group_id: groupId,
       public_reactions: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? publicReactions : false,
       visible_to_new_followers: visibleToNew,
+      is_subscriber_only: isSubscriberOnly,
     }))
     const { error } = await supabase.from('broadcasts').insert(inserts)
     if (error) { Alert.alert('エラー', error.message); asDraft ? setSaving(false) : setLoading(false); return }
@@ -303,12 +306,12 @@ export default function ComposeScreen() {
     if (status === 'draft') {
       Alert.alert('下書き保存', '下書きを保存しました。「下書き・予約」タブから配信できます。')
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false)
+      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
       setActiveTab('drafts')
     } else if (status === 'scheduled') {
       Alert.alert('予約完了', `${scheduledLabel}に配信予定として保存しました。`)
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false)
+      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
       setActiveTab('drafts')
     } else {
       // 配信後は自分のトーク画面へ遷移して送信内容を確認できる
@@ -340,18 +343,18 @@ export default function ComposeScreen() {
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(v => !v); setShowSchedule(false); setShowReaction(false); setShowArchive(false) }}>
+        <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(v => !v); setShowSchedule(false); setShowReaction(false); setShowArchive(false); setShowSubscriber(false) }}>
           <Ionicons name="people-outline" size={15} color={showTarget ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showTarget && styles.toolBtnTextActive]} numberOfLines={1}>{targetLabel}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowTarget(false); setShowReaction(false); setShowArchive(false) }}>
+        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowTarget(false); setShowReaction(false); setShowArchive(false); setShowSubscriber(false) }}>
           <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
             style={[styles.toolBtn, showReaction && styles.toolBtnActive]}
-            onPress={() => { setShowReaction(v => !v); setShowTarget(false); setShowSchedule(false); setShowArchive(false) }}
+            onPress={() => { setShowReaction(v => !v); setShowTarget(false); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
           >
             <Ionicons name="heart-outline" size={15} color={showReaction ? Colors.white : Colors.accent} />
             <Text style={[styles.toolBtnText, showReaction && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -361,11 +364,20 @@ export default function ComposeScreen() {
         )}
         <TouchableOpacity
           style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
-          onPress={() => { setShowArchive(v => !v); setShowTarget(false); setShowSchedule(false); setShowReaction(false) }}
+          onPress={() => { setShowArchive(v => !v); setShowTarget(false); setShowSchedule(false); setShowReaction(false); setShowSubscriber(false) }}
         >
           <Ionicons name="archive-outline" size={15} color={showArchive ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
             {visibleToNew ? '全期間' : '新規から'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toolBtn, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
+          onPress={() => { setShowSubscriber(v => !v); setShowTarget(false); setShowSchedule(false); setShowReaction(false); setShowArchive(false) }}
+        >
+          <Ionicons name="lock-closed-outline" size={15} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
+          <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
+            {isSubscriberOnly ? '限定' : '全員'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -442,6 +454,28 @@ export default function ComposeScreen() {
                 <Text style={styles.optionDesc}>{opt.desc}</Text>
               </View>
               {visibleToNew === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {showSubscriber && (
+        <View style={styles.optionCard}>
+          <Text style={styles.optionTitle}>配信の公開範囲</Text>
+          {[
+            { value: false, label: '全フォロワー', desc: '無料・サブスク両方のフォロワーに配信する' },
+            { value: true,  label: 'サブスク限定', desc: 'サブスクリプション登録者のみに配信する' },
+          ].map(opt => (
+            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, isSubscriberOnly === opt.value && styles.optionRowActive]}
+              onPress={() => { setIsSubscriberOnly(opt.value); setShowSubscriber(false) }}>
+              <View style={styles.optionLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {opt.value && <Ionicons name="lock-closed" size={13} color={Colors.accent} />}
+                  <Text style={[styles.optionLabel, isSubscriberOnly === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                </View>
+                <Text style={styles.optionDesc}>{opt.desc}</Text>
+              </View>
+              {isSubscriberOnly === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
             </TouchableOpacity>
           ))}
         </View>

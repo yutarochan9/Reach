@@ -6,7 +6,7 @@ import { Colors } from '../constants/colors'
 export default function BroadcastIntroScreen() {
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
+      <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)} style={styles.closeButton}>
         <Ionicons name="close" size={24} color={Colors.textLight} />
       </TouchableOpacity>
 

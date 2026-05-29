@@ -281,7 +281,7 @@ export default function SecurityScreen() {
   // ── メニュー画面 ──────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <Header title="セキュリティ" onBack={() => router.back()} />
+      <Header title="セキュリティ" onBack={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} />
       <ScrollView contentContainerStyle={styles.content}>
         {loadingFactors ? (
           <ActivityIndicator color={Colors.accent} style={{ marginTop: 40 }} />

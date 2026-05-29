@@ -55,7 +55,7 @@ export default function ReportScreen() {
         <Ionicons name="checkmark-circle" size={64} color="#38A169" />
         <Text style={styles.doneTitle}>報告を受け付けました</Text>
         <Text style={styles.doneDesc}>ご報告ありがとうございます。内容を確認し、適切に対応します。</Text>
-        <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.doneBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)}>
           <Text style={styles.doneBtnText}>閉じる</Text>
         </TouchableOpacity>
       </View>
@@ -65,7 +65,7 @@ export default function ReportScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/home' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>報告する</Text>
