@@ -74,11 +74,19 @@ export default function CreatorScreen() {
   const handleMembershipToggle = async () => {
     if (!myId) { router.push('/(auth)/login' as any); return }
     if (isSubscriber) {
-      await supabase.from('subscriptions').delete().eq('subscriber_id', myId).eq('creator_id', id)
-      setIsSubscriber(false)
+      // 退会確認
+      Alert.alert('メンバーシップを退会', 'メンバーシップを退会しますか？', [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '退会する', style: 'destructive', onPress: async () => {
+            await supabase.from('subscriptions').delete().eq('subscriber_id', myId).eq('creator_id', id)
+            setIsSubscriber(false)
+          }
+        },
+      ])
     } else {
-      const { error } = await supabase.from('subscriptions').insert({ subscriber_id: myId, creator_id: id, status: 'active' })
-      if (error) { Alert.alert('エラー', error.message) } else { setIsSubscriber(true) }
+      // 加入フローへ
+      router.push({ pathname: '/membership/[creatorId]' as any, params: { creatorId: id } })
     }
   }
 
@@ -270,15 +278,15 @@ export default function CreatorScreen() {
                     onPress={handleFollow}
                   >
                     {isFollowing
-                      ? <><Ionicons name="checkmark" size={16} color={Colors.button} /><Text style={styles.followingButtonText}>フォロー中</Text></>
-                      : <><Ionicons name="add" size={16} color={Colors.white} /><Text style={styles.followButtonText}>フォローする</Text></>
+                      ? <><Ionicons name="checkmark" size={16} color={Colors.accent} /><Text style={styles.followingButtonText}>フォロー中</Text></>
+                      : <><Ionicons name="add" size={16} color={Colors.accent} /><Text style={styles.followButtonText}>フォローする</Text></>
                     }
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.talkButton}
                     onPress={() => router.push(`/talk/${id}` as any)}
                   >
-                    <Ionicons name="chatbubbles" size={18} color={Colors.white} />
+                    <Ionicons name="chatbubbles" size={18} color={Colors.accent} />
                     <Text style={styles.talkButtonText}>メッセージ</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -403,38 +411,38 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, color: Colors.textLight },
   statDivider: { width: 1, height: 28, backgroundColor: Colors.border },
   actionButtons: { flexDirection: 'row', gap: 8, marginTop: 8, width: '100%' },
+  // 全ボタン共通: 白背景 + アクセントボーダー
   followButton: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
     borderRadius: 12, paddingVertical: 11,
   },
   followingButton: {
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
   },
-  followButtonText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
+  followButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
   followingButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
   talkButton: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
     borderRadius: 12, paddingVertical: 11,
   },
-  talkButtonText: { color: Colors.white, fontWeight: '700', fontSize: 14 },
+  talkButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
   dmButton: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
     borderRadius: 12, paddingVertical: 11,
-    borderWidth: 1.5, borderColor: Colors.accent,
   },
   dmButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
   membershipButton: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    backgroundColor: Colors.button,
+    backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
     borderRadius: 12, paddingVertical: 11,
   },
   membershipButtonActive: {
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
   },
-  membershipButtonText: { color: Colors.white, fontWeight: '700', fontSize: 13 },
+  membershipButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 13 },
   membershipButtonTextActive: { color: Colors.accent },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginTop: 16, alignSelf: 'flex-start' },
   richMenuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', marginTop: 8 },

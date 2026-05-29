@@ -206,7 +206,7 @@ function BarChart({ data, color, width, height = 110 }:
 export default function AnalyticsScreen() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
-  const [membershipBroadcastCount, setMembershipBroadcastCount] = useState(0)
+  const [memberStats, setMemberStats] = useState({ memberCount: 0, totalPosts: 0, monthlyPosts: 0, retentionRate: 0 })
   const [loading, setLoading] = useState(true)
   const { width } = useWindowDimensions()
   const isMobile = width < 900
@@ -220,9 +220,13 @@ export default function AnalyticsScreen() {
     const startOfMonth = new Date()
     startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
 
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString()
+
     const [
       { data: profile }, { count: followerCount }, { count: followingCount },
-      { data: bcs }, { count: monthlyCount }, { count: membershipCount },
+      { data: bcs }, { count: monthlyCount },
+      { count: memberCount }, { count: totalMbPosts }, { count: monthlyMbPosts },
+      { data: longTermSubs },
     ] = await Promise.all([
       supabase.from('profiles').select('plan').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id),
@@ -232,10 +236,29 @@ export default function AnalyticsScreen() {
       supabase.from('broadcasts').select('id', { count: 'exact', head: true })
         .eq('sender_id', user.id).eq('status', 'published')
         .gte('created_at', startOfMonth.toISOString()),
+      // 会員数: アクティブな加入者数
+      supabase.from('subscriptions').select('subscriber_id', { count: 'exact', head: true })
+        .eq('creator_id', user.id).eq('status', 'active'),
+      // 総投稿数: メンバーシップ限定配信の総数
       supabase.from('broadcasts').select('id', { count: 'exact', head: true })
         .eq('sender_id', user.id).eq('status', 'published').eq('is_subscriber_only', true),
+      // 月間投稿数: 今月のメンバーシップ限定配信数
+      supabase.from('broadcasts').select('id', { count: 'exact', head: true })
+        .eq('sender_id', user.id).eq('status', 'published').eq('is_subscriber_only', true)
+        .gte('created_at', startOfMonth.toISOString()),
+      // 継続率計算用: 30日以上前から加入しているメンバー
+      supabase.from('subscriptions').select('created_at')
+        .eq('creator_id', user.id).eq('status', 'active').lte('created_at', thirtyDaysAgo),
     ])
-    setMembershipBroadcastCount(membershipCount ?? 0)
+
+    const mc = memberCount ?? 0
+    const retentionRate = mc > 0 ? Math.round(((longTermSubs ?? []).length / mc) * 100) : 0
+    setMemberStats({
+      memberCount: mc,
+      totalPosts: totalMbPosts ?? 0,
+      monthlyPosts: monthlyMbPosts ?? 0,
+      retentionRate,
+    })
 
     const bcIds = (bcs ?? []).map((b: any) => b.id)
     const [{ data: reactions }, { data: reads }, { data: replies }] = await Promise.all([
@@ -455,21 +478,38 @@ export default function AnalyticsScreen() {
           <View style={s.chartHead}>
             <View>
               <Text style={s.cardSectionLabel}>メンバーシップ</Text>
-              <Text style={s.cardSub}>メンバーシップ限定配信</Text>
+              <Text style={s.cardSub}>メンバーシップ限定配信の実績</Text>
             </View>
             <View style={[s.badge, { backgroundColor: `${C.button}15`, borderColor: `${C.button}40` }]}>
               <Text style={[s.badgeText, { color: C.button }]}>限定配信</Text>
             </View>
           </View>
-          {membershipBroadcastCount === 0 ? (
+          {memberStats.totalPosts === 0 ? (
             <Text style={{ fontSize: 13, color: C.muted, textAlign: 'center', paddingVertical: 4 }}>
               メンバーシップ配信していません
             </Text>
           ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="lock-closed" size={16} color={C.button} />
-              <Text style={{ fontSize: 24, fontWeight: '800', color: C.text }}>{membershipBroadcastCount}</Text>
-              <Text style={{ fontSize: 13, color: C.muted }}>件の限定配信</Text>
+            <View style={s.mbGrid}>
+              <View style={s.mbCard}>
+                <Ionicons name="people-outline" size={16} color={C.button} />
+                <Text style={s.mbNum}>{memberStats.memberCount}</Text>
+                <Text style={s.mbLabel}>会員数</Text>
+              </View>
+              <View style={s.mbCard}>
+                <Ionicons name="lock-closed-outline" size={16} color={C.button} />
+                <Text style={s.mbNum}>{memberStats.totalPosts}</Text>
+                <Text style={s.mbLabel}>総投稿数</Text>
+              </View>
+              <View style={s.mbCard}>
+                <Ionicons name="calendar-outline" size={16} color={C.button} />
+                <Text style={s.mbNum}>{memberStats.monthlyPosts}</Text>
+                <Text style={s.mbLabel}>月間投稿数</Text>
+              </View>
+              <View style={s.mbCard}>
+                <Ionicons name="refresh-circle-outline" size={16} color={C.button} />
+                <Text style={s.mbNum}>{memberStats.retentionRate}%</Text>
+                <Text style={s.mbLabel}>継続率</Text>
+              </View>
             </View>
           )}
         </View>
@@ -633,6 +673,16 @@ const s = StyleSheet.create({
     padding: 10,
   },
   upgradeText: { flex: 1, fontSize: 12, fontWeight: '600' },
+
+  mbGrid: { flexDirection: 'row', gap: 8 },
+  mbCard: {
+    flex: 1, backgroundColor: C.light, borderRadius: 10,
+    borderWidth: 1, borderColor: C.border,
+    paddingVertical: 10, paddingHorizontal: 4,
+    alignItems: 'center', gap: 4,
+  },
+  mbNum: { fontSize: 18, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
+  mbLabel: { fontSize: 9, fontWeight: '600', color: C.muted, textAlign: 'center' },
 
   menuDotBtn: { width: 28, alignItems: 'center', justifyContent: 'center' },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 40 },
