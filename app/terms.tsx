@@ -35,7 +35,7 @@ export default function TermsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>利用規約</Text>

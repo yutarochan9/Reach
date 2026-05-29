@@ -285,7 +285,7 @@ export default function StepSequenceEditScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/step-sequences' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/step-sequences' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{name}</Text>

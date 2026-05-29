@@ -131,7 +131,7 @@ export default function TalkDetailScreen() {
       const self = user?.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }, myFollowResult, mySubscribeResult] = await Promise.all([
+      const [{ data: profile }, { data: broadcasts }, myFollowResult] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
@@ -141,9 +141,6 @@ export default function TalkDetailScreen() {
         user && !self
           ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle()
           : Promise.resolve({ data: null }),
-        user && !self
-          ? supabase.from('subscriptions').select('id').eq('subscriber_id', user.id).eq('creator_id', senderId).eq('status', 'active').maybeSingle()
-          : Promise.resolve({ data: null }),
       ])
 
       setSenderName(profile?.display_name ?? '')
@@ -152,7 +149,21 @@ export default function TalkDetailScreen() {
       setSenderBio((profile as any)?.bio ?? null)
       setSenderUsername((profile as any)?.username ?? null)
       setIsFollowing(!!(myFollowResult as any)?.data)
-      const subscribed = !!(mySubscribeResult as any)?.data
+
+      // サブスク確認：失敗してもメイン処理に影響させない
+      let subscribed = false
+      if (user && !self) {
+        try {
+          const { data: subData } = await supabase
+            .from('subscriptions')
+            .select('id')
+            .eq('subscriber_id', user.id)
+            .eq('creator_id', senderId)
+            .eq('status', 'active')
+            .maybeSingle()
+          subscribed = !!subData
+        } catch {}
+      }
       setIsSubscriber(subscribed)
 
       // サブスク限定配信は、クリエイター本人またはサブスク登録者のみ表示

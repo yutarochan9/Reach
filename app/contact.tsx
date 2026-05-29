@@ -45,7 +45,7 @@ export default function ContactScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>お問い合わせ</Text>
@@ -57,7 +57,7 @@ export default function ContactScreen() {
           </View>
           <Text style={styles.doneTitle}>送信しました</Text>
           <Text style={styles.doneSub}>お問い合わせを受け付けました。{'\n'}内容を確認の上、ご連絡いたします。</Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)}>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/mypage' as any)}>
             <Text style={styles.doneBtnText}>戻る</Text>
           </TouchableOpacity>
         </View>
@@ -68,7 +68,7 @@ export default function ContactScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>お問い合わせ</Text>
