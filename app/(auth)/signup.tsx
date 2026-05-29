@@ -33,38 +33,18 @@ export default function SignupScreen() {
     }
 
     setLoading(true)
+    // signUp ではなく OTP を使う。
+    // signUp は認証前にアカウントを作成してしまうため、
+    // OTP（shouldCreateUser: true）で送信のみ行い、
+    // 認証後に初めてアカウントが確定する方式に変更。
     authFlags.skipNextSignedIn = true
-    const { data: signUpData, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-    })
-    if (error) {
-      authFlags.skipNextSignedIn = false
-      setLoading(false)
-      // 登録済みメールアドレスはインラインで赤文字表示
-      const msg = error.message?.toLowerCase() ?? ''
-      if (msg.includes('already') || msg.includes('registered') || msg.includes('in use')) {
-        setEmailError('このメールアドレスはすでに登録されています')
-      } else {
-        Alert.alert('エラー', error.message)
-      }
-      return
-    }
-    // Supabase はセキュリティ上、既存メールの signUp でも error を返さず
-    // user = null を返す場合がある（メールアドレス列挙攻撃対策）
-    if (!signUpData.user) {
-      authFlags.skipNextSignedIn = false
-      setLoading(false)
-      setEmailError('このメールアドレスはすでに登録されています')
-      return
-    }
-
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: true },
     })
     setLoading(false)
     if (otpError) {
+      authFlags.skipNextSignedIn = false
       Alert.alert('エラー', otpError.message)
     } else {
       setStep('otp')
@@ -86,6 +66,19 @@ export default function SignupScreen() {
       setLoading(false)
       Alert.alert('認証エラー', '認証コードが正しくありません。もう一度確認してください。')
       return
+    }
+
+    // 認証成功後、すでにプロフィールが設定済みなら既存ユーザー → ホームへ
+    // 未設定なら新規ユーザー → プロフィール設定へ
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
+      if (prof?.display_name && !prof.display_name.includes('@')) {
+        // 既存ユーザー: すでに登録済みなのでそのままホームへ
+        setLoading(false)
+        router.replace('/(tabs)/' as any)
+        return
+      }
     }
 
     setLoading(false)
@@ -112,20 +105,25 @@ export default function SignupScreen() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
+      // OTP で作成されたアカウントにパスワードを設定
+      // （signUp を使わないため、ここで初めてパスワードを登録する）
+      if (password) {
+        await supabase.auth.updateUser({ password })
+      }
       await supabase.from('profiles').update({
         display_name: displayName.trim(),
         username: trimmedUsername,
       }).eq('id', user.id)
     }
     setLoading(false)
-    router.replace('/(tabs)/')
+    router.replace('/(tabs)/' as any)
   }
 
   const handleResend = async () => {
     setLoading(true)
     await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: true },
     })
     setLoading(false)
     Alert.alert('再送しました', `${email} に認証コードを再送しました。`)
