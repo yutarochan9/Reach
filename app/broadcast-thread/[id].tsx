@@ -17,6 +17,10 @@ type Comment = {
   created_at: string
   is_mine: boolean
   replies: Comment[]
+  // いいね
+  like_count: number
+  liked: boolean          // 自分がいいね済みか
+  creator_liked: boolean  // 配信者がいいね済みか（YouTube風）
 }
 
 type BroadcastBlock = {
@@ -33,6 +37,8 @@ export default function BroadcastThreadScreen() {
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [isSelf, setIsSelf] = useState(false)
   const [broadcastSenderId, setBroadcastSenderId] = useState<string | null>(null)
+  const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null)
+  const [creatorName, setCreatorName] = useState('')
   const [blocks, setBlocks] = useState<BroadcastBlock[]>([])
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
@@ -84,21 +90,40 @@ export default function BroadcastThreadScreen() {
 
     if (!allMsgs?.length) { setComments([]); setLoading(false); return }
 
-    const senderIds = [...new Set([user.id, ...allMsgs.map((m: any) => m.sender_id)])]
-    const { data: profiles } = await supabase
-      .from('profiles').select('id, display_name, avatar_url').in('id', senderIds)
+    const msgIds = allMsgs.map((m: any) => m.id)
+    const senderIds = [...new Set([user.id, anchor.sender_id, ...allMsgs.map((m: any) => m.sender_id)])]
+
+    // プロフィールといいねを並行取得
+    const [{ data: profiles }, { data: likes }] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, avatar_url').in('id', senderIds),
+      supabase.from('message_likes').select('message_id, user_id').in('message_id', msgIds),
+    ])
+
     const profMap: Record<string, { name: string; avatar: string | null }> = {}
     for (const p of (profiles ?? [])) profMap[p.id] = { name: p.display_name, avatar: p.avatar_url ?? null }
     setMyName(profMap[user.id]?.name ?? '')
     setMyAvatar(profMap[user.id]?.avatar ?? null)
+    setCreatorAvatar(profMap[anchor.sender_id]?.avatar ?? null)
+    setCreatorName(profMap[anchor.sender_id]?.name ?? '')
+
+    // いいねマップ: message_id → { count, likedByMe, likedByCreator }
+    const likeMap: Record<string, { count: number; likedByMe: boolean; likedByCreator: boolean }> = {}
+    for (const l of (likes ?? [])) {
+      if (!likeMap[l.message_id]) likeMap[l.message_id] = { count: 0, likedByMe: false, likedByCreator: false }
+      likeMap[l.message_id].count++
+      if (l.user_id === user.id) likeMap[l.message_id].likedByMe = true
+      if (l.user_id === anchor.sender_id) likeMap[l.message_id].likedByCreator = true
+    }
 
     const byId: Record<string, Comment> = {}
     for (const m of allMsgs as any[]) {
+      const lk = likeMap[m.id] ?? { count: 0, likedByMe: false, likedByCreator: false }
       byId[m.id] = {
         id: m.id, content: m.content, sender_id: m.sender_id,
         sender_name: profMap[m.sender_id]?.name ?? 'ユーザー',
         sender_avatar: profMap[m.sender_id]?.avatar ?? null,
         created_at: m.created_at, is_mine: m.sender_id === user.id, replies: [],
+        like_count: lk.count, liked: lk.likedByMe, creator_liked: lk.likedByCreator,
       }
     }
     const topLevel: Comment[] = []
@@ -115,6 +140,43 @@ export default function BroadcastThreadScreen() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  // ── いいね ───────────────────────────────────────────────
+  const handleLike = async (comment: Comment) => {
+    if (!myId) return
+
+    // 楽観的UI更新
+    const updateLike = (list: Comment[]): Comment[] =>
+      list.map(c => {
+        if (c.id === comment.id) {
+          const liked = !c.liked
+          const isCreatorLiking = myId === broadcastSenderId
+          return {
+            ...c,
+            liked,
+            like_count: liked ? c.like_count + 1 : Math.max(0, c.like_count - 1),
+            creator_liked: isCreatorLiking ? liked : c.creator_liked,
+          }
+        }
+        return { ...c, replies: updateLike(c.replies) }
+      })
+    setComments(prev => updateLike(prev))
+
+    if (comment.liked) {
+      // いいね取り消し
+      await supabase.from('message_likes')
+        .delete()
+        .eq('message_id', comment.id)
+        .eq('user_id', myId)
+    } else {
+      // いいね追加
+      await supabase.from('message_likes').insert({
+        message_id: comment.id,
+        user_id: myId,
+      })
+    }
+  }
+
+  // ── 送信 ──────────────────────────────────────────────────
   const handleSend = async () => {
     if (!inputText.trim() || !myId || !broadcastSenderId) return
     setSending(true)
@@ -146,6 +208,9 @@ export default function BroadcastThreadScreen() {
       created_at: inserted?.created_at ?? new Date().toISOString(),
       is_mine: true,
       replies: [],
+      like_count: 0,
+      liked: false,
+      creator_liked: false,
     }
 
     if (parentId) {
@@ -211,6 +276,25 @@ export default function BroadcastThreadScreen() {
     return result
   }
 
+  // ── YouTube風「配信者いいね」アイコン ─────────────────────
+  const CreatorLikeIcon = () => (
+    <View style={styles.creatorLikeWrap}>
+      {/* ハートアイコン */}
+      <View style={styles.creatorLikeHeart}>
+        <Ionicons name="heart" size={18} color={Colors.accent} />
+      </View>
+      {/* 配信者アバター（小） */}
+      <View style={styles.creatorLikeAvatar}>
+        {creatorAvatar
+          ? <Image source={{ uri: creatorAvatar }} style={styles.creatorLikeAvatarImg} />
+          : <View style={styles.creatorLikeAvatarPlaceholder}>
+              <Text style={styles.creatorLikeAvatarText}>{creatorName[0] ?? 'R'}</Text>
+            </View>
+        }
+      </View>
+    </View>
+  )
+
   const renderComment = (comment: Comment, isReply = false) => {
     const expanded = expandedReplies.has(comment.id)
     const isCreator = comment.sender_id === broadcastSenderId
@@ -238,15 +322,39 @@ export default function BroadcastThreadScreen() {
             </View>
             <Text style={styles.commentText}>{comment.content}</Text>
 
-            <TouchableOpacity
-              onPress={() => {
-                setReplyToComment(comment)
-                setTimeout(() => inputRef.current?.focus(), 100)
-              }}
-              style={styles.replyBtn}
-            >
-              <Text style={styles.replyBtnText}>コメントする</Text>
-            </TouchableOpacity>
+            {/* アクション行: コメントする ＋ いいね */}
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                onPress={() => {
+                  setReplyToComment(comment)
+                  setTimeout(() => inputRef.current?.focus(), 100)
+                }}
+                style={styles.replyBtn}
+              >
+                <Text style={styles.replyBtnText}>コメントする</Text>
+              </TouchableOpacity>
+
+              {/* いいねボタン */}
+              <TouchableOpacity
+                onPress={() => handleLike(comment)}
+                style={styles.likeBtn}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={comment.liked ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={15}
+                  color={comment.liked ? Colors.accent : Colors.textLight}
+                />
+                {comment.like_count > 0 && (
+                  <Text style={[styles.likeCount, comment.liked && styles.likeCountActive]}>
+                    {comment.like_count}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {/* 配信者いいね表示（YouTubeスタイル） */}
+              {comment.creator_liked && <CreatorLikeIcon />}
+            </View>
 
             {!isReply && descendants.length > 0 && (
               <TouchableOpacity onPress={() => toggleReplies(comment.id)} style={styles.showRepliesBtn}>
@@ -427,8 +535,45 @@ const styles = StyleSheet.create({
   creatorBadge: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
   commentTime: { fontSize: 11, color: Colors.textLight },
   commentText: { fontSize: 14, color: Colors.text, lineHeight: 20 },
-  replyBtn: { alignSelf: 'flex-start', marginTop: 4 },
+
+  // アクション行（コメント ＋ いいね）
+  actionRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4,
+  },
+  replyBtn: {},
   replyBtnText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
+
+  // いいねボタン
+  likeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  likeCount: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
+  likeCountActive: { color: Colors.accent },
+
+  // 配信者いいね（YouTubeスタイル）
+  creatorLikeWrap: {
+    width: 32, height: 24,
+    position: 'relative',
+  },
+  creatorLikeHeart: {
+    position: 'absolute', bottom: 0, left: 0,
+  },
+  creatorLikeAvatar: {
+    position: 'absolute', top: 0, right: 0,
+    width: 16, height: 16, borderRadius: 8,
+    borderWidth: 1.5, borderColor: Colors.white,
+    overflow: 'hidden',
+    backgroundColor: Colors.button,
+  },
+  creatorLikeAvatarImg: { width: 16, height: 16, borderRadius: 8 },
+  creatorLikeAvatarPlaceholder: {
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: Colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  creatorLikeAvatarText: { fontSize: 8, fontWeight: '700', color: Colors.white },
+
   showRepliesBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     marginTop: 6, alignSelf: 'flex-start',
