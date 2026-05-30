@@ -64,6 +64,7 @@ export default function TalkDetailScreen() {
   const [senderUsername, setSenderUsername] = useState<string | null>(null)
   const [isFollowing, setIsFollowing] = useState(false)
   const [isSubscriber, setIsSubscriber] = useState(false)
+  const [isPrivateGated, setIsPrivateGated] = useState(false) // 鍵垢で未承認フォロワーの場合
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   // 画像の自然サイズキャッシュ（URL → {w, h}）
   const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
@@ -137,7 +138,7 @@ export default function TalkDetailScreen() {
       setIsSelf(self)
 
       const [{ data: profile }, { data: broadcasts }, myFollowResult] = await Promise.all([
-        supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username').eq('id', senderId).single(),
+        supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username, is_private').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId)
@@ -153,7 +154,16 @@ export default function TalkDetailScreen() {
       setSenderIsOfficial((profile as any)?.is_official ?? false)
       setSenderBio((profile as any)?.bio ?? null)
       setSenderUsername((profile as any)?.username ?? null)
-      setIsFollowing(!!(myFollowResult as any)?.data)
+      const following = !!(myFollowResult as any)?.data
+      setIsFollowing(following)
+
+      // 鍵アカウントで未フォローなら配信を表示しない
+      const senderIsPrivate = (profile as any)?.is_private ?? false
+      if (senderIsPrivate && !self && !following) {
+        setIsPrivateGated(true)
+        setLoading(false)
+        return
+      }
 
       // サブスク確認：失敗してもメイン処理に影響させない
       let subscribed = false
@@ -680,6 +690,34 @@ export default function TalkDetailScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={Colors.accent} />
+      </View>
+    )
+  }
+
+  // 鍵アカウントで未フォロー → 非公開ゲート画面
+  if (isPrivateGated) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={24} color={Colors.accent} />
+          </TouchableOpacity>
+          <Text style={styles.headerName}>{senderName}</Text>
+          <View style={{ width: 44 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32 }}>
+          <Ionicons name="lock-closed" size={48} color={Colors.border} />
+          <Text style={{ fontSize: 18, fontWeight: '700', color: Colors.text }}>非公開アカウントです</Text>
+          <Text style={{ fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22 }}>
+            このアカウントは鍵がかかっています。{'\n'}フォローリクエストを送って承認されると配信が見られます。
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12, marginTop: 8 }}
+            onPress={() => router.push(`/creator/${senderId}` as any)}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>プロフィールを見る</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     )
   }

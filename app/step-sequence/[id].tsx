@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform
+  ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, useWindowDimensions
 } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -15,7 +15,8 @@ type StepMessage = {
   sort_order: number
 }
 
-const DAY_OPTIONS = [0, 1, 3, 7, 14, 30]
+// 固定の日数選択肢（カスタム入力は別途 UI で対応）
+const DAY_OPTIONS = [0, 1, 3, 7, 30]
 
 function dayLabel(offset: number) {
   return offset === 0 ? 'フォロー直後' : `${offset}日後`
@@ -36,14 +37,21 @@ function groupByDay(msgs: StepMessage[]): { day: number; items: StepMessage[] }[
 
 export default function StepSequenceEditScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const { width } = useWindowDimensions()
+  const isWide = width >= 768   // タブレット/PCはサイドバイサイド、スマホはエディタのみ
   const [name, setName] = useState('')
   const [messages, setMessages] = useState<StepMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingMsg, setEditingMsg] = useState<Partial<StepMessage> | null>(null)
   const [saving, setSaving] = useState(false)
+  // カスタム日数入力
+  const [customDayInput, setCustomDayInput] = useState('')
+  const [showCustomDay, setShowCustomDay] = useState(false)
   // 時点追加モーダル
   const [dayPickerVisible, setDayPickerVisible] = useState(false)
+  // スマホ用プレビュー表示タブ
+  const [mobileTab, setMobileTab] = useState<'editor' | 'preview'>('editor')
 
   const load = useCallback(async () => {
     const [{ data: seq }, { data: msgs }] = await Promise.all([
@@ -59,11 +67,18 @@ export default function StepSequenceEditScreen() {
 
   const openNew = (day: number) => {
     setEditingMsg({ day_offset: day, content: '' })
+    // DAY_OPTIONSにない値はカスタム入力として扱う
+    const isCustom = !DAY_OPTIONS.includes(day)
+    setShowCustomDay(isCustom)
+    setCustomDayInput(isCustom ? String(day) : '')
     setModalVisible(true)
   }
 
   const openEdit = (msg: StepMessage) => {
     setEditingMsg({ ...msg })
+    const isCustom = !DAY_OPTIONS.includes(msg.day_offset)
+    setShowCustomDay(isCustom)
+    setCustomDayInput(isCustom ? String(msg.day_offset) : '')
     setModalVisible(true)
   }
 
@@ -150,7 +165,7 @@ export default function StepSequenceEditScreen() {
 
   // ── プレビュー用チャット ────────────────────────────────
   const Preview = (
-    <View style={styles.previewPanel}>
+    <View style={isWide ? styles.previewPanel : styles.previewPanelMobile}>
       <Text style={styles.previewTitle}>プレビュー</Text>
       <View style={styles.phoneFrame}>
         <View style={styles.phoneHeader}>
@@ -297,10 +312,32 @@ export default function StepSequenceEditScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.bodyRow}>
-        {Editor}
-        {Preview}
-      </View>
+      {isWide ? (
+        // PC/タブレット: エディタ + プレビューを横並び
+        <View style={styles.bodyRow}>
+          {Editor}
+          {Preview}
+        </View>
+      ) : (
+        // スマホ: タブで切り替え
+        <View style={{ flex: 1 }}>
+          <View style={styles.mobileTabBar}>
+            <TouchableOpacity
+              style={[styles.mobileTab, mobileTab === 'editor' && styles.mobileTabActive]}
+              onPress={() => setMobileTab('editor')}
+            >
+              <Text style={[styles.mobileTabText, mobileTab === 'editor' && styles.mobileTabTextActive]}>編集</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.mobileTab, mobileTab === 'preview' && styles.mobileTabActive]}
+              onPress={() => setMobileTab('preview')}
+            >
+              <Text style={[styles.mobileTabText, mobileTab === 'preview' && styles.mobileTabTextActive]}>プレビュー</Text>
+            </TouchableOpacity>
+          </View>
+          {mobileTab === 'editor' ? Editor : Preview}
+        </View>
+      )}
 
       {/* メッセージ編集モーダル */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
@@ -326,15 +363,42 @@ export default function StepSequenceEditScreen() {
                 {DAY_OPTIONS.map(d => (
                   <TouchableOpacity
                     key={d}
-                    style={[styles.dayChip, editingMsg?.day_offset === d && styles.dayChipActive]}
-                    onPress={() => setEditingMsg(prev => ({ ...prev, day_offset: d }))}
+                    style={[styles.dayChip, !showCustomDay && editingMsg?.day_offset === d && styles.dayChipActive]}
+                    onPress={() => { setShowCustomDay(false); setCustomDayInput(''); setEditingMsg(prev => ({ ...prev, day_offset: d })) }}
                   >
-                    <Text style={[styles.dayChipText, editingMsg?.day_offset === d && styles.dayChipTextActive]}>
+                    <Text style={[styles.dayChipText, !showCustomDay && editingMsg?.day_offset === d && styles.dayChipTextActive]}>
                       {d === 0 ? '直後' : `${d}日後`}
                     </Text>
                   </TouchableOpacity>
                 ))}
+                {/* カスタム日数チップ */}
+                <TouchableOpacity
+                  style={[styles.dayChip, showCustomDay && styles.dayChipActive]}
+                  onPress={() => { setShowCustomDay(true); setCustomDayInput('') }}
+                >
+                  <Text style={[styles.dayChipText, showCustomDay && styles.dayChipTextActive]}>日にち選択</Text>
+                </TouchableOpacity>
               </View>
+              {showCustomDay && (
+                <View style={styles.customDayRow}>
+                  <TextInput
+                    style={styles.customDayInput}
+                    value={customDayInput}
+                    onChangeText={v => {
+                      const n = v.replace(/[^0-9]/g, '')
+                      setCustomDayInput(n)
+                      const num = parseInt(n, 10)
+                      if (!isNaN(num) && num >= 0) {
+                        setEditingMsg(prev => ({ ...prev, day_offset: num }))
+                      }
+                    }}
+                    placeholder="例: 14"
+                    keyboardType="number-pad"
+                    placeholderTextColor={Colors.textLight}
+                  />
+                  <Text style={styles.customDayUnit}>日後に送信</Text>
+                </View>
+              )}
               <Text style={styles.fieldLabel}>メッセージ内容</Text>
               <TextInput
                 style={styles.textarea}
@@ -358,7 +422,7 @@ export default function StepSequenceEditScreen() {
           activeOpacity={1}
           onPress={() => setDayPickerVisible(false)}
         >
-          <View style={styles.dayPickerBox}>
+          <TouchableOpacity style={styles.dayPickerBox} activeOpacity={1} onPress={() => {}}>
             <Text style={styles.dayPickerTitle}>追加するタイミングを選択</Text>
             {availableDays.map(d => (
               <TouchableOpacity
@@ -370,7 +434,35 @@ export default function StepSequenceEditScreen() {
                 <Text style={styles.dayPickerItemText}>{dayLabel(d)}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+            {/* 日にちを直接入力 */}
+            <View style={[styles.dayPickerItem, { borderBottomWidth: 0, flexDirection: 'column', alignItems: 'flex-start', gap: 8 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="create-outline" size={18} color={Colors.accent} />
+                <Text style={styles.dayPickerItemText}>日にちを指定</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 26 }}>
+                <TextInput
+                  style={[styles.customDayInput, { width: 80 }]}
+                  value={customDayInput}
+                  onChangeText={v => setCustomDayInput(v.replace(/[^0-9]/g, ''))}
+                  placeholder="例: 14"
+                  keyboardType="number-pad"
+                  placeholderTextColor={Colors.textLight}
+                  returnKeyType="done"
+                />
+                <Text style={{ fontSize: 14, color: Colors.textLight }}>日後</Text>
+                <TouchableOpacity
+                  style={{ backgroundColor: Colors.accent, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
+                  onPress={() => {
+                    const n = parseInt(customDayInput, 10)
+                    if (!isNaN(n) && n >= 0) { setCustomDayInput(''); setDayPickerVisible(false); openNew(n) }
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>追加</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
     </View>
@@ -381,7 +473,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
@@ -390,6 +482,19 @@ const styles = StyleSheet.create({
   addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
 
   bodyRow: { flex: 1, flexDirection: 'row' },
+
+  // スマホ用タブ
+  mobileTabBar: {
+    flexDirection: 'row', backgroundColor: Colors.white,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  mobileTab: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  mobileTabActive: { borderBottomColor: Colors.accent },
+  mobileTabText: { fontSize: 14, fontWeight: '600', color: Colors.textLight },
+  mobileTabTextActive: { color: Colors.accent },
 
   // ── エディタ（左） ─────────────────────────────────────
   editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
@@ -449,6 +554,7 @@ const styles = StyleSheet.create({
 
   // ── プレビュー（右） ────────────────────────────────────
   previewPanel: { width: 300, padding: 16, gap: 8 },
+  previewPanelMobile: { flex: 1, padding: 16, gap: 8 },
   previewTitle: { fontSize: 13, fontWeight: '700', color: Colors.textLight },
   phoneFrame: {
     flex: 1, backgroundColor: '#F0F0F0', borderRadius: 16, overflow: 'hidden',
@@ -493,7 +599,7 @@ const styles = StyleSheet.create({
   // ── モーダル ───────────────────────────────────────────
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
@@ -510,6 +616,15 @@ const styles = StyleSheet.create({
   dayChipActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   dayChipText: { fontSize: 13, color: Colors.textLight, fontWeight: '600' },
   dayChipTextActive: { color: '#fff' },
+  // カスタム日数入力
+  customDayRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+  customDayInput: {
+    borderWidth: 1, borderColor: Colors.border, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8,
+    fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
+    width: 80,
+  },
+  customDayUnit: { fontSize: 14, color: Colors.textLight },
   textarea: {
     flex: 1, borderWidth: 1, borderColor: Colors.border, borderRadius: 12,
     padding: 14, fontSize: 15, color: Colors.text, backgroundColor: Colors.white,
