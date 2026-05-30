@@ -312,6 +312,16 @@ export default function TalkDetailScreen() {
     }
   }, [loading, groups.length])
 
+  // タイルの開閉・表示切替時にスクロール位置を再調整
+  // タイルが開く → FlatList 縮小 → 最新メッセージがタイル直上に来るようスクロール
+  // タイルが閉じる → FlatList 拡大 → 最新メッセージが下に移動（スムーズアニメ）
+  useEffect(() => {
+    if (firstUnreadIndexRef.current <= 0 && groups.length > 0) {
+      const t = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80)
+      return () => clearTimeout(t)
+    }
+  }, [tileOpen, tileVisible])
+
   // URL と最大幅からアスペクト比を保ったサイズを返す
   const getImgStyle = (url: string, maxW: number) => {
     const size = imageSizes[url]
@@ -728,7 +738,7 @@ export default function TalkDetailScreen() {
       data={groups}
       keyExtractor={item => item.anchorId}
       style={{ flex: 1 }}
-      contentContainerStyle={styles.messageList}
+      contentContainerStyle={[styles.messageList, tileVisible && { paddingBottom: 8 }]}
       onContentSizeChange={() => {
         const idx = firstUnreadIndexRef.current
         if (idx > 0 && !initialScrollDoneRef.current) {
