@@ -326,10 +326,12 @@ export default function TalkScreen() {
       myLikeCount = (myReactions ?? []).length
       myCommentCount = (myComments ?? []).length
     }
+    const myRawContent = myLastBroadcast?.content ?? ''
+    const myDisplayContent = myRawContent.trim() ? myRawContent.trim() : myLastBroadcast ? '📷 画像' : 'まだ配信がありません'
     setMyItem({
       name: myProfile?.display_name ?? 'あなた',
       avatar: myProfile?.avatar_url ?? null,
-      last_content: myLastBroadcast?.content ?? 'まだ配信がありません',
+      last_content: myDisplayContent,
       created_at: myLastBroadcast?.created_at ?? new Date().toISOString(),
       is_official: (myProfile as any)?.is_official ?? false,
       public_reactions: myLastBroadcast?.public_reactions ?? false,
@@ -393,11 +395,13 @@ export default function TalkScreen() {
         const latest = visibleBcs[0]
         const lastRead = readMap[id]
         const unread = lastRead ? visibleBcs.filter((b: any) => b.created_at > lastRead).length : visibleBcs.length
+        const rawContent = latest?.content ?? ''
+        const displayContent = rawContent.trim() ? rawContent.trim() : latest ? '📷 画像' : 'まだ配信がありません'
         return {
           id,
           name: profMap[id]?.display_name ?? '?',
           avatar: profMap[id]?.avatar_url ?? null,
-          last_content: latest?.content ?? 'まだ配信がありません',
+          last_content: displayContent,
           created_at: latest?.created_at ?? new Date(0).toISOString(),
           unread,
           is_official: profMap[id]?.is_official ?? false,
