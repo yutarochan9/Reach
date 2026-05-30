@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, useWindowDimensions } from 'react-native'
+﻿import { useState, useCallback } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, useWindowDimensions, TextInput, Platform } from 'react-native'
 import Svg, {
   Polyline, Circle, Rect, G, Line, Path,
   Defs, LinearGradient as SvgLinearGradient, Stop,
@@ -212,6 +212,9 @@ export default function AnalyticsScreen() {
   const isMobile = width < 900
   const [chartW, setChartW] = useState(0)
   const [menuBc, setMenuBc] = useState<Broadcast | null>(null)
+  // 日時フィルター（YYYY-MM-DD 形式の文字列）
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -317,6 +320,20 @@ export default function AnalyticsScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const formatDate = (iso: string) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}` }
+
+  // 日時フィルターを適用した配信リスト
+  const filteredBroadcasts = broadcasts.filter(bc => {
+    const t = new Date(bc.created_at).getTime()
+    if (dateFrom) {
+      const from = new Date(dateFrom + 'T00:00:00').getTime()
+      if (isNaN(from) || t < from) return false
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59').getTime()
+      if (isNaN(to) || t > to) return false
+    }
+    return true
+  })
   const fmtShort = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K` : String(n)
   const truncate = (s: string, n = 28) => s.length > n ? s.slice(0, n) + '…' : s
 
@@ -516,11 +533,62 @@ export default function AnalyticsScreen() {
 
         {/* ── 配信テーブル ── */}
         <View style={[s.card, { padding: 0, overflow: 'hidden' }]}>
+          {/* タイトル行 */}
           <View style={{ padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={s.cardSectionLabel}>配信ごとの実績</Text>
-            <Text style={[s.badgeText, { color: C.muted }]}>{broadcasts.length} 件</Text>
+            <Text style={[s.badgeText, { color: C.muted }]}>{filteredBroadcasts.length} / {broadcasts.length} 件</Text>
           </View>
 
+          {/* 日時フィルター */}
+          <View style={s.dateFilterRow}>
+            <Ionicons name="calendar-outline" size={14} color={C.muted} />
+            {Platform.OS === 'web' ? (
+              // Web: input type="date" をそのまま使う（ネイティブのカレンダーピッカーが使える）
+              <>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  style={{ fontSize: 12, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', backgroundColor: C.light, outline: 'none', flex: 1 } as any}
+                />
+                <Text style={{ fontSize: 12, color: C.muted }}>〜</Text>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                  style={{ fontSize: 12, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', backgroundColor: C.light, outline: 'none', flex: 1 } as any}
+                />
+              </>
+            ) : (
+              // ネイティブ: テキスト入力（YYYY-MM-DD形式）
+              <>
+                <TextInput
+                  style={s.dateInput}
+                  value={dateFrom}
+                  onChangeText={setDateFrom}
+                  placeholder="2026-01-01"
+                  placeholderTextColor={C.muted}
+                  keyboardType="numbers-and-punctuation"
+                />
+                <Text style={{ fontSize: 12, color: C.muted }}>〜</Text>
+                <TextInput
+                  style={s.dateInput}
+                  value={dateTo}
+                  onChangeText={setDateTo}
+                  placeholder="2026-12-31"
+                  placeholderTextColor={C.muted}
+                  keyboardType="numbers-and-punctuation"
+                />
+              </>
+            )}
+            {(dateFrom || dateTo) && (
+              <TouchableOpacity onPress={() => { setDateFrom(''); setDateTo('') }}>
+                <Ionicons name="close-circle" size={16} color={C.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* テーブルヘッダー（固定） */}
           <View style={s.thRow}>
             <Text style={[s.th, { flex: 1 }]}>内容</Text>
             <Text style={s.th}>日時</Text>
@@ -530,39 +598,48 @@ export default function AnalyticsScreen() {
             <View style={{ width: 28 }} />
           </View>
 
-          {broadcasts.length === 0 ? (
-            <View style={{ alignItems: 'center', padding: 32, gap: 8 }}>
-              <Ionicons name="radio-outline" size={32} color={C.border} />
-              <Text style={{ color: C.muted, fontSize: 13 }}>配信がまだありません</Text>
-            </View>
-          ) : broadcasts.map((bc, idx) => (
-            <TouchableOpacity
-              key={bc.id}
-              style={[s.tdRow, idx % 2 !== 0 && { backgroundColor: C.light }]}
-              onPress={() => router.push(`/broadcast-thread/${bc.id}` as any)}
-              activeOpacity={0.7}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                {bc.block_count > 1 && (
-                  <View style={s.groupBadge}>
-                    <Text style={s.groupBadgeText}>{bc.block_count}件まとめて</Text>
-                  </View>
-                )}
-                <Text style={s.tdText} numberOfLines={1}>{truncate(bc.content)}</Text>
+          {/* テーブルボディ（固定高さ＋スクロール） */}
+          <ScrollView
+            style={s.tableBody}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+          >
+            {filteredBroadcasts.length === 0 ? (
+              <View style={{ alignItems: 'center', padding: 32, gap: 8 }}>
+                <Ionicons name="radio-outline" size={32} color={C.border} />
+                <Text style={{ color: C.muted, fontSize: 13 }}>
+                  {broadcasts.length === 0 ? '配信がまだありません' : '該当する配信がありません'}
+                </Text>
               </View>
-              <Text style={[s.td, { width: 36 }]}>{formatDate(bc.created_at)}</Text>
-              <Text style={[s.td, { width: 30, color: C.accent }]}>{bc.read_count}</Text>
-              <Text style={[s.td, { width: 30, color: C.button }]}>{bc.like_count}</Text>
-              <Text style={[s.td, { width: 30, color: C.muted }]}>{bc.reply_count}</Text>
+            ) : filteredBroadcasts.map((bc, idx) => (
               <TouchableOpacity
-                style={s.menuDotBtn}
-                onPress={(e) => { e.stopPropagation?.(); setMenuBc(bc) }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                key={bc.id}
+                style={[s.tdRow, idx % 2 !== 0 && { backgroundColor: C.light }]}
+                onPress={() => router.push(`/broadcast-thread/${bc.id}` as any)}
+                activeOpacity={0.7}
               >
-                <Ionicons name="ellipsis-vertical" size={16} color={C.muted} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  {bc.block_count > 1 && (
+                    <View style={s.groupBadge}>
+                      <Text style={s.groupBadgeText}>{bc.block_count}件まとめて</Text>
+                    </View>
+                  )}
+                  <Text style={s.tdText} numberOfLines={1}>{truncate(bc.content)}</Text>
+                </View>
+                <Text style={[s.td, { width: 36 }]}>{formatDate(bc.created_at)}</Text>
+                <Text style={[s.td, { width: 30, color: C.accent }]}>{bc.read_count}</Text>
+                <Text style={[s.td, { width: 30, color: C.button }]}>{bc.like_count}</Text>
+                <Text style={[s.td, { width: 30, color: C.muted }]}>{bc.reply_count}</Text>
+                <TouchableOpacity
+                  style={s.menuDotBtn}
+                  onPress={(e) => { e.stopPropagation?.(); setMenuBc(bc) }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="ellipsis-vertical" size={16} color={C.muted} />
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
+            ))}
+          </ScrollView>
         </View>
 
       </ScrollView>
@@ -595,11 +672,11 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: {
     backgroundColor: C.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: C.border,
   },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: C.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: C.text },
   content: { padding: 14, gap: 12, paddingBottom: 48 },
 
   topRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
@@ -683,6 +760,20 @@ const s = StyleSheet.create({
   },
   mbNum: { fontSize: 18, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
   mbLabel: { fontSize: 9, fontWeight: '600', color: C.muted, textAlign: 'center' },
+
+  // 日時フィルター行
+  dateFilterRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingBottom: 10,
+  },
+  dateInput: {
+    flex: 1, fontSize: 12, color: C.text,
+    borderWidth: 1, borderColor: C.border, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: C.light,
+  },
+  // テーブルボディ: 固定高さ＋スクロール（約8行分）
+  tableBody: { maxHeight: 360 },
 
   menuDotBtn: { width: 28, alignItems: 'center', justifyContent: 'center' },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 40 },

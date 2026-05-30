@@ -738,7 +738,7 @@ export default function TalkDetailScreen() {
       data={groups}
       keyExtractor={item => item.anchorId}
       style={{ flex: 1 }}
-      contentContainerStyle={[styles.messageList, tileVisible && { paddingBottom: 8 }]}
+      contentContainerStyle={[styles.messageList, tileVisible && { paddingBottom: 20 }]}
       onContentSizeChange={() => {
         const idx = firstUnreadIndexRef.current
         if (idx > 0 && !initialScrollDoneRef.current) {

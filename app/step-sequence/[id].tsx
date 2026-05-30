@@ -326,7 +326,7 @@ export default function StepSequenceEditScreen() {
         >
           {nameSaving
             ? <ActivityIndicator size="small" color={Colors.accent} />
-            : <Ionicons name="checkmark" size={24} color={Colors.accent} />
+            : <Text style={styles.saveButtonText}>保存</Text>
           }
         </TouchableOpacity>
       </View>
@@ -498,7 +498,8 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.text, textAlign: 'center', paddingVertical: 4, paddingHorizontal: 8 },
-  addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
+  addButton: { padding: 4, minWidth: 40, alignItems: 'flex-end', justifyContent: 'center' },
+  saveButtonText: { fontSize: 15, fontWeight: '700', color: Colors.accent },
 
   bodyRow: { flex: 1, flexDirection: 'row' },
 
