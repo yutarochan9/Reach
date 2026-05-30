@@ -128,7 +128,7 @@ export default function CreatorScreen() {
         'フォローを外すと以下の変更があります：\n\n' +
         '• このアカウントの配信欄が非表示になります\n' +
         '• 「現在のフォロワーのみ」対象の配信が見えなくなります\n' +
-        '• フロー配信（自動メッセージ）の受信が停止します\n\n' +
+        '• フロー配信（自動メッセージ）の受信が停止します（再フォロー時はリセットされます）\n\n' +
         'DM履歴は引き続き確認できます。'
       if (Platform.OS === 'web') {
         if (window.confirm(msg)) await doUnfollow()
