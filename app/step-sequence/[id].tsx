@@ -40,6 +40,7 @@ export default function StepSequenceEditScreen() {
   const { width } = useWindowDimensions()
   const isWide = width >= 768   // タブレット/PCはサイドバイサイド、スマホはエディタのみ
   const [name, setName] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
   const [messages, setMessages] = useState<StepMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [modalVisible, setModalVisible] = useState(false)
@@ -303,12 +304,30 @@ export default function StepSequenceEditScreen() {
         <TouchableOpacity onPress={() => router.replace('/step-sequences' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{name}</Text>
+        <TextInput
+          style={styles.headerTitle}
+          value={name}
+          onChangeText={setName}
+          placeholder="シーケンス名"
+          placeholderTextColor={Colors.textLight}
+          returnKeyType="done"
+          selectTextOnFocus
+        />
         <TouchableOpacity
-          onPress={() => availableDays.length > 0 ? setDayPickerVisible(true) : openNew(0)}
           style={styles.addButton}
+          onPress={async () => {
+            if (!name.trim()) return
+            setNameSaving(true)
+            await supabase.from('step_sequences').update({ name: name.trim() }).eq('id', id)
+            setNameSaving(false)
+            router.replace('/step-sequences' as any)
+          }}
+          disabled={nameSaving}
         >
-          <Ionicons name="add" size={24} color={Colors.accent} />
+          {nameSaving
+            ? <ActivityIndicator size="small" color={Colors.accent} />
+            : <Ionicons name="checkmark" size={24} color={Colors.accent} />
+          }
         </TouchableOpacity>
       </View>
 
@@ -478,7 +497,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.text, textAlign: 'center' },
+  headerTitle: { flex: 1, fontSize: 17, fontWeight: '700', color: Colors.text, textAlign: 'center', paddingVertical: 4, paddingHorizontal: 8 },
   addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
 
   bodyRow: { flex: 1, flexDirection: 'row' },

@@ -167,22 +167,12 @@ export default function CreatorScreen() {
       setIsFollowing(true)
       setFollowerCount(c => c + 1)
 
-      // アクティブなフロー配信シーケンスへ自動エンロール
-      const { data: sequences } = await supabase
-        .from('step_sequences')
-        .select('id')
-        .eq('creator_id', id)
-        .eq('is_active', true)
-      if (sequences?.length) {
-        await supabase.from('step_enrollments').upsert(
-          sequences.map((seq: any) => ({
-            follower_id: myId,
-            creator_id: id,
-            sequence_id: seq.id,
-          })),
-          { onConflict: 'follower_id,sequence_id', ignoreDuplicates: true }
-        )
-      }
+      // フロー配信シーケンスへエンロール＋day_offset=0のメッセージを即時DM送信
+      // SECURITY DEFINER RPC でクリエイター名義のDMを挿入する
+      await supabase.rpc('enroll_step_sequences', {
+        p_creator_id: id,
+        p_follower_id: myId,
+      }).catch(() => {})
     }
   }
 
