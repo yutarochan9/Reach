@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
   Alert, useWindowDimensions, Image, ActivityIndicator, FlatList
@@ -17,10 +17,11 @@ type Block = {
   text: string
   imageUri: string | null
   imageUrl: string | null
+  imageLinkUrl: string   // 画像タップで開くURL（任意）
   uploading: boolean
 }
 
-type Target = 'all' | 'week' | 'month' | 'tag'
+type Target = 'all'
 
 type DraftItem = {
   id: string
@@ -33,11 +34,6 @@ type DraftItem = {
   created_at: string
 }
 
-const TARGET_OPTIONS: { value: Target; label: string; desc: string }[] = [
-  { value: 'all',   label: '全員',    desc: 'フォロワー全員に届けます' },
-  { value: 'week',  label: '直近7日', desc: '7日以内にフォローした人' },
-  { value: 'month', label: '直近30日',desc: '30日以内にフォローした人' },
-]
 
 function genId() { return Math.random().toString(36).slice(2) }
 function genUUID() {
@@ -53,13 +49,10 @@ export default function ComposeScreen() {
   const [activeTab, setActiveTab] = useState<'new' | 'drafts' | 'tools'>('new')
 
   // 新規配信
-  const [blocks, setBlocks] = useState<Block[]>([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-  const [target, setTarget] = useState<Target>('all')
-  const [selectedTag, setSelectedTag] = useState<string>('')
-  const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [blocks, setBlocks] = useState<Block[]>([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
+  const [target] = useState<Target>('all')
   const [scheduledAt, setScheduledAt] = useState('')
   const [showSchedule, setShowSchedule] = useState(false)
-  const [showTarget, setShowTarget] = useState(false)
   const [showReaction, setShowReaction] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
   const [showSubscriber, setShowSubscriber] = useState(false)
@@ -80,6 +73,7 @@ export default function ComposeScreen() {
   const [senderName, setSenderName] = useState('')
   const [userId, setUserId] = useState('')
   const [userPlan, setUserPlan] = useState<'free' | 'standard' | 'pro'>('free')
+  const [hasMembership, setHasMembership] = useState(false) // メンバーシップ設定済みか
   const [monthlyCount, setMonthlyCount] = useState(0)
   const { width } = useWindowDimensions()
   const isWide = width >= 768
@@ -90,18 +84,11 @@ export default function ComposeScreen() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       setUserId(user.id)
-      supabase.from('profiles').select('display_name, plan').eq('id', user.id).single()
+      supabase.from('profiles').select('display_name, plan, membership_active').eq('id', user.id).single()
         .then(({ data }) => {
           setSenderName(data?.display_name ?? '')
           setUserPlan((data?.plan ?? 'free') as 'free' | 'standard' | 'pro')
-          // プロプランの場合タグ一覧を取得
-          if (BETA_MODE || data?.plan === 'pro') {
-            supabase.from('follower_tags').select('tag').eq('creator_id', user.id)
-              .then(({ data: tags }) => {
-                const unique = [...new Set((tags ?? []).map((t: any) => t.tag))]
-                setAvailableTags(unique)
-              })
-          }
+          setHasMembership(data?.membership_active ?? false)
         })
       // 今月の配信数を取得
       const startOfMonth = new Date()
@@ -163,10 +150,10 @@ export default function ComposeScreen() {
       return
     }
 
-    // フォロワーにプッシュ通知
-    const targetVal = (item.target ?? 'all') as Target
+    // フォロワーにプッシュ通知（下書きはセグメント配信含む旧形式も考慮）
+    const targetVal = item.target ?? 'all'
     let q = supabase.from('follows').select('follower_id').eq('following_id', userId)
-    if (targetVal === 'week') q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
+    if (targetVal === 'week')  q = q.gte('created_at', new Date(Date.now() - 7  * 86400000).toISOString())
     if (targetVal === 'month') q = q.gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString())
     const { data: follows } = await q
     const followerIds = (follows ?? []).map((f: any) => f.follower_id)
@@ -200,7 +187,7 @@ export default function ComposeScreen() {
   }
 
   const addBlock = () => {
-    setBlocks(prev => [...prev, { id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
+    setBlocks(prev => [...prev, { id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
   }
 
   const removeBlock = (id: string) => {
@@ -238,18 +225,8 @@ export default function ComposeScreen() {
   const removeImage = (blockId: string) => updateBlock(blockId, { imageUri: null, imageUrl: null })
 
   const getTargetFollowers = async (): Promise<string[]> => {
-    if (target === 'tag' && selectedTag) {
-      const { data } = await supabase
-        .from('follower_tags')
-        .select('follower_id')
-        .eq('creator_id', userId)
-        .eq('tag', selectedTag)
-      return (data ?? []).map((f: any) => f.follower_id)
-    }
-    let q = supabase.from('follows').select('follower_id').eq('following_id', userId)
-    if (target === 'week') q = q.gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString())
-    if (target === 'month') q = q.gte('created_at', new Date(Date.now() - 30 * 86400000).toISOString())
-    const { data } = await q
+    // 通常配信は全フォロワー対象（セグメント配信は /segment-compose で行う）
+    const { data } = await supabase.from('follows').select('follower_id').eq('following_id', userId)
     return (data ?? []).map((f: any) => f.follower_id)
   }
 
@@ -289,7 +266,9 @@ export default function ComposeScreen() {
     const groupId = readyBlocks.length > 1 ? genUUID() : null
     const inserts = readyBlocks.map((b, i) => ({
       sender_id: userId, content: b.text.trim() || '　',
-      image_url: b.imageUrl ?? null, block_order: i,
+      image_url: b.imageUrl ?? null,
+      image_link_url: b.imageLinkUrl.trim() || null,
+      block_order: i,
       status, scheduled_at: scheduledDate?.toISOString() ?? null, target,
       group_id: groupId,
       public_reactions: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? publicReactions : false,
@@ -299,19 +278,30 @@ export default function ComposeScreen() {
     const { error } = await supabase.from('broadcasts').insert(inserts)
     if (error) { Alert.alert('エラー', error.message); asDraft ? setSaving(false) : setLoading(false); return }
     if (status === 'published') {
-      const followerIds = await getTargetFollowers()
-      sendPushToUsers(followerIds, senderName, readyBlocks[0]?.text.trim().slice(0, 80) || '画像が届きました')
+      let notifyIds: string[]
+      if (isSubscriberOnly) {
+        // MB限定配信：サブスクリプション登録者のみに通知
+        const { data: subs } = await supabase
+          .from('subscriptions')
+          .select('subscriber_id')
+          .eq('creator_id', userId)
+          .eq('status', 'active')
+        notifyIds = (subs ?? []).map((s: any) => s.subscriber_id)
+      } else {
+        notifyIds = await getTargetFollowers()
+      }
+      sendPushToUsers(notifyIds, senderName, readyBlocks[0]?.text.trim().slice(0, 80) || '画像が届きました')
       setMonthlyCount(prev => prev + 1)
     }
     if (status === 'draft') {
       Alert.alert('下書き保存', '下書きを保存しました。「下書き・予約」タブから配信できます。')
-      setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
+      setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
+      setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
       setActiveTab('drafts')
     } else if (status === 'scheduled') {
       Alert.alert('予約完了', `${scheduledLabel}に配信予定として保存しました。`)
-      setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, uploading: false }])
-      setTarget('all'); setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
+      setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
+      setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
       setActiveTab('drafts')
     } else {
       // 配信後は自分のトーク画面へ遷移して送信内容を確認できる
@@ -323,7 +313,7 @@ export default function ComposeScreen() {
   // ─── 描画用変数 ──────────────────────────────────────────
   const now = new Date()
   const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-  const targetLabel = target === 'tag' ? (selectedTag ? `🏷 ${selectedTag}` : 'タグ絞込') : (TARGET_OPTIONS.find(t => t.value === target)?.label ?? '全員')
+  const targetLabel = '全員'
   const scheduledLabel = parseScheduledAt()
     ? parseScheduledAt()!.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null
@@ -343,18 +333,14 @@ export default function ComposeScreen() {
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, showTarget && styles.toolBtnActive]} onPress={() => { setShowTarget(v => !v); setShowSchedule(false); setShowReaction(false); setShowArchive(false); setShowSubscriber(false) }}>
-          <Ionicons name="people-outline" size={15} color={showTarget ? Colors.white : Colors.accent} />
-          <Text style={[styles.toolBtnText, showTarget && styles.toolBtnTextActive]} numberOfLines={1}>{targetLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowTarget(false); setShowReaction(false); setShowArchive(false); setShowSubscriber(false) }}>
+        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowReaction(false); setShowArchive(false); setShowSubscriber(false) }}>
           <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
             style={[styles.toolBtn, showReaction && styles.toolBtnActive]}
-            onPress={() => { setShowReaction(v => !v); setShowTarget(false); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
+            onPress={() => { setShowReaction(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
           >
             <Ionicons name="heart-outline" size={15} color={showReaction ? Colors.white : Colors.accent} />
             <Text style={[styles.toolBtnText, showReaction && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -364,16 +350,16 @@ export default function ComposeScreen() {
         )}
         <TouchableOpacity
           style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
-          onPress={() => { setShowArchive(v => !v); setShowTarget(false); setShowSchedule(false); setShowReaction(false); setShowSubscriber(false) }}
+          onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowReaction(false); setShowSubscriber(false) }}
         >
           <Ionicons name="archive-outline" size={15} color={showArchive ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
-            {visibleToNew ? '全期間' : '新規から'}
+            {visibleToNew ? '全員' : '現在のみ'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toolBtn, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
-          onPress={() => { setShowSubscriber(v => !v); setShowTarget(false); setShowSchedule(false); setShowReaction(false); setShowArchive(false) }}
+          onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowReaction(false); setShowArchive(false) }}
         >
           <Ionicons name="lock-closed-outline" size={15} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -381,45 +367,6 @@ export default function ComposeScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-
-      {showTarget && (
-        <View style={styles.optionCard}>
-          <Text style={styles.optionTitle}>配信対象</Text>
-          {TARGET_OPTIONS.map(opt => (
-            <TouchableOpacity key={opt.value} style={[styles.optionRow, target === opt.value && styles.optionRowActive]}
-              onPress={() => { setTarget(opt.value); setShowTarget(false) }}>
-              <View style={styles.optionLeft}>
-                <Text style={[styles.optionLabel, target === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
-                <Text style={styles.optionDesc}>{opt.desc}</Text>
-              </View>
-              {target === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
-            </TouchableOpacity>
-          ))}
-          {(BETA_MODE || userPlan === 'pro') && (
-            <>
-              <View style={styles.optionDivider} />
-              <Text style={styles.optionSectionLabel}>セグメント配信（プロ）</Text>
-              {availableTags.length === 0 ? (
-                <Text style={styles.optionEmptyTag}>フォロワーにタグを付けると絞り込めます</Text>
-              ) : (
-                availableTags.map(tag => (
-                  <TouchableOpacity
-                    key={tag}
-                    style={[styles.optionRow, target === 'tag' && selectedTag === tag && styles.optionRowActive]}
-                    onPress={() => { setTarget('tag'); setSelectedTag(tag); setShowTarget(false) }}
-                  >
-                    <View style={styles.optionLeft}>
-                      <Text style={[styles.optionLabel, target === 'tag' && selectedTag === tag && styles.optionLabelActive]}>🏷 {tag}</Text>
-                      <Text style={styles.optionDesc}>このタグのフォロワーのみ</Text>
-                    </View>
-                    {target === 'tag' && selectedTag === tag && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
-                  </TouchableOpacity>
-                ))
-              )}
-            </>
-          )}
-        </View>
-      )}
 
       {showReaction && (
         <View style={styles.optionCard}>
@@ -444,8 +391,8 @@ export default function ComposeScreen() {
         <View style={styles.optionCard}>
           <Text style={styles.optionTitle}>過去配信の公開範囲</Text>
           {[
-            { value: true,  label: '全期間',   desc: '新規フォロワーもフォロー前の配信を遡れる' },
-            { value: false, label: '新規から', desc: 'フォローした日以降の配信のみ表示する' },
+            { value: true,  label: '全員',         desc: '新規フォロワーも過去の配信を遡って見られる' },
+            { value: false, label: '現在のフォロワーのみ', desc: '今後フォローする人には見せない' },
           ].map(opt => (
             <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, visibleToNew === opt.value && styles.optionRowActive]}
               onPress={() => { setVisibleToNew(opt.value); setShowArchive(false) }}>
@@ -462,22 +409,53 @@ export default function ComposeScreen() {
       {showSubscriber && (
         <View style={styles.optionCard}>
           <Text style={styles.optionTitle}>配信の公開範囲</Text>
-          {[
-            { value: false, label: '全フォロワー', desc: '全フォロワーに配信する' },
-            { value: true,  label: 'メンバーシップ限定', desc: 'メンバーシップ登録者のみに配信する' },
-          ].map(opt => (
-            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, isSubscriberOnly === opt.value && styles.optionRowActive]}
-              onPress={() => { setIsSubscriberOnly(opt.value); setShowSubscriber(false) }}>
+
+          {/* 全フォロワー（常に選択可） */}
+          <TouchableOpacity
+            style={[styles.optionRow, !isSubscriberOnly && styles.optionRowActive]}
+            onPress={() => { setIsSubscriberOnly(false); setShowSubscriber(false) }}
+          >
+            <View style={styles.optionLeft}>
+              <Text style={[styles.optionLabel, !isSubscriberOnly && styles.optionLabelActive]}>全フォロワー</Text>
+              <Text style={styles.optionDesc}>全フォロワーに配信する</Text>
+            </View>
+            {!isSubscriberOnly && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+          </TouchableOpacity>
+
+          {/* メンバーシップ限定（設定済みの場合のみ選択可） */}
+          {hasMembership ? (
+            <TouchableOpacity
+              style={[styles.optionRow, isSubscriberOnly && styles.optionRowActive]}
+              onPress={() => { setIsSubscriberOnly(true); setShowSubscriber(false) }}
+            >
               <View style={styles.optionLeft}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  {opt.value && <Ionicons name="lock-closed" size={13} color={Colors.accent} />}
-                  <Text style={[styles.optionLabel, isSubscriberOnly === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                  <Ionicons name="lock-closed" size={13} color={isSubscriberOnly ? Colors.accent : Colors.text} />
+                  <Text style={[styles.optionLabel, isSubscriberOnly && styles.optionLabelActive]}>メンバーシップ限定</Text>
                 </View>
-                <Text style={styles.optionDesc}>{opt.desc}</Text>
+                <Text style={styles.optionDesc}>メンバーシップ登録者のみに配信する</Text>
               </View>
-              {isSubscriberOnly === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+              {isSubscriberOnly && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
             </TouchableOpacity>
-          ))}
+          ) : (
+            /* メンバーシップ未設定 → 利用不可表示 */
+            <TouchableOpacity
+              style={styles.optionRowDisabled}
+              onPress={() => { setShowSubscriber(false); router.push('/membership-settings' as any) }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.optionLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="lock-closed" size={13} color={Colors.border} />
+                  <Text style={styles.optionLabelDisabled}>メンバーシップ限定</Text>
+                  <View style={styles.optionUnavailableBadge}>
+                    <Text style={styles.optionUnavailableText}>利用不可</Text>
+                  </View>
+                </View>
+                <Text style={styles.optionDesc}>メンバーシップを公開してから利用できます　→ 設定する</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -539,13 +517,28 @@ export default function ComposeScreen() {
             />
           )}
           {block.imageUri && (
-            <View style={styles.imagePreviewWrap}>
-              <Image source={{ uri: block.imageUri }} style={styles.imagePreview} resizeMode="cover" />
-              {block.uploading
-                ? <View style={styles.uploadOverlay}><ActivityIndicator color={Colors.white} /><Text style={styles.uploadText}>アップロード中...</Text></View>
-                : <TouchableOpacity style={styles.imageRemove} onPress={() => removeImage(block.id)}><Ionicons name="close-circle" size={24} color={Colors.white} /></TouchableOpacity>
-              }
-            </View>
+            <>
+              <View style={styles.imagePreviewWrap}>
+                <Image source={{ uri: block.imageUri }} style={styles.imagePreview} resizeMode="cover" />
+                {block.uploading
+                  ? <View style={styles.uploadOverlay}><ActivityIndicator color={Colors.white} /><Text style={styles.uploadText}>アップロード中...</Text></View>
+                  : <TouchableOpacity style={styles.imageRemove} onPress={() => removeImage(block.id)}><Ionicons name="close-circle" size={24} color={Colors.white} /></TouchableOpacity>
+                }
+              </View>
+              {/* 画像タップで開くURLリンク（全プラン利用可） */}
+              <View style={styles.imageLinkRow}>
+                <Ionicons name="link-outline" size={14} color={Colors.textLight} />
+                <TextInput
+                  style={styles.imageLinkInput}
+                  placeholder="タップで開くURL（任意）例: https://youtube.com/..."
+                  placeholderTextColor={Colors.textLight}
+                  value={block.imageLinkUrl}
+                  onChangeText={url => updateBlock(block.id, { imageLinkUrl: url })}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                />
+              </View>
+            </>
           )}
           <View style={styles.blockFooter}>
             <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(block.id)} disabled={block.uploading}>
@@ -837,7 +830,7 @@ export default function ComposeScreen() {
               icon="pricetag-outline"
               label="セグメント配信"
               desc="タグ付けで特定のフォロワーグループに配信"
-              onPress={() => router.push('/followers' as any)}
+              onPress={() => router.push('/segment-compose' as any)}
             />
           </View>
 
@@ -882,7 +875,7 @@ const styles = StyleSheet.create({
 
   pageHeader: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 20, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 20, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
@@ -954,6 +947,19 @@ const styles = StyleSheet.create({
   optionSectionLabel: { fontSize: 11, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 4, paddingVertical: 4 },
   optionEmptyTag: { fontSize: 12, color: Colors.textLight, padding: 8, textAlign: 'center' },
 
+  // メンバーシップ未設定時の「利用不可」行
+  optionRowDisabled: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8,
+    opacity: 0.6,
+  },
+  optionLabelDisabled: { fontSize: 14, fontWeight: '600', color: Colors.textLight },
+  optionUnavailableBadge: {
+    backgroundColor: Colors.border, borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  optionUnavailableText: { fontSize: 10, fontWeight: '700', color: Colors.textLight },
+
   scheduleInput: {
     backgroundColor: Colors.background, borderRadius: 8,
     paddingHorizontal: 14, paddingVertical: 10,
@@ -994,6 +1000,28 @@ const styles = StyleSheet.create({
   },
   uploadText: { color: Colors.white, fontSize: 12 },
   imageRemove: { position: 'absolute', top: 8, right: 8 },
+  imageLinkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingBottom: 8,
+  },
+  imageLinkInput: {
+    flex: 1, fontSize: 13, color: Colors.text,
+    backgroundColor: Colors.background, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  imageLinkRowLocked: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, paddingBottom: 8,
+  },
+  imageLinkLockedText: {
+    flex: 1, fontSize: 13, color: Colors.textLight,
+  },
+  imageLinkProBadge: {
+    backgroundColor: '#8B4513', borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  imageLinkProBadgeText: { fontSize: 10, fontWeight: '800', color: Colors.white },
 
   blockFooter: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

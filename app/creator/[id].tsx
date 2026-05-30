@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking, Modal, TextInput, Platform } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import Head from 'expo-router/head'
@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { BETA_MODE } from '../../constants/config'
 
-const FREE_FOLLOWER_LIMIT = 500
+const FREE_FOLLOWER_LIMIT = 10000
 
 const SNS_FIELDS = [
   { key: 'x', label: 'X', icon: 'logo-twitter' as const },
@@ -27,6 +27,8 @@ type Profile = {
   username: string | null
   sns_links: Record<string, string> | null
   plan: string
+  membership_active: boolean | null
+  is_private: boolean | null
 }
 
 
@@ -36,6 +38,8 @@ export default function CreatorScreen() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [followerCount, setFollowerCount] = useState(0)
   const [isFollowing, setIsFollowing] = useState(false)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [followRequestStatus, setFollowRequestStatus] = useState<'none' | 'pending' | 'approved' | 'rejected'>('none')
   const [creatorPlan, setCreatorPlan] = useState<string>('free')
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -50,8 +54,8 @@ export default function CreatorScreen() {
     const { data: { user } } = await supabase.auth.getUser()
     setMyId(user?.id ?? null)
 
-    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }, mySubResult] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', id).single(),
+    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }, mySubResult, myRequestResult] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, membership_active, is_private').eq('id', id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', id),
       user
         ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
@@ -60,12 +64,17 @@ export default function CreatorScreen() {
       user
         ? supabase.from('subscriptions').select('subscriber_id').eq('subscriber_id', user.id).eq('creator_id', id).eq('status', 'active').maybeSingle()
         : Promise.resolve({ data: null }),
+      user
+        ? supabase.from('follow_requests').select('status').eq('requester_id', user.id).eq('target_id', id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
 
     setProfile(prof)
     setCreatorPlan(prof?.plan ?? 'free')
+    setIsPrivate(prof?.is_private ?? false)
     setFollowerCount((follows ?? []).length)
     setIsFollowing(!!(myFollowResult as any)?.data)
+    setFollowRequestStatus((myRequestResult as any)?.data?.status ?? 'none')
     setRichMenu(menu && menu.is_active ? menu : null)
     setIsSubscriber(!!(mySubResult as any)?.data)
     setLoading(false)
@@ -75,15 +84,19 @@ export default function CreatorScreen() {
     if (!myId) { router.push('/(auth)/login' as any); return }
     if (isSubscriber) {
       // 退会確認
-      Alert.alert('メンバーシップを退会', 'メンバーシップを退会しますか？', [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '退会する', style: 'destructive', onPress: async () => {
-            await supabase.from('subscriptions').delete().eq('subscriber_id', myId).eq('creator_id', id)
-            setIsSubscriber(false)
-          }
-        },
-      ])
+      Alert.alert(
+        'メンバーシップを退会',
+        'メンバーシップを退会しますか？\n\n⚠ 退会するとメンバーシップ限定コンテンツはトーク画面から即座に消えます。',
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          {
+            text: '退会する', style: 'destructive', onPress: async () => {
+              await supabase.from('subscriptions').delete().eq('subscriber_id', myId).eq('creator_id', id)
+              setIsSubscriber(false)
+            }
+          },
+        ]
+      )
     } else {
       // 加入フローへ
       router.push({ pathname: '/membership/[creatorId]' as any, params: { creatorId: id } })
@@ -104,7 +117,21 @@ export default function CreatorScreen() {
       await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', id)
       setIsFollowing(false)
       setFollowerCount(c => c - 1)
+    } else if (isPrivate) {
+      // 鍵垢の場合はフォローリクエストを送る
+      if (followRequestStatus === 'pending') {
+        // リクエスト取り消し
+        await supabase.from('follow_requests').delete().eq('requester_id', myId).eq('target_id', id)
+        setFollowRequestStatus('none')
+      } else {
+        await supabase.from('follow_requests').upsert(
+          { requester_id: myId, target_id: id, status: 'pending' },
+          { onConflict: 'requester_id,target_id' }
+        )
+        setFollowRequestStatus('pending')
+      }
     } else {
+      // 通常フォロー
       // フォロワー上限チェック（無料プランは500人まで・ベータ期間中はスキップ）
       if (!BETA_MODE && creatorPlan === 'free' && followerCount >= FREE_FOLLOWER_LIMIT) {
         Alert.alert(
@@ -274,37 +301,43 @@ export default function CreatorScreen() {
               {myId ? (
                 <>
                   <TouchableOpacity
-                    style={[styles.followButton, isFollowing && styles.followingButton]}
+                    style={[styles.followButton, (isFollowing || followRequestStatus === 'pending') && styles.followingButton]}
                     onPress={handleFollow}
                   >
                     {isFollowing
                       ? <><Ionicons name="checkmark" size={16} color={Colors.accent} /><Text style={styles.followingButtonText}>フォロー中</Text></>
-                      : <><Ionicons name="add" size={16} color={Colors.accent} /><Text style={styles.followButtonText}>フォローする</Text></>
+                      : followRequestStatus === 'pending'
+                        ? <><Ionicons name="time-outline" size={16} color={Colors.accent} /><Text style={styles.followingButtonText}>リクエスト中</Text></>
+                        : isPrivate
+                          ? <><Ionicons name="lock-closed-outline" size={16} color={Colors.accent} /><Text style={styles.followButtonText}>フォローリクエスト</Text></>
+                          : <><Ionicons name="add" size={16} color={Colors.accent} /><Text style={styles.followButtonText}>フォローする</Text></>
                     }
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.talkButton}
                     onPress={() => router.push(`/talk/${id}` as any)}
                   >
-                    <Ionicons name="chatbubbles" size={18} color={Colors.accent} />
-                    <Text style={styles.talkButtonText}>メッセージ</Text>
+                    <Ionicons name="radio-outline" size={16} color={Colors.accent} />
+                    <Text style={styles.talkButtonText}>配信</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.dmButton}
                     onPress={() => router.push({ pathname: '/im/[userId]' as any, params: { userId: id } })}
                   >
-                    <Ionicons name="chatbubble-outline" size={18} color={Colors.accent} />
+                    <Ionicons name="chatbubble-outline" size={16} color={Colors.accent} />
                     <Text style={styles.dmButtonText}>DM</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.membershipButton, isSubscriber && styles.membershipButtonActive]}
-                    onPress={handleMembershipToggle}
-                  >
-                    <Ionicons name="star" size={16} color={isSubscriber ? Colors.accent : Colors.white} />
-                    <Text style={[styles.membershipButtonText, isSubscriber && styles.membershipButtonTextActive]}>
-                      {isSubscriber ? '登録中' : 'MB加入'}
-                    </Text>
-                  </TouchableOpacity>
+                  {(profile.membership_active || isSubscriber) && (
+                    <TouchableOpacity
+                      style={[styles.membershipButton, isSubscriber && styles.membershipButtonActive]}
+                      onPress={handleMembershipToggle}
+                    >
+                      <Ionicons name="star" size={16} color={Colors.accent} />
+                      <Text style={[styles.membershipButtonText, isSubscriber && styles.membershipButtonTextActive]}>
+                        {isSubscriber ? '登録中' : 'メンバー'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </>
               ) : (
                 <TouchableOpacity
@@ -373,7 +406,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: 36,
     paddingHorizontal: 16,
     paddingBottom: 14,
     flexDirection: 'row',
@@ -383,7 +416,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   list: { paddingBottom: 32 },
   profileSection: { alignItems: 'center', padding: 24, gap: 8 },
   avatarWrap: { marginBottom: 4 },
@@ -410,39 +443,39 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 18, fontWeight: '700', color: Colors.text },
   statLabel: { fontSize: 12, color: Colors.textLight },
   statDivider: { width: 1, height: 28, backgroundColor: Colors.border },
-  actionButtons: { flexDirection: 'row', gap: 8, marginTop: 8, width: '100%' },
+  actionButtons: { flexDirection: 'row', gap: 6, marginTop: 8, width: '100%' },
   // 全ボタン共通: 白背景 + アクセントボーダー
   followButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
-    borderRadius: 12, paddingVertical: 11,
+    borderRadius: 12, paddingVertical: 10,
   },
   followingButton: {
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
   },
-  followButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
-  followingButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  followButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 12 },
+  followingButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 12 },
   talkButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
-    borderRadius: 12, paddingVertical: 11,
+    borderRadius: 12, paddingVertical: 10,
   },
-  talkButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  talkButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 12 },
   dmButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
-    borderRadius: 12, paddingVertical: 11,
+    borderRadius: 12, paddingVertical: 10,
   },
-  dmButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 14 },
+  dmButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 12 },
   membershipButton: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
-    borderRadius: 12, paddingVertical: 11,
+    borderRadius: 12, paddingVertical: 10,
   },
   membershipButtonActive: {
     backgroundColor: Colors.white, borderWidth: 1.5, borderColor: Colors.accent,
   },
-  membershipButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 13 },
+  membershipButtonText: { color: Colors.accent, fontWeight: '700', fontSize: 12 },
   membershipButtonTextActive: { color: Colors.accent },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, marginTop: 16, alignSelf: 'flex-start' },
   richMenuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', marginTop: 8 },

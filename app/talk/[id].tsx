@@ -29,6 +29,7 @@ type Broadcast = {
   id: string
   content: string
   image_url: string | null
+  image_link_url: string | null
   created_at: string
   block_order: number
   group_id: string | null
@@ -64,6 +65,8 @@ export default function TalkDetailScreen() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [isSubscriber, setIsSubscriber] = useState(false)
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
+  // 画像の自然サイズキャッシュ（URL → {w, h}）
+  const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
@@ -73,6 +76,8 @@ export default function TalkDetailScreen() {
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const firstUnreadIndexRef = useRef<number>(-1)   // 最初の未読グループのインデックス（-1=全既読）
+  const initialScrollDoneRef = useRef(false)        // 初回スクロール済みフラグ
   // メッセージグループのDOM要素をシェア用にキャッシュ（id → DOM node）
   const groupRefs = useRef<Map<string, any>>(new Map())
   // フッター（タイムスタンプ+シェアボタン）のDOM要素キャッシュ（キャプチャ前に非表示にする）
@@ -134,7 +139,7 @@ export default function TalkDetailScreen() {
       const [{ data: profile }, { data: broadcasts }, myFollowResult] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username').eq('id', senderId).single(),
         supabase.from('broadcasts')
-          .select('id, content, image_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
+          .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId)
           .eq('status', 'published')
           .order('created_at', { ascending: true }),
@@ -220,20 +225,37 @@ export default function TalkDetailScreen() {
       setGroups(result)
 
       if (user && !self && bcIds.length > 0) {
-        await supabase.from('talk_reads').upsert(
-          { user_id: user.id, sender_id: senderId, last_read_at: new Date().toISOString() },
-          { onConflict: 'user_id,sender_id' }
-        )
         const alreadyRead = new Set(
           (reads ?? []).filter((r: any) => r.user_id === user.id).map((r: any) => r.broadcast_id)
         )
         const toMark = bcIds.filter(id => !alreadyRead.has(id))
+
+        // 最初の未読グループ���インデックスを記録（スクロール用）
+        if (!initialScrollDoneRef.current) {
+          let firstUnread = -1
+          for (let i = 0; i < result.length; i++) {
+            if (!alreadyRead.has(result[i].anchorId)) {
+              firstUnread = i
+              break
+            }
+          }
+          firstUnreadIndexRef.current = firstUnread
+        }
+
+        // 既読マーク（talk_reads + broadcast_reads）
+        await supabase.from('talk_reads').upsert(
+          { user_id: user.id, sender_id: senderId, last_read_at: new Date().toISOString() },
+          { onConflict: 'user_id,sender_id' }
+        )
         if (toMark.length > 0) {
           await supabase.from('broadcast_reads').upsert(
             toMark.map(id => ({ broadcast_id: id, user_id: user.id })),
             { onConflict: 'broadcast_id,user_id' }
           )
         }
+
+        // トーク一覧のバッジをクリアするためにAsyncStorageへ記録
+        await AsyncStorage.setItem('last_read_talk', senderId)
       }
     } catch (e) {
       console.error('talk/[id] load error:', e)
@@ -243,6 +265,52 @@ export default function TalkDetailScreen() {
   }, [senderId])
 
   useEffect(() => { load() }, [load])
+
+  // groups が更新されたら、含まれる画像URLのサイズを取得
+  useEffect(() => {
+    const urls = groups.flatMap(g =>
+      g.blocks.map(b => b.image_url).filter((u): u is string => !!u)
+    )
+    urls.forEach(url => {
+      setImageSizes(prev => {
+        if (prev[url]) return prev          // 既に取得済みならスキップ
+        Image.getSize(url, (w, h) => {
+          setImageSizes(p => ({ ...p, [url]: { w, h } }))
+        }, () => {})
+        return prev
+      })
+    })
+  }, [groups])
+
+  // 画像サイズ確定後も最下部へスクロール（全既読・自分の配信の場合）
+  // 画像が非同期で読み込まれると onContentSizeChange が追従しないことがあるため
+  useEffect(() => {
+    if (firstUnreadIndexRef.current <= 0 && groups.length > 0) {
+      flatListRef.current?.scrollToEnd({ animated: false })
+    }
+  }, [imageSizes])
+
+  // ロード完了後に複数回スクロール
+  // OGPリンクプレビュー・画像など子コンポーネント内の非同期ロードを拾うため
+  // 300ms・1000ms・2500ms の3段階でスクロールし直す
+  useEffect(() => {
+    if (!loading && firstUnreadIndexRef.current <= 0 && groups.length > 0) {
+      const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300)
+      const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 1000)
+      const t3 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 2500)
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+    }
+  }, [loading, groups.length])
+
+  // URL と最大幅からアスペクト比を保ったサイズを返す
+  const getImgStyle = (url: string, maxW: number) => {
+    const size = imageSizes[url]
+    if (!size) return { width: maxW, height: Math.round(maxW * 9 / 16) }  // デフォルト16:9
+    const ratio = size.h / size.w
+    const w = Math.min(maxW, size.w)
+    const h = Math.min(Math.round(w * ratio), 360)   // 縦長でも最大360px
+    return { width: w, height: h }
+  }
 
   // richMenu が確定したら画像を事前ロードし、全部揃ったら一斉表示
   useEffect(() => {
@@ -301,6 +369,7 @@ export default function TalkDetailScreen() {
           if (bc.is_subscriber_only && !isSelf && !isSubscriber) return
           const newBlock: Broadcast = {
             id: bc.id, content: bc.content, image_url: bc.image_url ?? null,
+            image_link_url: bc.image_link_url ?? null,
             created_at: bc.created_at, block_order: bc.block_order,
             group_id: bc.group_id ?? null, public_reactions: bc.public_reactions ?? false,
             is_subscriber_only: bc.is_subscriber_only ?? false,
@@ -540,14 +609,25 @@ export default function TalkDetailScreen() {
     if (!myId) { router.push('/(auth)/login' as any); return }
     if (isSelf) return
     if (isSubscriber) {
-      // 退会：subscriptions レコードを削除
-      await supabase.from('subscriptions')
-        .delete()
-        .eq('subscriber_id', myId)
-        .eq('creator_id', senderId)
-      setIsSubscriber(false)
-      // サブスク限定メッセージをリストから除外
-      setGroups(prev => prev.filter(g => !g.is_subscriber_only))
+      // 退会：コンテンツが消える旨を警告してから削除
+      Alert.alert(
+        'メンバーシップを退会',
+        '退会すると、メンバーシップ限定コンテンツはこの画面から即座に消えます。\n\nよろしいですか？',
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          {
+            text: '退会する', style: 'destructive', onPress: async () => {
+              await supabase.from('subscriptions')
+                .delete()
+                .eq('subscriber_id', myId)
+                .eq('creator_id', senderId)
+              setIsSubscriber(false)
+              // 限定コンテンツを即時非表示
+              setGroups(prev => prev.filter(g => !g.is_subscriber_only))
+            }
+          },
+        ]
+      )
     } else {
       // 加入：subscriptions にレコード挿入
       const { error } = await supabase.from('subscriptions').insert({
@@ -611,7 +691,28 @@ export default function TalkDetailScreen() {
       keyExtractor={item => item.anchorId}
       style={{ flex: 1 }}
       contentContainerStyle={styles.messageList}
-      onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+      onContentSizeChange={() => {
+        const idx = firstUnreadIndexRef.current
+        if (idx > 0 && !initialScrollDoneRef.current) {
+          // 未読あり → 最初の未読位置へ1回だけスクロール
+          initialScrollDoneRef.current = true
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: idx, animated: false, viewPosition: 0 })
+          }, 50)
+        } else if (idx <= 0) {
+          // 全既読・自分の配信 → 常に最下部へ（画像・プレビュー読み込み後も追従）
+          flatListRef.current?.scrollToEnd({ animated: false })
+        }
+      }}
+      onScrollToIndexFailed={(info) => {
+        // アイテムが未描画の場合は推定位置へスクロール
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({
+            offset: info.averageItemLength * info.index,
+            animated: false,
+          })
+        }, 100)
+      }}
       ListEmptyComponent={() => (
         <View style={styles.emptyWrap}>
           <Ionicons name="radio-outline" size={48} color={Colors.border} />
@@ -648,7 +749,8 @@ export default function TalkDetailScreen() {
                   }
                 </View>
                 <View style={styles.blocksWrap}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {/* 送信者名 + メンバーシップバッジ（web対応でflexWrap） */}
+                  <View style={styles.senderNameRow}>
                     <Text style={styles.senderNameLabel}>{senderName}</Text>
                     {group.is_subscriber_only && (
                       <View style={styles.subscriberBadge}>
@@ -660,12 +762,50 @@ export default function TalkDetailScreen() {
                   {group.blocks.map((block, idx) => {
                     const urlMatch = block.content.match(/(https?:\/\/[^\s]+)/)
                     const linkUrl = urlMatch?.[1] ?? null
+                    const hasText = block.content.trim() && block.content !== '　'
+                    const isImageOnly = !!block.image_url && !hasText
+
+                    const openImgLink = () => {
+                      if (!block.image_link_url) return
+                      if (isWeb && typeof window !== 'undefined') {
+                        window.open(block.image_link_url, '_blank', 'noopener')
+                      } else {
+                        Linking.openURL(block.image_link_url).catch(() => {})
+                      }
+                    }
+
+                    if (isImageOnly) {
+                      // 画像のみ → 吹き出しなし、画像だけ表示
+                      const imgDims = getImgStyle(block.image_url!, Math.min(Math.floor(width * 0.72), 300))
+                      const imgEl = (
+                        <Image
+                          source={{ uri: block.image_url! }}
+                          style={[styles.broadcastImageOnly, imgDims, idx > 0 && { marginTop: 4 }]}
+                          resizeMode="cover"
+                        />
+                      )
+                      return block.image_link_url ? (
+                        <TouchableOpacity key={block.id} onPress={openImgLink} activeOpacity={0.85}>
+                          {imgEl}
+                        </TouchableOpacity>
+                      ) : (
+                        <View key={block.id}>{imgEl}</View>
+                      )
+                    }
+
+                    const imgDims = block.image_url ? getImgStyle(block.image_url, Math.min(Math.floor(width * 0.72), 300)) : null
                     return (
                       <View key={block.id} style={[styles.broadcastBubble, idx > 0 && { marginTop: 4 }]}>
                         {block.image_url && (
-                          <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
+                          block.image_link_url ? (
+                            <TouchableOpacity onPress={openImgLink} activeOpacity={0.85}>
+                              <Image source={{ uri: block.image_url }} style={[styles.broadcastImage, imgDims!]} resizeMode="cover" />
+                            </TouchableOpacity>
+                          ) : (
+                            <Image source={{ uri: block.image_url }} style={[styles.broadcastImage, imgDims!]} resizeMode="cover" />
+                          )
                         )}
-                        {block.content.trim() && block.content !== '　' && (
+                        {hasText && (
                           <LinkifiedText
                             text={block.content}
                             textStyle={styles.broadcastText}
@@ -1168,11 +1308,16 @@ const styles = StyleSheet.create({
   broadcastAvatarImg: { width: 36, height: 36, borderRadius: 18 },
   broadcastAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   blocksWrap: { flex: 1, flexShrink: 1 },
-  senderNameLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 3, fontWeight: '600' },
+  // 送信者名 + バッジ行（web で flexWrap して確実に表示）
+  senderNameRow: {
+    flexDirection: 'row', alignItems: 'center',
+    flexWrap: 'wrap', gap: 5, marginBottom: 3,
+  },
+  senderNameLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
   subscriberBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     backgroundColor: Colors.accent, borderRadius: 4,
-    paddingHorizontal: 5, paddingVertical: 2, marginBottom: 3,
+    paddingHorizontal: 5, paddingVertical: 2,
   },
   subscriberBadgeText: { fontSize: 9, color: Colors.white, fontWeight: '700' },
   broadcastBubble: {
@@ -1181,7 +1326,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1,
     alignSelf: 'flex-start', maxWidth: '60%',
   },
-  broadcastImage: { width: 220, height: 160, borderRadius: 12, marginBottom: 4 },
+  // 吹き出し内の画像（サイズはgetImgStyleで動的計算）
+  broadcastImage: { borderRadius: 8, marginBottom: 4 },
+  // 画像のみメッセージ（吹き出しなし）
+  broadcastImageOnly: {
+    borderRadius: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+  },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
   broadcastLink: { color: '#1D9BF0', textDecorationLine: 'underline' },
   bubbleFooter: {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import ToggleSwitch from './components/ToggleSwitch'
@@ -14,6 +14,8 @@ const PLAN_COLORS: Record<Plan, string> = { free: Colors.textLight, standard: Co
 export default function SettingsScreen() {
   const [email, setEmail] = useState<string | null>(null)
   const [pushEnabled, setPushEnabled] = useState(true)
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [savingPrivate, setSavingPrivate] = useState(false)
   const [plan, setPlan] = useState<Plan>('free')
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -27,16 +29,27 @@ export default function SettingsScreen() {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('push_enabled, plan, subscription_status, is_admin')
+      .select('push_enabled, plan, subscription_status, is_admin, is_private')
       .eq('id', user.id)
       .single()
 
     setPushEnabled(profile?.push_enabled ?? true)
+    setIsPrivate(profile?.is_private ?? false)
     setPlan(BETA_MODE ? 'pro' : (profile?.plan ?? 'free') as Plan)
     setSubscriptionStatus(profile?.subscription_status ?? null)
     setIsAdmin(profile?.is_admin ?? false)
     setLoading(false)
   }, [])
+
+  const handlePrivateToggle = async (val: boolean) => {
+    setSavingPrivate(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('profiles').update({ is_private: val }).eq('id', user.id)
+    }
+    setIsPrivate(val)
+    setSavingPrivate(false)
+  }
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
@@ -179,6 +192,32 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        <Text style={styles.sectionLabel}>プライバシー</Text>
+        <View style={styles.section}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <Ionicons name="lock-closed-outline" size={18} color={Colors.accent} />
+              <View>
+                <Text style={styles.toggleLabel}>鍵アカウント</Text>
+                <Text style={styles.toggleDesc}>フォローに承認が必要になります</Text>
+              </View>
+            </View>
+            <ToggleSwitch
+              value={isPrivate}
+              onValueChange={handlePrivateToggle}
+              disabled={savingPrivate}
+            />
+          </View>
+          {isPrivate && (
+            <><View style={styles.divider} />
+            <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/follow-requests' as any)}>
+              <Ionicons name="people-outline" size={18} color={Colors.accent} />
+              <Text style={styles.actionLabel}>フォローリクエストを管理</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+            </TouchableOpacity></>
+          )}
+        </View>
+
         <Text style={styles.sectionLabel}>セキュリティ</Text>
         <View style={styles.section}>
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/security' as any)}>
@@ -203,6 +242,12 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionLabel}>サポート</Text>
         <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/support' as any)}>
+            <Ionicons name="heart-outline" size={18} color="#E05555" />
+            <Text style={[styles.actionLabel, { color: Colors.text }]}>開発を応援する</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/contact' as any)}>
             <Ionicons name="chatbubble-ellipses-outline" size={18} color={Colors.accent} />
             <Text style={styles.actionLabel}>お問い合わせ</Text>
@@ -248,7 +293,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: 36,
     paddingHorizontal: 16,
     paddingBottom: 14,
     flexDirection: 'row',
@@ -258,7 +303,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 16, gap: 8 },
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: Colors.textLight,

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, ActivityIndicator, Clipboard, Linking, Platform, PanResponder, Share } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
@@ -132,13 +132,31 @@ export default function MyPageScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [cropVisible, setCropVisible] = useState(false)
   const [cropUri, setCropUri] = useState<string | null>(null)
+  // 鍵アカウント & フォローリクエスト待ち件数
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [pendingFollowCount, setPendingFollowCount] = useState(0)
+
   const load = useCallback(async () => {
     const { data } = await supabase.auth.getUser()
     if (!data.user) return
     setUser(data.user)
-    const { data: prof } = await supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan').eq('id', data.user.id).single()
+    const { data: prof } = await supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, is_private').eq('id', data.user.id).single()
     setProfile(prof)
+    setIsPrivate(prof?.is_private ?? false)
   }, [])
+
+  // フォーカス時にフォローリクエスト待ち件数を更新
+  useFocusEffect(useCallback(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return
+      supabase
+        .from('follow_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('target_id', data.user.id)
+        .eq('status', 'pending')
+        .then(({ count }) => setPendingFollowCount(count ?? 0))
+    })
+  }, []))
 
   useEffect(() => { load() }, [load])
 
@@ -339,6 +357,23 @@ const openEdit = () => {
           </TouchableOpacity>
         </View>
 
+        {isPrivate && pendingFollowCount > 0 && (
+          <TouchableOpacity
+            style={styles.followRequestBanner}
+            onPress={() => router.push('/follow-requests' as any)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.followRequestLeft}>
+              <Ionicons name="people-outline" size={20} color={Colors.white} />
+              <Text style={styles.followRequestText}>フォローリクエスト</Text>
+            </View>
+            <View style={styles.followRequestBadge}>
+              <Text style={styles.followRequestBadgeText}>{pendingFollowCount}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.white} />
+          </TouchableOpacity>
+        )}
+
         <View style={styles.menuSection}>
           <MenuItem icon="create-outline" label="プロフィール編集" onPress={openEdit} />
           <MenuItem icon="bar-chart-outline" label="分析" onPress={() => router.push('/analytics' as any)} />
@@ -490,13 +525,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: 36,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: Colors.accent },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
   content: { padding: 16, gap: 16 },
   profileCard: {
     backgroundColor: Colors.white,
@@ -539,6 +574,22 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   shareIdText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  // フォローリクエスト待ちバナー
+  followRequestBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: Colors.accent, borderRadius: 14,
+    paddingHorizontal: 16, paddingVertical: 14,
+    marginBottom: 8,
+  },
+  followRequestLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  followRequestText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  followRequestBadge: {
+    backgroundColor: Colors.white, borderRadius: 12,
+    minWidth: 24, height: 24, paddingHorizontal: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  followRequestBadgeText: { fontSize: 13, fontWeight: '800', color: Colors.accent },
+
   menuSection: {
     backgroundColor: Colors.white,
     borderRadius: 16,
@@ -566,7 +617,7 @@ const styles = StyleSheet.create({
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: 36,
     paddingHorizontal: 16,
     paddingBottom: 14,
     flexDirection: 'row',
