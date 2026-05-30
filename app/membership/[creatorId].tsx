@@ -16,19 +16,20 @@ type Profile = {
   membership_price: number | null
   membership_benefits: string[] | null
   membership_welcome: string | null
+  membership_community: boolean | null
 }
 
 const DEFAULT_PRICE = 500
 
 const DEFAULT_BENEFITS = [
-  { icon: 'lock-closed-outline' as const, title: 'メンバーシップ限定配信', desc: 'メンバー専用の限定コンテンツをすべて閲覧できます' },
-  { icon: 'star-outline' as const, title: '優先サポート', desc: 'クリエーターへの優先アクセスが得られます' },
-  { icon: 'heart-outline' as const, title: 'コミュニティ参加', desc: 'メンバー限定のコミュニティに参加できます' },
-  { icon: 'notifications-outline' as const, title: '最新情報をいち早く', desc: '最新の配信をいち早くお届けします' },
+  { title: 'メンバーシップ限定配信へのアクセス' },
+  { title: 'DMで優先的に返信' },
+  { title: '最新情報をいち早くお届け' },
 ]
 
 const BENEFIT_ICONS = [
-  'lock-closed-outline', 'star-outline', 'heart-outline', 'notifications-outline',
+  'lock-closed-outline', 'chatbubble-ellipses-outline', 'notifications-outline',
+  'star-outline', 'people-outline',
 ] as const
 
 export default function MembershipPage() {
@@ -43,7 +44,7 @@ export default function MembershipPage() {
       setMyId(user?.id ?? null)
       const { data } = await supabase
         .from('profiles')
-        .select('id, display_name, bio, avatar_url, membership_price, membership_benefits, membership_welcome')
+        .select('id, display_name, bio, avatar_url, membership_price, membership_benefits, membership_welcome, membership_community')
         .eq('id', creatorId)
         .single()
       setProfile(data)
@@ -65,13 +66,18 @@ export default function MembershipPage() {
   const price = profile.membership_price ?? DEFAULT_PRICE
 
   // DB設定の特典があればそれを使う、なければデフォルト
-  const benefits = profile.membership_benefits && profile.membership_benefits.length > 0
-    ? profile.membership_benefits.map((title, i) => ({
-        icon: BENEFIT_ICONS[i % BENEFIT_ICONS.length],
-        title,
-        desc: '',
-      }))
-    : DEFAULT_BENEFITS
+  // コミュニティが有効なら末尾に追加
+  const benefitTitles = profile.membership_benefits && profile.membership_benefits.length > 0
+    ? profile.membership_benefits
+    : DEFAULT_BENEFITS.map(b => b.title)
+  const allBenefitTitles = profile.membership_community
+    ? [...benefitTitles, 'メンバーシップ限定コミュニティへの参加']
+    : benefitTitles
+  const benefits = allBenefitTitles.map((title, i) => ({
+    icon: BENEFIT_ICONS[i % BENEFIT_ICONS.length],
+    title,
+    desc: '',
+  }))
 
   const handleJoin = () => {
     if (!myId) { router.push('/(auth)/login' as any); return }
