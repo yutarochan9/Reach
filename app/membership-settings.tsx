@@ -11,27 +11,17 @@ import ToggleSwitch from './components/ToggleSwitch'
 
 // ── 価格プラン ─────────────────────────────────────────────
 const PRICE_OPTIONS = [
-  { value: 500,  label: '¥500',   desc: '気軽に始めやすい' },
-  { value: 1000, label: '¥1,000', desc: 'スタンダード' },
-  { value: 3000, label: '¥3,000', desc: 'プレミアム' },
+  { value: 500,  label: '¥500' },
+  { value: 1000, label: '¥1,000' },
+  { value: 3000, label: '¥3,000' },
 ]
 
 // ── デフォルト特典 ─────────────────────────────────────────
-// 「優先サポート」は曖昧なので、Reachでは「DMで優先的に返信」が具体的な意味
 const DEFAULT_BENEFITS = [
   'メンバーシップ限定配信へのアクセス',
-  'DMで優先的に返信',
+  '優先サポート',
   '最新情報をいち早くお届け',
 ]
-
-// プレビュー用アイコン（設定の順番に対応）
-const BENEFIT_ICONS = [
-  'lock-closed-outline',
-  'chatbubble-ellipses-outline',
-  'notifications-outline',
-  'star-outline',
-  'people-outline',  // コミュニティ用
-] as const
 
 export default function MembershipSettingsScreen() {
   const [userId, setUserId] = useState<string | null>(null)
@@ -40,13 +30,12 @@ export default function MembershipSettingsScreen() {
   const [memberCount, setMemberCount] = useState(0)
 
   // 設定値
-  const [isActive, setIsActive]           = useState(false)
-  const [price, setPrice]                 = useState(500)
-  const [benefit1, setBenefit1]           = useState(DEFAULT_BENEFITS[0])
-  const [benefit2, setBenefit2]           = useState(DEFAULT_BENEFITS[1])
-  const [benefit3, setBenefit3]           = useState(DEFAULT_BENEFITS[2])
-  const [benefit4, setBenefit4]           = useState('')
-  const [includeCommunity, setIncludeCommunity] = useState(false)
+  const [isActive, setIsActive]         = useState(false)
+  const [price, setPrice]               = useState(500)
+  const [benefit1, setBenefit1]         = useState(DEFAULT_BENEFITS[0])
+  const [benefit2, setBenefit2]         = useState(DEFAULT_BENEFITS[1])
+  const [benefit3, setBenefit3]         = useState(DEFAULT_BENEFITS[2])
+  const [benefit4, setBenefit4]         = useState('')
   const [welcomeMessage, setWelcomeMessage] = useState('')
 
   useEffect(() => {
@@ -70,7 +59,6 @@ export default function MembershipSettingsScreen() {
         const saved = prof.membership_price ?? 500
         setPrice(PRICE_OPTIONS.some(p => p.value === saved) ? saved : 500)
         setWelcomeMessage(prof.membership_welcome ?? '')
-        setIncludeCommunity(prof.membership_community ?? false)
         const benefits: string[] = prof.membership_benefits ?? []
         setBenefit1(benefits[0] ?? DEFAULT_BENEFITS[0])
         setBenefit2(benefits[1] ?? DEFAULT_BENEFITS[1])
@@ -83,11 +71,6 @@ export default function MembershipSettingsScreen() {
     load()
   }, [])
 
-  // 現在の特典リスト（コミュニティを末尾に追加）
-  const currentBenefits = [benefit1, benefit2, benefit3, benefit4]
-    .filter(b => b.trim())
-    .concat(includeCommunity ? ['メンバーシップ限定コミュニティへの参加'] : [])
-
   const handleSave = async () => {
     if (!userId) return
     setSaving(true)
@@ -97,7 +80,6 @@ export default function MembershipSettingsScreen() {
       membership_active: isActive,
       membership_welcome: welcomeMessage.trim() || null,
       membership_benefits: benefits.length > 0 ? benefits : null,
-      membership_community: includeCommunity,
     }).eq('id', userId)
     setSaving(false)
     if (error) { Alert.alert('保存エラー', error.message); return }
@@ -173,7 +155,6 @@ export default function MembershipSettingsScreen() {
                     )}
                     <Text style={[s.priceLabel, selected && s.priceLabelSelected]}>{opt.label}</Text>
                     <Text style={s.priceMonth}>/月</Text>
-                    <Text style={[s.priceDesc, selected && s.priceDescSelected]}>{opt.desc}</Text>
                   </TouchableOpacity>
                 )
               })}
@@ -203,17 +184,6 @@ export default function MembershipSettingsScreen() {
               </View>
             ))}
 
-            {/* コミュニティ特典トグル */}
-            <View style={[s.row, { marginTop: 4, backgroundColor: includeCommunity ? '#FDF6EE' : 'transparent', borderRadius: 10, padding: 8 }]}>
-              <View style={s.rowInfo}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="people-outline" size={16} color={Colors.accent} />
-                  <Text style={s.rowTitle}>メンバーシップ限定コミュニティ</Text>
-                </View>
-                <Text style={s.rowDesc}>メンバー専用のグループチャットを特典として表示</Text>
-              </View>
-              <ToggleSwitch value={includeCommunity} onValueChange={setIncludeCommunity} />
-            </View>
           </View>
 
           {/* ── ウェルカムメッセージ ── */}
@@ -231,36 +201,18 @@ export default function MembershipSettingsScreen() {
             <Text style={s.charCount}>{welcomeMessage.length} / 200</Text>
           </View>
 
-          {/* ── 加入ページプレビュー（リアルタイム） ── */}
-          <View style={s.section}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Ionicons name="eye-outline" size={15} color={Colors.textLight} />
-              <Text style={s.sectionTitle}>加入ページのプレビュー</Text>
-            </View>
-            <Text style={s.sectionDesc}>保存前でも入力内容をそのまま確認できます</Text>
-
-            {/* 価格バナー */}
-            <View style={s.previewBanner}>
-              <Text style={s.previewBannerLabel}>月額料金</Text>
-              <Text style={s.previewBannerPrice}>¥{price.toLocaleString()}<Text style={s.previewBannerPer}>/月</Text></Text>
-            </View>
-
-            {/* 特典リスト */}
-            {currentBenefits.length === 0 ? (
-              <Text style={s.previewEmpty}>特典を1つ以上入力してください</Text>
-            ) : (
-              <View style={s.previewBenefits}>
-                {currentBenefits.map((b, i) => (
-                  <View key={i} style={[s.previewBenefitRow, i > 0 && s.previewBenefitDivider]}>
-                    <View style={s.previewBenefitIcon}>
-                      <Ionicons name={BENEFIT_ICONS[i] ?? 'star-outline'} size={16} color={Colors.accent} />
-                    </View>
-                    <Text style={s.previewBenefitText}>{b}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+          {/* プレビューボタン */}
+          {isActive && userId && (
+            <TouchableOpacity
+              style={s.previewBtn}
+              onPress={() => router.push({ pathname: '/membership/[creatorId]' as any, params: { creatorId: userId } })}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="eye-outline" size={16} color={Colors.accent} />
+              <Text style={s.previewBtnText}>加入ページをプレビュー</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.accent} />
+            </TouchableOpacity>
+          )}
 
           <View style={s.noticeBox}>
             <Ionicons name="information-circle-outline" size={15} color={Colors.textLight} />
@@ -330,9 +282,6 @@ const s = StyleSheet.create({
   priceLabel: { fontSize: 18, fontWeight: '900', color: Colors.textLight, letterSpacing: -0.5 },
   priceLabelSelected: { color: Colors.accent },
   priceMonth: { fontSize: 10, color: Colors.textLight },
-  priceDesc: { fontSize: 11, color: Colors.textLight, textAlign: 'center', marginTop: 4 },
-  priceDescSelected: { color: Colors.accent },
-
   // 特典入力
   benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   benefitNum: {
@@ -356,23 +305,13 @@ const s = StyleSheet.create({
   },
   charCount: { fontSize: 11, color: Colors.textLight, textAlign: 'right', marginTop: -6 },
 
-  // プレビューセクション
-  previewBanner: {
-    backgroundColor: Colors.accent, borderRadius: 10,
-    paddingVertical: 14, alignItems: 'center', gap: 2,
+  previewBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.accent,
+    paddingHorizontal: 16, paddingVertical: 13,
   },
-  previewBannerLabel: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.75)', letterSpacing: 1 },
-  previewBannerPrice: { fontSize: 28, fontWeight: '900', color: Colors.white, letterSpacing: -1 },
-  previewBannerPer: { fontSize: 13, fontWeight: '400', color: 'rgba(255,255,255,0.8)' },
-  previewEmpty: { fontSize: 12, color: Colors.textLight, textAlign: 'center', paddingVertical: 8 },
-  previewBenefits: { borderRadius: 10, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
-  previewBenefitRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  previewBenefitDivider: { borderTopWidth: 1, borderTopColor: Colors.border },
-  previewBenefitIcon: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center',
-  },
-  previewBenefitText: { flex: 1, fontSize: 13, fontWeight: '600', color: Colors.text },
+  previewBtnText: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.accent },
 
   noticeBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',

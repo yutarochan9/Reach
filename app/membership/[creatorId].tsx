@@ -23,13 +23,13 @@ const DEFAULT_PRICE = 500
 
 const DEFAULT_BENEFITS = [
   { title: 'メンバーシップ限定配信へのアクセス' },
-  { title: 'DMで優先的に返信' },
+  { title: '優先サポート' },
   { title: '最新情報をいち早くお届け' },
 ]
 
 const BENEFIT_ICONS = [
-  'lock-closed-outline', 'chatbubble-ellipses-outline', 'notifications-outline',
-  'star-outline', 'people-outline',
+  'lock-closed-outline', 'star-outline', 'notifications-outline',
+  'heart-outline', 'people-outline',
 ] as const
 
 export default function MembershipPage() {
@@ -66,14 +66,10 @@ export default function MembershipPage() {
   const price = profile.membership_price ?? DEFAULT_PRICE
 
   // DB設定の特典があればそれを使う、なければデフォルト
-  // コミュニティが有効なら末尾に追加
   const benefitTitles = profile.membership_benefits && profile.membership_benefits.length > 0
     ? profile.membership_benefits
     : DEFAULT_BENEFITS.map(b => b.title)
-  const allBenefitTitles = profile.membership_community
-    ? [...benefitTitles, 'メンバーシップ限定コミュニティへの参加']
-    : benefitTitles
-  const benefits = allBenefitTitles.map((title, i) => ({
+  const benefits = benefitTitles.map((title, i) => ({
     icon: BENEFIT_ICONS[i % BENEFIT_ICONS.length],
     title,
     desc: '',
