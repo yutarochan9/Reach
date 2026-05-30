@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, TextInput, Modal, Image, ScrollView
@@ -345,7 +345,7 @@ export default function FollowersScreen() {
                 {savingTag ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.tagAddText}>追加</Text>}
               </TouchableOpacity>
             </View>
-            <Text style={styles.tagHint}>タグはセグメント配信（プロプラン）で使えます</Text>
+            <Text style={styles.tagHint}>タグでフォロワーを分類できます</Text>
           </View>
         </View>
       </Modal>
@@ -357,12 +357,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
 
   // セグメント一覧
   segmentList: { padding: 16, gap: 10, paddingBottom: 40 },
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   // モーダル
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },

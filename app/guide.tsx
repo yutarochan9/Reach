@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+﻿import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
@@ -19,7 +19,6 @@ const TOOLS = [
   { icon: 'grid-outline' as const, title: 'タイルメニュー', desc: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。タップするだけで簡単に使えます。' },
   { icon: 'time-outline' as const, title: '下書き・予約配信', desc: '配信内容を下書きとして保存し、指定した日時に自動送信できます。事前に準備しておくことで、計画的な情報発信が可能です。' },
   { icon: 'archive-outline' as const, title: '過去配信', desc: '過去に送った配信メッセージの一覧を確認できます。閲覧数・いいね・返信などの実績もあわせて確認できます。' },
-  { icon: 'people-outline' as const, title: 'セグメント配信', desc: 'フォロワーを属性や条件で絞り込み、特定のグループだけに配信できます。ターゲットに合わせた情報発信が可能です。' },
   { icon: 'flash-outline' as const, title: '自動応答', desc: 'キーワードに反応して自動でメッセージを返信する機能です。よくある質問への対応や入力促進など、さまざまな場面で活用できます。' },
   { icon: 'git-network-outline' as const, title: 'フロー配信', desc: '複数のメッセージをシナリオとして組み合わせ、条件分岐しながら順番に届ける機能です。ストーリー性のある体験を作れます。' },
 ]
@@ -28,7 +27,7 @@ export default function GuideScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>使い方ガイド</Text>
@@ -93,12 +92,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 20, paddingBottom: 48, gap: 20 },
   conceptCard: { backgroundColor: Colors.white, borderRadius: 16, padding: 20, borderWidth: 1, borderColor: Colors.border },
   conceptText: { fontSize: 14, color: Colors.text, lineHeight: 24 },

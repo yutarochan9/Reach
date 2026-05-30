@@ -150,7 +150,7 @@ export default function ComposeScreen() {
       return
     }
 
-    // フォロワーにプッシュ通知（下書きはセグメント配信含む旧形式も考慮）
+    // フォロワーにプッシュ通知
     const targetVal = item.target ?? 'all'
     let q = supabase.from('follows').select('follower_id').eq('following_id', userId)
     if (targetVal === 'week')  q = q.gte('created_at', new Date(Date.now() - 7  * 86400000).toISOString())
@@ -225,7 +225,7 @@ export default function ComposeScreen() {
   const removeImage = (blockId: string) => updateBlock(blockId, { imageUri: null, imageUrl: null })
 
   const getTargetFollowers = async (): Promise<string[]> => {
-    // 通常配信は全フォロワー対象（セグメント配信は /segment-compose で行う）
+    // 通常配信は全フォロワー対象
     const { data } = await supabase.from('follows').select('follower_id').eq('following_id', userId)
     return (data ?? []).map((f: any) => f.follower_id)
   }
@@ -824,13 +824,6 @@ export default function ComposeScreen() {
               desc="フォロー後に自動でメッセージを送る"
               plan="standard"
               onPress={() => router.push('/step-sequences' as any)}
-            />
-            <View style={styles.toolsDivider} />
-            <ToolMenuItem
-              icon="pricetag-outline"
-              label="セグメント配信"
-              desc="タグ付けで特定のフォロワーグループに配信"
-              onPress={() => router.push('/segment-compose' as any)}
             />
           </View>
 

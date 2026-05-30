@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Alert, Linking, Modal, TextInput, Platform } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocalSearchParams, router } from 'expo-router'
 import Head from 'expo-router/head'
 import { Ionicons } from '@expo/vector-icons'
@@ -111,12 +112,33 @@ export default function CreatorScreen() {
     setRefreshing(false)
   }
 
+  const doUnfollow = async () => {
+    await supabase.from('follows').delete().eq('follower_id', myId!).eq('following_id', id)
+    setIsFollowing(false)
+    setFollowerCount(c => c - 1)
+    // talk.tsx にフォロー解除を通知 → 配信欄から即時削除
+    await AsyncStorage.setItem('unfollowed_creator_id', id).catch(() => {})
+  }
+
   const handleFollow = async () => {
     if (!myId) return
     if (isFollowing) {
-      await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', id)
-      setIsFollowing(false)
-      setFollowerCount(c => c - 1)
+      // フォロー解除前に影響を説明して確認
+      const msg =
+        'フォローを外すと以下の変更があります：\n\n' +
+        '• このアカウントの配信欄が非表示になります\n' +
+        '• 「現在のフォロワーのみ」対象の配信が見えなくなります\n' +
+        '• フロー配信（自動メッセージ）の受信が停止します\n\n' +
+        'DM履歴は引き続き確認できます。'
+      if (Platform.OS === 'web') {
+        if (window.confirm(msg)) await doUnfollow()
+      } else {
+        Alert.alert('フォローを外しますか？', msg, [
+          { text: 'キャンセル', style: 'cancel' },
+          { text: 'フォローを外す', style: 'destructive', onPress: doUnfollow },
+        ])
+      }
+      return
     } else if (isPrivate) {
       // 鍵垢の場合はフォローリクエストを送る
       if (followRequestStatus === 'pending') {

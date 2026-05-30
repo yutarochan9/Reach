@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+﻿import { useState, useCallback, useRef, useEffect } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, Image, Animated, PanResponder, Platform, Alert } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router, useFocusEffect } from 'expo-router'
@@ -7,7 +7,11 @@ import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { useTalkContext } from '../contexts/TalkContext'
 
-const ACTION_WIDTH = 140
+const PIN_COLOR = '#7CB342'  // ピン止めの黄緑色
+const ACTION_WIDTH = 80    // DMの削除パネル幅
+const DM_LEFT_W = 160      // DMの右スワイプパネル幅（ピン+通知オフ）
+const FOLLOW_LEFT_W = 160   // 右スワイプで開くピン+通知オフパネル幅
+const FOLLOW_RIGHT_W = 80   // 左スワイプで開く削除パネル幅
 const isWeb = Platform.OS === 'web'
 
 type FollowingItem = {
@@ -39,30 +43,32 @@ type FlatRow =
   | { type: 'dm-item'; data: DmItem }
 
 function SwipeableDmRow({
-  data,
-  onPress,
-  onHide,
-  onDelete,
-  formatTime,
-  selected,
+  data, isPinned, isMuted, onPress, onPin, onMute, onDelete, formatTime, selected,
 }: {
   data: DmItem
+  isPinned: boolean
+  isMuted: boolean
   onPress: () => void
-  onHide: () => void
+  onPin: () => void
+  onMute: () => void
   onDelete: () => void
   formatTime: (iso: string) => string
   selected?: boolean
 }) {
   const translateX = useRef(new Animated.Value(0)).current
-  const isOpen = useRef(false)
+  const openState = useRef<'none' | 'left' | 'right'>('none')
 
   const close = () => {
     Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 80 }).start()
-    isOpen.current = false
+    openState.current = 'none'
   }
-  const open = () => {
+  const openLeft = () => {
+    Animated.spring(translateX, { toValue: DM_LEFT_W, useNativeDriver: true, tension: 80 }).start()
+    openState.current = 'left'
+  }
+  const openRight = () => {
     Animated.spring(translateX, { toValue: -ACTION_WIDTH, useNativeDriver: true, tension: 80 }).start()
-    isOpen.current = true
+    openState.current = 'right'
   }
 
   const panResponder = useRef(
@@ -71,35 +77,33 @@ function SwipeableDmRow({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
       onPanResponderGrant: () => { translateX.stopAnimation() },
       onPanResponderMove: (_, g) => {
-        const base = isOpen.current ? -ACTION_WIDTH : 0
-        const val = Math.max(-ACTION_WIDTH, Math.min(0, base + g.dx))
-        translateX.setValue(val)
+        const base = openState.current === 'left' ? DM_LEFT_W : openState.current === 'right' ? -ACTION_WIDTH : 0
+        translateX.setValue(Math.max(-ACTION_WIDTH, Math.min(DM_LEFT_W, base + g.dx)))
       },
       onPanResponderRelease: (_, g) => {
-        if (isOpen.current) {
-          g.dx > 40 ? close() : open()
-        } else {
-          g.dx < -40 ? open() : close()
-        }
+        if (openState.current === 'left') { g.dx < -40 ? close() : openLeft() }
+        else if (openState.current === 'right') { g.dx > 40 ? close() : openRight() }
+        else { if (g.dx > 40) openLeft(); else if (g.dx < -40) openRight(); else close() }
       },
     })
   ).current
 
   return (
     <View style={swipeStyles.wrap}>
-      {/* アクションボタン（背面） */}
-      <View style={swipeStyles.actions}>
-        <TouchableOpacity
-          style={swipeStyles.hideBtn}
-          onPress={() => { close(); setTimeout(onHide, 200) }}
-        >
-          <Ionicons name="eye-off-outline" size={18} color={Colors.white} />
-          <Text style={swipeStyles.actionText}>非表示</Text>
+      {/* 左アクション: ピン止め + 通知オフ（右スワイプで表示） */}
+      <View style={swipeStyles.leftActions}>
+        <TouchableOpacity style={[swipeStyles.pinBtn, isPinned && swipeStyles.pinBtnActive]} onPress={() => { close(); onPin() }}>
+          <Ionicons name={isPinned ? 'pin' : 'pin-outline'} size={18} color={Colors.white} />
+          <Text style={swipeStyles.actionText}>{isPinned ? '解除' : 'ピン'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={swipeStyles.deleteBtn}
-          onPress={() => { close(); setTimeout(onDelete, 200) }}
-        >
+        <TouchableOpacity style={[swipeStyles.muteBtn, isMuted && swipeStyles.muteBtnActive]} onPress={() => { close(); onMute() }}>
+          <Ionicons name={isMuted ? 'notifications' : 'notifications-off-outline'} size={18} color={Colors.white} />
+          <Text style={swipeStyles.actionText}>{isMuted ? '通知オン' : '通知オフ'}</Text>
+        </TouchableOpacity>
+      </View>
+      {/* 右アクション: 削除（左スワイプで表示） */}
+      <View style={swipeStyles.rightActions}>
+        <TouchableOpacity style={swipeStyles.deleteBtn} onPress={() => { close(); setTimeout(onDelete, 200) }}>
           <Ionicons name="trash-outline" size={18} color={Colors.white} />
           <Text style={swipeStyles.actionText}>削除</Text>
         </TouchableOpacity>
@@ -108,11 +112,11 @@ function SwipeableDmRow({
       {/* スライドする行 */}
       <Animated.View
         style={[swipeStyles.row, { transform: [{ translateX }] }]}
-        {...(isWeb ? {} : panResponder.panHandlers)}
+        {...panResponder.panHandlers}
       >
         <TouchableOpacity
-          style={[styles.talkItem, selected && styles.talkItemSelected]}
-          onPress={() => { if (!isWeb && isOpen.current) { close() } else { onPress() } }}
+          style={[styles.talkItem, selected && styles.talkItemSelected, isPinned && styles.talkItemPinned]}
+          onPress={() => { if (openState.current !== 'none') { close() } else { onPress() } }}
           activeOpacity={0.8}
         >
           <View style={styles.avatar}>
@@ -120,6 +124,11 @@ function SwipeableDmRow({
               ? <Image source={{ uri: data.avatar }} style={styles.avatarImage} />
               : <Text style={styles.avatarText}>{data.name[0]}</Text>
             }
+            {isMuted && (
+              <View style={swipeStyles.mutedDot}>
+                <Ionicons name="notifications-off" size={8} color={Colors.white} />
+              </View>
+            )}
           </View>
           <View style={styles.talkInfo}>
             <View style={styles.talkHeader}>
@@ -137,6 +146,116 @@ function SwipeableDmRow({
   )
 }
 
+// ── フォロー中クリエーター行 (両方向スワイプ) ──────────────────────────────
+function SwipeableFollowingRow({
+  data, isPinned, isMuted, onPress, onPin, onMute, onDelete, formatTime, selected,
+}: {
+  data: FollowingItem
+  isPinned: boolean
+  isMuted: boolean
+  onPress: () => void
+  onPin: () => void
+  onMute: () => void
+  onDelete: () => void
+  formatTime: (iso: string) => string
+  selected?: boolean
+}) {
+  const translateX = useRef(new Animated.Value(0)).current
+  const openState = useRef<'none' | 'left' | 'right'>('none')
+
+  const close = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 80 }).start()
+    openState.current = 'none'
+  }
+  const openLeft = () => {  // 右スワイプ → 左のピン+通知ボタンを開く
+    Animated.spring(translateX, { toValue: FOLLOW_LEFT_W, useNativeDriver: true, tension: 80 }).start()
+    openState.current = 'left'
+  }
+  const openRight = () => {  // 左スワイプ → 右の削除ボタンを開く
+    Animated.spring(translateX, { toValue: -FOLLOW_RIGHT_W, useNativeDriver: true, tension: 80 }).start()
+    openState.current = 'right'
+  }
+
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+    onPanResponderGrant: () => { translateX.stopAnimation() },
+    onPanResponderMove: (_, g) => {
+      const base = openState.current === 'left' ? FOLLOW_LEFT_W : openState.current === 'right' ? -FOLLOW_RIGHT_W : 0
+      translateX.setValue(Math.max(-FOLLOW_RIGHT_W, Math.min(FOLLOW_LEFT_W, base + g.dx)))
+    },
+    onPanResponderRelease: (_, g) => {
+      if (openState.current === 'left') { g.dx < -40 ? close() : openLeft() }
+      else if (openState.current === 'right') { g.dx > 40 ? close() : openRight() }
+      else { if (g.dx > 40) openLeft(); else if (g.dx < -40) openRight(); else close() }
+    },
+  })).current
+
+  const showUnread = !isMuted && data.unread > 0
+
+  return (
+    <View style={followSwipe.wrap}>
+      {/* 左アクション: ピン止め + 通知オフ（右スワイプで表示） */}
+      <View style={followSwipe.leftActions}>
+        <TouchableOpacity style={[followSwipe.pinBtn, isPinned && followSwipe.pinBtnActive]} onPress={() => { close(); onPin() }}>
+          <Ionicons name={isPinned ? 'pin' : 'pin-outline'} size={18} color={Colors.white} />
+          <Text style={followSwipe.actionText}>{isPinned ? '解除' : 'ピン'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[followSwipe.muteBtn, isMuted && followSwipe.muteBtnActive]} onPress={() => { close(); onMute() }}>
+          <Ionicons name={isMuted ? 'notifications' : 'notifications-off-outline'} size={18} color={Colors.white} />
+          <Text style={followSwipe.actionText}>{isMuted ? '通知オン' : '通知オフ'}</Text>
+        </TouchableOpacity>
+      </View>
+      {/* 右アクション: 削除（左スワイプで表示） */}
+      <View style={followSwipe.rightActions}>
+        <TouchableOpacity style={followSwipe.deleteBtn} onPress={() => { close(); setTimeout(onDelete, 200) }}>
+          <Ionicons name="trash-outline" size={18} color={Colors.white} />
+          <Text style={followSwipe.actionText}>削除</Text>
+        </TouchableOpacity>
+      </View>
+      {/* スライドする行 */}
+      <Animated.View style={[followSwipe.row, { transform: [{ translateX }] }]} {...panResponder.panHandlers}>
+        <TouchableOpacity
+          style={[styles.talkItem, selected && styles.talkItemSelected, isPinned && styles.talkItemPinned]}
+          onPress={() => { if (openState.current !== 'none') { close() } else { onPress() } }}
+          activeOpacity={0.8}
+        >
+          <TouchableOpacity onPress={() => router.push(`/creator/${data.id}` as any)} activeOpacity={0.7}>
+            <View style={styles.avatar}>
+              {data.avatar
+                ? <Image source={{ uri: data.avatar }} style={styles.avatarImage} />
+                : <Text style={styles.avatarText}>{data.name[0]}</Text>
+              }
+              {isMuted && (
+                <View style={followSwipe.mutedDot}>
+                  <Ionicons name="notifications-off" size={8} color={Colors.white} />
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+          <View style={styles.talkInfo}>
+            <View style={styles.talkHeader}>
+              <View style={styles.nameRow}>
+                <Text style={styles.talkName}>{data.name}</Text>
+                {data.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+              </View>
+              <Text style={styles.talkTime}>{formatTime(data.created_at)}</Text>
+            </View>
+            <View style={styles.talkFooter}>
+              <Text style={[styles.lastMessage, showUnread && styles.lastMessageUnread]} numberOfLines={1}>{data.last_content}</Text>
+              {showUnread && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{data.unread > 99 ? '99+' : data.unread}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  )
+}
+
 export default function TalkScreen() {
   const { setSelectedTalkId, setSelectedDmId, isDesktop, selectedTalkId, selectedDmId, dmReloadKey } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
@@ -145,17 +264,32 @@ export default function TalkScreen() {
   const [dmItems, setDmItems] = useState<DmItem[]>([])
   const [followingOpen, setFollowingOpen] = useState(true)
   const [dmOpen, setDmOpen] = useState(true)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
+  const [mutedIds, setMutedIds] = useState<Set<string>>(new Set())
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+  const [dmPinnedIds, setDmPinnedIds] = useState<Set<string>>(new Set())
+  const [dmMutedIds, setDmMutedIds] = useState<Set<string>>(new Set())
 
-  // 開閉状態を永続化
+  // 開閉状態・ピン・通知オフ・非表示を永続化
   useEffect(() => {
-    AsyncStorage.multiGet(['talk_following_open', 'talk_dm_open']).then(pairs => {
+    AsyncStorage.multiGet(['talk_following_open', 'talk_dm_open', 'talk_pinned_ids', 'talk_muted_ids', 'talk_hidden_ids', 'talk_dm_pinned_ids', 'talk_dm_muted_ids']).then(pairs => {
       const fo = pairs[0][1]; const do_ = pairs[1][1]
       if (fo !== null) setFollowingOpen(fo === 'true')
       if (do_ !== null) setDmOpen(do_ === 'true')
+      try { if (pairs[2][1]) setPinnedIds(new Set(JSON.parse(pairs[2][1]))) } catch {}
+      try { if (pairs[3][1]) setMutedIds(new Set(JSON.parse(pairs[3][1]))) } catch {}
+      try { if (pairs[4][1]) setHiddenIds(new Set(JSON.parse(pairs[4][1]))) } catch {}
+      try { if (pairs[5][1]) setDmPinnedIds(new Set(JSON.parse(pairs[5][1]))) } catch {}
+      try { if (pairs[6][1]) setDmMutedIds(new Set(JSON.parse(pairs[6][1]))) } catch {}
     }).catch(() => {})
   }, [])
   useEffect(() => { AsyncStorage.setItem('talk_following_open', String(followingOpen)).catch(() => {}) }, [followingOpen])
   useEffect(() => { AsyncStorage.setItem('talk_dm_open', String(dmOpen)).catch(() => {}) }, [dmOpen])
+  useEffect(() => { AsyncStorage.setItem('talk_pinned_ids', JSON.stringify([...pinnedIds])).catch(() => {}) }, [pinnedIds])
+  useEffect(() => { AsyncStorage.setItem('talk_muted_ids', JSON.stringify([...mutedIds])).catch(() => {}) }, [mutedIds])
+  useEffect(() => { AsyncStorage.setItem('talk_hidden_ids', JSON.stringify([...hiddenIds])).catch(() => {}) }, [hiddenIds])
+  useEffect(() => { AsyncStorage.setItem('talk_dm_pinned_ids', JSON.stringify([...dmPinnedIds])).catch(() => {}) }, [dmPinnedIds])
+  useEffect(() => { AsyncStorage.setItem('talk_dm_muted_ids', JSON.stringify([...dmMutedIds])).catch(() => {}) }, [dmMutedIds])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -205,14 +339,16 @@ export default function TalkScreen() {
 
     // フォロー中セクション
     if (followingIds.length > 0) {
-      const [{ data: broadcasts }, { data: reads }, { data: profiles }] = await Promise.all([
+      const [{ data: broadcasts }, { data: reads }, { data: profiles }, { data: subs }] = await Promise.all([
         supabase.from('broadcasts')
-          .select('id, sender_id, content, created_at, public_reactions')
+          .select('id, sender_id, content, created_at, public_reactions, is_subscriber_only')
           .in('sender_id', followingIds)
           .eq('status', 'published')
           .order('created_at', { ascending: false }),
         supabase.from('talk_reads').select('sender_id, last_read_at').eq('user_id', user.id),
         supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followingIds),
+        // 自分がサブスクしているクリエーター一覧を取得（MB限定メッセージのフィルタリング用）
+        supabase.from('subscriptions').select('creator_id').eq('subscriber_id', user.id).eq('status', 'active'),
       ])
 
       const readMap: Record<string, string> = {}
@@ -221,6 +357,9 @@ export default function TalkScreen() {
       const profMap: Record<string, { display_name: string; avatar_url: string | null; is_official: boolean }> = {}
       for (const p of (profiles ?? [])) profMap[p.id] = p
 
+      // サブスク中のクリエーターIDのセット
+      const subSet = new Set((subs ?? []).map((s: any) => s.creator_id))
+
       const senderBroadcasts: Record<string, any[]> = {}
       for (const b of (broadcasts ?? [])) {
         if (!senderBroadcasts[b.sender_id]) senderBroadcasts[b.sender_id] = []
@@ -228,7 +367,11 @@ export default function TalkScreen() {
       }
 
       const publicBcIds = followingIds
-        .map(id => senderBroadcasts[id]?.[0])
+        .map(id => {
+          // 表示可能な最新メッセージ（MB限定はサブスク済みのみ）
+          const visibleBcs = (senderBroadcasts[id] ?? []).filter((b: any) => !b.is_subscriber_only || subSet.has(id))
+          return visibleBcs[0]
+        })
         .filter((b: any) => b?.public_reactions)
         .map((b: any) => b.id)
 
@@ -245,9 +388,11 @@ export default function TalkScreen() {
 
       const fItems: FollowingItem[] = followingIds.map(id => {
         const bcs = senderBroadcasts[id] ?? []
-        const latest = bcs[0]
+        // MB限定はサブスク済みのみ表示、それ以外は非表示
+        const visibleBcs = bcs.filter((b: any) => !b.is_subscriber_only || subSet.has(id))
+        const latest = visibleBcs[0]
         const lastRead = readMap[id]
-        const unread = lastRead ? bcs.filter((b: any) => b.created_at > lastRead).length : bcs.length
+        const unread = lastRead ? visibleBcs.filter((b: any) => b.created_at > lastRead).length : visibleBcs.length
         return {
           id,
           name: profMap[id]?.display_name ?? '?',
@@ -317,6 +462,24 @@ export default function TalkScreen() {
   }, [])
 
   useFocusEffect(useCallback(() => {
+    // 配信画面から戻ってきた場合、読んだ送信者のバッジを即時クリア
+    AsyncStorage.getItem('last_read_talk').then(senderId => {
+      if (senderId) {
+        setFollowingItems(prev => prev.map(item =>
+          item.id === senderId ? { ...item, unread: 0 } : item
+        ))
+        AsyncStorage.removeItem('last_read_talk').catch(() => {})
+      }
+    }).catch(() => {})
+
+    // フォロー解除されたアカウントを配信欄から即時削除
+    AsyncStorage.getItem('unfollowed_creator_id').then(creatorId => {
+      if (creatorId) {
+        setFollowingItems(prev => prev.filter(item => item.id !== creatorId))
+        AsyncStorage.removeItem('unfollowed_creator_id').catch(() => {})
+      }
+    }).catch(() => {})
+
     load()
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current).catch(() => {})
@@ -402,6 +565,12 @@ export default function TalkScreen() {
     }
   }
 
+  const togglePin = (id: string) => setPinnedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleMute = (id: string) => setMutedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const hideFollowing = (id: string) => setHiddenIds(prev => { const s = new Set(prev); s.add(id); return s })
+  const toggleDmPin = (id: string) => setDmPinnedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleDmMute = (id: string) => setDmMutedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     const now = new Date()
@@ -425,12 +594,21 @@ export default function TalkScreen() {
     flatData.push({ type: 'my', myId, ...myItem })
   }
 
+  // ピン止めを先頭、非表示を除外してソート
+  const visibleFollowing = followingItems
+    .filter(d => !hiddenIds.has(d.id))
+    .sort((a, b) => {
+      const ap = pinnedIds.has(a.id) ? 1 : 0
+      const bp = pinnedIds.has(b.id) ? 1 : 0
+      return bp - ap
+    })
+
   flatData.push({
     type: 'section-header', sectionId: 'following',
-    label: 'フォロー中', open: followingOpen,
+    label: '配信', open: followingOpen,
   })
   if (followingOpen) {
-    followingItems.forEach(d => flatData.push({ type: 'following-item', data: d }))
+    visibleFollowing.forEach(d => flatData.push({ type: 'following-item', data: d }))
   }
 
   flatData.push({
@@ -438,7 +616,12 @@ export default function TalkScreen() {
     label: 'DM', open: dmOpen,
   })
   if (dmOpen) {
-    dmItems.forEach(d => flatData.push({ type: 'dm-item', data: d }))
+    const sortedDm = [...dmItems].sort((a, b) => {
+      const ap = dmPinnedIds.has(a.otherId) ? 1 : 0
+      const bp = dmPinnedIds.has(b.otherId) ? 1 : 0
+      return bp - ap
+    })
+    sortedDm.forEach(d => flatData.push({ type: 'dm-item', data: d }))
   }
 
   return (
@@ -503,38 +686,17 @@ export default function TalkScreen() {
           if (item.type === 'following-item') {
             const d = item.data
             return (
-              <TouchableOpacity style={[styles.talkItem, isDesktop && selectedTalkId === d.id && styles.talkItemSelected]} activeOpacity={0.85} onPress={() => { setSelectedDmId(null); isDesktop ? setSelectedTalkId(d.id) : router.push(`/talk/${d.id}` as any) }}>
-                <TouchableOpacity
-                  onPress={() => router.push(`/creator/${d.id}` as any)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.avatar}>
-                    {d.avatar
-                      ? <Image source={{ uri: d.avatar }} style={styles.avatarImage} />
-                      : <Text style={styles.avatarText}>{d.name[0]}</Text>
-                    }
-                  </View>
-                </TouchableOpacity>
-                <View style={styles.talkInfo}>
-                  <View style={styles.talkHeader}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.talkName}>{d.name}</Text>
-                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
-                    </View>
-                    <Text style={styles.talkTime}>{formatTime(d.created_at)}</Text>
-                  </View>
-                  <View style={styles.talkFooter}>
-                    <Text style={[styles.lastMessage, d.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
-                      {d.last_content}
-                    </Text>
-                    {d.unread > 0 && (
-                      <View style={styles.badge}>
-                        <Text style={styles.badgeText}>{d.unread > 99 ? '99+' : d.unread}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
+              <SwipeableFollowingRow
+                data={d}
+                isPinned={pinnedIds.has(d.id)}
+                isMuted={mutedIds.has(d.id)}
+                selected={isDesktop && selectedTalkId === d.id}
+                onPress={() => { setSelectedDmId(null); isDesktop ? setSelectedTalkId(d.id) : router.push(`/talk/${d.id}` as any) }}
+                onPin={() => togglePin(d.id)}
+                onMute={() => toggleMute(d.id)}
+                onDelete={() => hideFollowing(d.id)}
+                formatTime={formatTime}
+              />
             )
           }
 
@@ -542,6 +704,8 @@ export default function TalkScreen() {
             return (
               <SwipeableDmRow
                 data={item.data}
+                isPinned={dmPinnedIds.has(item.data.otherId)}
+                isMuted={dmMutedIds.has(item.data.otherId)}
                 selected={isDesktop && selectedDmId === item.data.otherId}
                 onPress={() => {
                   if (isDesktop) {
@@ -551,7 +715,8 @@ export default function TalkScreen() {
                     router.push({ pathname: '/im/[userId]' as any, params: { userId: item.data.otherId } })
                   }
                 }}
-                onHide={() => handleHideDm(item.data.otherId)}
+                onPin={() => toggleDmPin(item.data.otherId)}
+                onMute={() => toggleDmMute(item.data.otherId)}
                 onDelete={() => handleDeleteDm(item.data.otherId)}
                 formatTime={formatTime}
               />
@@ -566,35 +731,72 @@ export default function TalkScreen() {
   )
 }
 
+const followSwipe = StyleSheet.create({
+  wrap: { position: 'relative', overflow: 'hidden', backgroundColor: Colors.white },
+  leftActions: {
+    position: 'absolute', left: 0, top: 0, bottom: 0,
+    width: FOLLOW_LEFT_W, flexDirection: 'row',
+  },
+  rightActions: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    width: FOLLOW_RIGHT_W,
+  },
+  pinBtn: { flex: 1, backgroundColor: PIN_COLOR, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  pinBtnActive: { backgroundColor: '#558B2F' },
+  muteBtn: { flex: 1, backgroundColor: '#8E8E93', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  muteBtnActive: { backgroundColor: '#636366' },
+  deleteBtn: { flex: 1, backgroundColor: '#E53E3E', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  actionText: { fontSize: 11, color: Colors.white, fontWeight: '700' },
+  row: { backgroundColor: Colors.white },
+  mutedDot: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#8E8E93',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: Colors.white,
+  },
+})
+
 const swipeStyles = StyleSheet.create({
   wrap: { position: 'relative', overflow: 'hidden', backgroundColor: Colors.white },
-  actions: {
+  leftActions: {
+    position: 'absolute', left: 0, top: 0, bottom: 0,
+    width: DM_LEFT_W, flexDirection: 'row',
+  },
+  rightActions: {
     position: 'absolute', right: 0, top: 0, bottom: 0,
-    width: ACTION_WIDTH, flexDirection: 'row',
+    width: ACTION_WIDTH,
   },
-  hideBtn: {
-    flex: 1, backgroundColor: '#8E8E93',
-    alignItems: 'center', justifyContent: 'center', gap: 4,
-  },
+  pinBtn: { flex: 1, backgroundColor: PIN_COLOR, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  pinBtnActive: { backgroundColor: '#558B2F' },
+  muteBtn: { flex: 1, backgroundColor: '#8E8E93', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  muteBtnActive: { backgroundColor: '#636366' },
   deleteBtn: {
     flex: 1, backgroundColor: '#E53E3E',
     alignItems: 'center', justifyContent: 'center', gap: 4,
   },
   actionText: { fontSize: 11, color: Colors.white, fontWeight: '700' },
   row: { backgroundColor: Colors.white },
+  mutedDot: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#8E8E93',
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderColor: Colors.white,
+  },
 })
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: 36,
     paddingHorizontal: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: Colors.accent },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -616,6 +818,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     backgroundColor: Colors.white,
     gap: 12,
+  },
+  talkItemPinned: {
+    borderLeftWidth: 6,
+    borderLeftColor: PIN_COLOR,
   },
   talkItemSelected: {
     backgroundColor: `${Colors.accent}18`,

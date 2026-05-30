@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+﻿import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
@@ -34,12 +34,6 @@ const NEWS: NewsItem[] = [
     tag: '新機能',
     title: 'フロー配信・自動化',
     body: 'フォロー後に自動で配信を送るフロー配信機能をリリースしました。クリエイターの配信効率が大幅に向上します。',
-  },
-  {
-    date: '2026年5月',
-    tag: '新機能',
-    title: 'セグメント配信',
-    body: 'タグを使って特定のフォロワーグループにだけ配信を届けるセグメント配信機能をリリースしました。',
   },
   {
     date: '2026年5月',
@@ -88,12 +82,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 20, paddingBottom: 48 },
   row: { flexDirection: 'row', gap: 12 },
   timelineLeft: { alignItems: 'center', width: 16 },

@@ -1,11 +1,12 @@
-import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native'
+﻿import { useState, useCallback, useEffect } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as WebBrowser from 'expo-web-browser'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
 import { BETA_MODE } from '../constants/config'
+import { IAP_SKUS, IS_NATIVE, initIAP, endIAP, purchasePlanIAP } from '../lib/iap'
 
 type Plan = 'free' | 'standard' | 'pro'
 
@@ -17,12 +18,12 @@ const PLANS = [
     period: '',
     color: Colors.textLight,
     features: [
-      'フォロワー500人まで',
+      'フォロワー1万人まで',
       '月50回まで配信',
       '基本配信（テキスト・画像）',
       'コメント・リアクション確認',
     ],
-    disabled: ['フロー配信', 'セグメント配信', 'タイル', '自動応答'],
+    disabled: ['フロー配信', 'タイル', '自動応答'],
   },
   {
     id: 'standard' as Plan,
@@ -37,7 +38,7 @@ const PLANS = [
       'フロー配信・自動化',
       '分析（閲覧数・リアクション数）',
     ],
-    disabled: ['セグメント配信', 'タイル', '自動応答'],
+    disabled: ['タイル', '自動応答'],
   },
   {
     id: 'pro' as Plan,
@@ -52,7 +53,6 @@ const PLANS = [
       'フロー配信・自動化',
       '分析（閲覧数・リアクション数）',
       'タイル作成',
-      'セグメント配信（タグで絞り込み）',
       '自動応答',
     ],
     disabled: [],
@@ -80,31 +80,41 @@ export default function PlanScreen() {
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
+  // iOS: IAP 接続の初期化・終了
+  useEffect(() => {
+    if (!IS_NATIVE) return
+    initIAP().catch(() => {})
+    return () => { endIAP().catch(() => {}) }
+  }, [])
+
   const handleUpgrade = async (plan: Plan) => {
     if (plan === 'free') return
     if (plan === currentPlan && subscriptionStatus === 'active') {
-      // Manage existing subscription
-      handleManage()
-      return
+      handleManage(); return
     }
 
     setProcessing(plan)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { Alert.alert('エラー', 'ログインが必要です'); return }
-
-      const res = await supabase.functions.invoke('stripe-checkout', {
-        body: { plan },
-      })
-
-      if (res.error) throw new Error(res.error.message)
-      const { url } = res.data
-
-      const result = await WebBrowser.openAuthSessionAsync(url, 'reach://')
-      if (result.type === 'success') {
-        await new Promise(r => setTimeout(r, 1500)) // wait for webhook
+      if (IS_NATIVE) {
+        // ── iOS / Android: App Store IAP ──────────────────────────
+        const sku = plan === 'standard' ? IAP_SKUS.PLAN_STANDARD : IAP_SKUS.PLAN_PRO
+        await purchasePlanIAP(sku)
+        // 購入完了は RNIap の purchaseUpdatedListener で受け取る
+        // TODO: Supabase Edge Function でレシート検証 + plan 更新
         await load()
         Alert.alert('🎉 アップグレード完了', `${plan === 'standard' ? 'スタンダード' : 'プロ'}プランが有効になりました！`)
+      } else {
+        // ── Web: Stripe Checkout ──────────────────────────────────
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) { Alert.alert('エラー', 'ログインが必要です'); return }
+        const res = await supabase.functions.invoke('stripe-checkout', { body: { plan } })
+        if (res.error) throw new Error(res.error.message)
+        const result = await WebBrowser.openAuthSessionAsync(res.data.url, 'reach://')
+        if (result.type === 'success') {
+          await new Promise(r => setTimeout(r, 1500))
+          await load()
+          Alert.alert('🎉 アップグレード完了', `${plan === 'standard' ? 'スタンダード' : 'プロ'}プランが有効になりました！`)
+        }
       }
     } catch (e: any) {
       Alert.alert('エラー', e.message ?? '決済処理に失敗しました')
@@ -116,12 +126,16 @@ export default function PlanScreen() {
   const handleManage = async () => {
     setProcessing('free')
     try {
-      const res = await supabase.functions.invoke('stripe-checkout', {
-        body: { plan: currentPlan },
-      })
-      if (res.error) throw new Error(res.error.message)
-      await WebBrowser.openAuthSessionAsync(res.data.url, 'reach://')
-      await load()
+      if (IS_NATIVE) {
+        // iOS: App Store のサブスクリプション管理画面を開く
+        // TODO: Linking.openURL('https://apps.apple.com/account/subscriptions')
+      } else {
+        // Web: Stripe カスタマーポータル
+        const res = await supabase.functions.invoke('stripe-checkout', { body: { plan: currentPlan } })
+        if (res.error) throw new Error(res.error.message)
+        await WebBrowser.openAuthSessionAsync(res.data.url, 'reach://')
+        await load()
+      }
     } catch (e: any) {
       Alert.alert('エラー', e.message)
     } finally {
@@ -232,11 +246,6 @@ export default function PlanScreen() {
           )
         })}
 
-        <Text style={styles.note}>
-          ※ 決済はブラウザ上のStripeで安全に処理されます。{'\n'}
-          ※ Apple/Googleの手数料は発生しません。{'\n'}
-          ※ 販売手数料は一切いただきません。
-        </Text>
       </ScrollView>
     </View>
   )
@@ -246,12 +255,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 16, gap: 16, paddingBottom: 40 },
   subtitle: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22, marginBottom: 4 },
   betaBanner: {

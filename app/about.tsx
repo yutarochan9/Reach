@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native'
+﻿import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
@@ -25,7 +25,6 @@ const FEATURES = [
   { icon: 'flash-outline' as const, title: '自動応答', desc: 'キーワードに反応して自動でメッセージを返信。' },
   { icon: 'time-outline' as const, title: '予約配信', desc: '指定した日時に自動で配信をスタート。' },
   { icon: 'git-network-outline' as const, title: 'フロー配信', desc: 'シナリオを組んで順番に自動配信。' },
-  { icon: 'pricetag-outline' as const, title: 'セグメント配信', desc: '特定のファンだけに絞って配信できる。' },
   { icon: 'grid-outline' as const, title: 'タイルメニュー', desc: '独自のメニューをトーク画面に設置。' },
   { icon: 'bar-chart-outline' as const, title: '分析', desc: '閲覧数・いいね・既読率をリアルタイムで確認。' },
 ]
@@ -34,7 +33,7 @@ export default function AboutScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Reachとは</Text>
@@ -102,12 +101,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 20, paddingBottom: 48, gap: 20 },
 
   hero: { alignItems: 'center', paddingVertical: 8, gap: 10 },
