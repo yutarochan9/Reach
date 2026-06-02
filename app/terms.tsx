@@ -3,7 +3,7 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
 
-const LAST_UPDATED = '2026年5月31日'
+const LAST_UPDATED = '2026年6月2日'
 const SERVICE_NAME = 'Reach'
 const COMPANY = 'Reach運営事務局'
 const CONTACT_X = '@Reach_X_PR'
@@ -69,7 +69,23 @@ export default function TermsScreen() {
           </Body>
         </Section>
 
-        <Section title="第4条　禁止事項">
+        <Section title="第4条　利用資格・年齢制限">
+          <Body>
+            本サービスは、日本国内に居住する方を対象としています。未成年者（18歳未満）が本サービスを利用する場合は、保護者の同意が必要です。課金機能（サブスクリプション・メンバーシップ・開発支援金）を利用する場合は、保護者の同意を得たうえでご利用ください。当社は未成年者による保護者の同意を得ない課金について、一切の責任を負いません。
+          </Body>
+        </Section>
+
+        <Section title="第5条　料金・課金・収益分配">
+          <Body>本サービスにおける料金・課金・収益分配について以下のとおり定めます。</Body>
+          <Item n={1}>クリエイタープランの月額料金は特定商取引法に基づく表記ページに記載の通りです（税込表示）。</Item>
+          <Item n={2}>クリエイターが設定するメンバーシップ料金は¥500・¥1,000・¥3,000（各税込）から選択できます。</Item>
+          <Item n={3}>メンバーシップ収益はプラットフォーム手数料30%を差し引いた70%をクリエイターに支払います。</Item>
+          <Item n={4}>サブスクリプションおよびメンバーシップは毎月自動更新されます。解約はいつでも設定画面から行え、次回更新日以降の請求は発生しません。</Item>
+          <Item n={5}>デジタルコンテンツ・サービスの性質上、原則として返金には応じられません。ただし、当社の重大な瑕疵による場合はこの限りではありません。</Item>
+          <Item n={6}>App Store・Google Play 経由の決済については、各ストアの規約・返金ポリシーが優先して適用されます。</Item>
+        </Section>
+
+        <Section title="第6条　禁止事項">
           <Body>ユーザーは以下の行為を行ってはなりません。</Body>
           <Item n={1}>法令または公序良俗に違反する行為</Item>
           <Item n={2}>他のユーザーへの誹謗中傷・ハラスメント・脅迫</Item>
@@ -81,32 +97,32 @@ export default function TermsScreen() {
           <Item n={8}>その他、当社が不適切と判断する行為</Item>
         </Section>
 
-        <Section title="第5条　コンテンツの権利">
+        <Section title="第7条　コンテンツの権利">
           <Body>
             ユーザーが本サービスに投稿したコンテンツの著作権はユーザーに帰属します。ただし、ユーザーは当社に対し、本サービスの運営・改善・プロモーションに必要な範囲で、無償・非独占的にコンテンツを利用する権利を許諾するものとします。
           </Body>
         </Section>
 
-        <Section title="第6条　サービスの停止・中断">
+        <Section title="第8条　サービスの停止・中断">
           <Body>当社は以下の場合、ユーザーへの事前通知なくサービスを停止・中断できます。</Body>
           <Item n={1}>システムのメンテナンス・緊急対応</Item>
           <Item n={2}>天災・停電・通信障害などの不可抗力</Item>
           <Item n={3}>その他、運営上やむを得ない場合</Item>
         </Section>
 
-        <Section title="第7条　利用制限・アカウント停止">
+        <Section title="第9条　利用制限・アカウント停止">
           <Body>
             ユーザーが本規約に違反した場合、または不適切な行為があった場合、当社は事前通知なくコンテンツの削除・利用制限・アカウント停止を行うことができます。
           </Body>
         </Section>
 
-        <Section title="第8条　退会">
+        <Section title="第10条　退会">
           <Body>
             ユーザーはいつでも設定画面からアカウントを削除できます。退会後はコンテンツ・履歴等が削除され、復元できません。
           </Body>
         </Section>
 
-        <Section title="第9条　運営によるコンテンツへのアクセス">
+        <Section title="第11条　運営によるコンテンツへのアクセス">
           <Body>
             当社は、本サービスの適正な運営および利用規約の執行を目的として、以下のとおりコンテンツにアクセスすることがあります。
           </Body>
@@ -116,7 +132,7 @@ export default function TermsScreen() {
           <Item n={4}>本サービスをご利用いただくことにより、ユーザーは本条に定める取扱いに同意したものとみなします。</Item>
         </Section>
 
-        <Section title="第10条　免責事項">
+        <Section title="第12条　免責事項">
           <Body>当社は以下について責任を負いません。</Body>
           <Item n={1}>本サービスの中断・停止・終了によって生じた損害</Item>
           <Item n={2}>ユーザー間のトラブルによって生じた損害</Item>
@@ -125,25 +141,25 @@ export default function TermsScreen() {
           <Body>{'\n'}当社の責任が生じる場合でも、故意・重過失による場合を除き、賠償額はユーザーが直近1ヶ月に支払った利用料金を上限とします。</Body>
         </Section>
 
-        <Section title="第11条　サービスの終了">
+        <Section title="第13条　サービスの終了">
           <Body>
             当社は、30日前までに本サービス内でお知らせのうえ、本サービスを終了することがあります。
           </Body>
         </Section>
 
-        <Section title="第12条　規約の変更">
+        <Section title="第14条　規約の変更">
           <Body>
             当社は本規約を変更することがあります。重要な変更は本サービス内でお知らせし、変更後も継続してご利用いただいた場合は変更後の規約に同意したものとみなします。
           </Body>
         </Section>
 
-        <Section title="第13条　準拠法・管轄裁判所">
+        <Section title="第15条　準拠法・管轄裁判所">
           <Body>
             本規約は日本法に準拠します。本サービスに関する紛争は、当社所在地を管轄する日本の裁判所を第一審の専属的合意管轄裁判所とします。
           </Body>
         </Section>
 
-        <Section title="第14条　お問い合わせ">
+        <Section title="第16条　お問い合わせ">
           <Body>{`本規約に関するお問い合わせは、以下の窓口までご連絡ください。\n\n${COMPANY}`}</Body>
           <TouchableOpacity onPress={() => Linking.openURL(CONTACT_X_URL)}>
             <Text style={styles.contactLink}>X（DM）：{CONTACT_X}</Text>

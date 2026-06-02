@@ -3,7 +3,7 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
 
-const LAST_UPDATED = '2026年6月1日'
+const LAST_UPDATED = '2026年6月2日'
 
 function Row({ label, value, isLink }: { label: string; value: string; isLink?: boolean }) {
   return (
@@ -56,15 +56,20 @@ export default function TokuteiScreen() {
 
         <Text style={styles.sectionTitle}>販売価格</Text>
         <View style={styles.card}>
-          <Row label="スタンダードプラン" value="¥2,980 / 月" />
+          <Row label="スタンダードプラン" value="¥2,980（税込）/ 月" />
           <View style={styles.divider} />
-          <Row label="プロプラン" value="¥7,500 / 月" />
+          <Row label="プロプラン" value="¥7,500（税込）/ 月" />
           <View style={styles.divider} />
-          <Row label="開発支援金" value="¥300 / ¥500 / ¥1,000（一回払い）" />
+          <Row label="開発支援金" value="¥300 / ¥500 / ¥1,000（各税込・一回払い）" />
           <View style={styles.divider} />
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>メンバーシップ手数料</Text>
-            <Text style={styles.rowValue}>各クリエイターの設定価格の30%{'\n'}（App Store / Google Play 決済の場合は、当該ストアの手数料を30%の中から差し引いた額）</Text>
+            <Text style={styles.rowLabel}>クリエイターメンバーシップ</Text>
+            <Text style={styles.rowValue}>各クリエイターが設定する金額（¥500 / ¥1,000 / ¥3,000、各税込）/ 月{'\n'}※金額はクリエイターにより異なります</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>プラットフォーム手数料</Text>
+            <Text style={styles.rowValue}>クリエイター収益の30%（クリエイターへの支払いは70%）{'\n'}App Store / Google Play 決済の場合は、各ストア手数料を差し引いた残額の70%をクリエイターに支払います</Text>
           </View>
         </View>
 
