@@ -69,7 +69,7 @@ export default function TokuteiScreen() {
           <View style={styles.divider} />
           <View style={styles.row}>
             <Text style={styles.rowLabel}>プラットフォーム手数料</Text>
-            <Text style={styles.rowValue}>クリエイター収益の30%（クリエイターへの支払いは70%）{'\n'}App Store / Google Play 決済の場合は、各ストア手数料を差し引いた残額の70%をクリエイターに支払います</Text>
+            <Text style={styles.rowValue}>販売価格の30%（Stripe・App Store・Google Play 等の決済手数料を含む）{'\n'}クリエイターへのお支払いは販売価格の70%です</Text>
           </View>
         </View>
 
