@@ -120,14 +120,6 @@ export default function RootLayout() {
     })
   }, [])
 
-  // ゲート確認中は何も表示しない（チラつき防止）
-  if (!gateChecked) return null
-
-  // パスワード未入力ならゲート画面だけ表示
-  if (BETA_GATE && !gateUnlocked) {
-    return <BetaGate onUnlock={() => setGateUnlocked(true)} />
-  }
-
   // パスが変わるたびに保存（認証・オンボーディング画面は除く）
   useEffect(() => {
     if (isRestorable(pathname)) {
@@ -278,6 +270,14 @@ export default function RootLayout() {
       return () => sub.remove()
     }
   }, [])
+
+  // ── ゲート判定（全Hook定義の後に配置：Rules of Hooks を守るため）─────────────
+  // ゲート確認中は何も表示しない（チラつき防止）
+  if (!gateChecked) return null
+  // パスワード未入力ならゲート画面だけ表示
+  if (BETA_GATE && !gateUnlocked) {
+    return <BetaGate onUnlock={() => setGateUnlocked(true)} />
+  }
 
   return (
     <View style={{ flex: 1, flexDirection: showSidebar ? 'row' : 'column', ...(Platform.OS === 'web' ? { height: '100vh' as any } : {}) }}>
