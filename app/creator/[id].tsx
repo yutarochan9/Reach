@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { BETA_MODE } from '../../constants/config'
+import { TEST_IDS_CSV } from '../../constants/testAccounts'
 
 const FREE_FOLLOWER_LIMIT = 500
 
@@ -60,7 +61,7 @@ export default function CreatorScreen() {
 
     const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }, mySubResult, myRequestResult, viewerProfileResult] = await Promise.all([
       supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, membership_active, is_private, pinned_broadcast_id').eq('id', id).single(),
-      supabase.from('follows').select('follower_id').eq('following_id', id),
+      supabase.from('follows').select('follower_id').eq('following_id', id).not('follower_id', 'in', TEST_IDS_CSV),
       user
         ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
         : Promise.resolve({ data: null }),

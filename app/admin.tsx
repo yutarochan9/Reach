@@ -14,6 +14,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
+import { TEST_IDS_CSV } from '../constants/testAccounts'
 
 // ── プラットフォーム収益設定 ─────────────────────────────────
 const PLAN_PRICE: Record<string, number> = { free: 0, standard: 980, pro: 1980 }
@@ -69,8 +70,8 @@ async function loadPeriodRankings(period: RankPeriod): Promise<PeriodRankings> {
     { data: earningsData }, { data: reactionsRaw }, { data: commentsRaw }, { data: reportsData },
   ] = await Promise.all([
     wd(supabase.from('broadcasts').select('sender_id, sender:profiles!broadcasts_sender_id_fkey(display_name,username,avatar_url)').eq('status','published')).limit(5000),
-    wd(supabase.from('follows').select('following_id, following:profiles!follows_following_id_fkey(display_name,username,avatar_url)')).limit(5000),
-    wd(supabase.from('subscriptions').select('creator_id, creator:profiles!subscriptions_creator_id_fkey(display_name,username,avatar_url)').eq('status','active')).limit(5000),
+    wd(supabase.from('follows').select('following_id, following:profiles!follows_following_id_fkey(display_name,username,avatar_url)').not('follower_id', 'in', TEST_IDS_CSV)).limit(5000),
+    wd(supabase.from('subscriptions').select('creator_id, creator:profiles!subscriptions_creator_id_fkey(display_name,username,avatar_url)').eq('status','active').not('subscriber_id', 'in', TEST_IDS_CSV)).limit(5000),
     wd(supabase.from('creator_earnings').select('creator_id, creator_amount, creator:profiles!creator_earnings_creator_id_fkey(display_name,username,avatar_url)')).limit(5000),
     wd(supabase.from('reactions').select('broadcast_id')).limit(5000),
     wd(supabase.from('messages').select('broadcast_id').not('broadcast_id','is',null)).limit(5000),
@@ -416,10 +417,10 @@ export default function AdminScreen() {
       supabase.from('messages').select('id', { count: 'exact', head: true }).gte('created_at', todayStart).is('broadcast_id', null),
       supabase.from('messages').select('id', { count: 'exact', head: true }).gte('created_at', todayStart).not('broadcast_id', 'is', null),
       supabase.from('message_likes').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
-      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', todayStart),
-      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', weekStart),
-      supabase.from('profiles').select('id, display_name, username, avatar_url, plan, is_admin, is_banned, created_at').order('created_at', { ascending: false }).limit(200),
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').not('subscriber_id', 'in', TEST_IDS_CSV),
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', todayStart).not('subscriber_id', 'in', TEST_IDS_CSV),
+      supabase.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'active').gte('created_at', weekStart).not('subscriber_id', 'in', TEST_IDS_CSV),
+      supabase.from('profiles').select('id, display_name, username, avatar_url, plan, is_admin, is_banned, created_at').neq('is_test', true).order('created_at', { ascending: false }).limit(200),
       supabase.from('reports').select(`id, reporter_id, reported_user_id, reason, details, status, admin_note, created_at,
         reporter:profiles!reports_reporter_id_fkey(display_name, username),
         reported_user:profiles!reports_reported_user_id_fkey(display_name, username),
@@ -429,7 +430,7 @@ export default function AdminScreen() {
       supabase.from('profiles').select('created_at').gte('created_at', weekStart),
       supabase.from('broadcasts').select('created_at').gte('created_at', weekStart),
       supabase.from('messages').select('created_at, broadcast_id').gte('created_at', weekStart),
-      supabase.from('subscriptions').select('creator:profiles!subscriptions_creator_id_fkey(membership_price)').eq('status', 'active'),
+      supabase.from('subscriptions').select('creator:profiles!subscriptions_creator_id_fkey(membership_price)').eq('status', 'active').not('subscriber_id', 'in', TEST_IDS_CSV),
       supabase.from('support_payments').select('amount'),
     ])
 

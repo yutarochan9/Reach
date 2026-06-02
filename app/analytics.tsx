@@ -9,6 +9,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { BETA_MODE } from '../constants/config'
+import { TEST_IDS_CSV } from '../constants/testAccounts'
 
 const C = {
   bg:       '#EDE4D8',
@@ -232,8 +233,8 @@ export default function AnalyticsScreen() {
       { data: longTermSubs },
     ] = await Promise.all([
       supabase.from('profiles').select('plan').eq('id', user.id).single(),
-      supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id),
-      supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', user.id),
+      supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id).not('follower_id', 'in', TEST_IDS_CSV),
+      supabase.from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', user.id).not('following_id', 'in', TEST_IDS_CSV),
       supabase.from('broadcasts').select('id, content, created_at, group_id, block_order')
         .eq('sender_id', user.id).eq('status', 'published').order('created_at', { ascending: false }),
       supabase.from('broadcasts').select('id', { count: 'exact', head: true })
@@ -241,7 +242,7 @@ export default function AnalyticsScreen() {
         .gte('created_at', startOfMonth.toISOString()),
       // 会員数: アクティブな加入者数
       supabase.from('subscriptions').select('subscriber_id', { count: 'exact', head: true })
-        .eq('creator_id', user.id).eq('status', 'active'),
+        .eq('creator_id', user.id).eq('status', 'active').not('subscriber_id', 'in', TEST_IDS_CSV),
       // 総投稿数: メンバーシップ限定配信の総数
       supabase.from('broadcasts').select('id', { count: 'exact', head: true })
         .eq('sender_id', user.id).eq('status', 'published').eq('is_subscriber_only', true),
@@ -251,7 +252,7 @@ export default function AnalyticsScreen() {
         .gte('created_at', startOfMonth.toISOString()),
       // 継続率計算用: 30日以上前から加入しているメンバー
       supabase.from('subscriptions').select('created_at')
-        .eq('creator_id', user.id).eq('status', 'active').lte('created_at', thirtyDaysAgo),
+        .eq('creator_id', user.id).eq('status', 'active').lte('created_at', thirtyDaysAgo).not('subscriber_id', 'in', TEST_IDS_CSV),
     ])
 
     const mc = memberCount ?? 0
@@ -265,8 +266,8 @@ export default function AnalyticsScreen() {
 
     const bcIds = (bcs ?? []).map((b: any) => b.id)
     const [{ data: reactions }, { data: reads }, { data: replies }] = await Promise.all([
-      bcIds.length > 0 ? supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds) : Promise.resolve({ data: [] }),
-      bcIds.length > 0 ? supabase.from('broadcast_reads').select('broadcast_id').in('broadcast_id', bcIds) : Promise.resolve({ data: [] }),
+      bcIds.length > 0 ? supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds).not('user_id', 'in', TEST_IDS_CSV) : Promise.resolve({ data: [] }),
+      bcIds.length > 0 ? supabase.from('broadcast_reads').select('broadcast_id').in('broadcast_id', bcIds).not('user_id', 'in', TEST_IDS_CSV) : Promise.resolve({ data: [] }),
       bcIds.length > 0 ? supabase.from('messages').select('broadcast_id').in('broadcast_id', bcIds) : Promise.resolve({ data: [] }),
     ])
 
