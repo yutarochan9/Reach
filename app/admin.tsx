@@ -4,7 +4,7 @@
  * 管理者専用ダッシュボード。
  * タブ：KPI / ユーザー / 報告 / 配信 / メンシプ / 振込 / お知らせ / フラグ
  */
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Alert, ActivityIndicator, Platform, Image, FlatList,
