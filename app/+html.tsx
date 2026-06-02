@@ -13,6 +13,9 @@ export default function Root({ children }: PropsWithChildren) {
           content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover"
         />
 
+        {/* ── Google Search Console 所有権確認 ── */}
+        <meta name="google-site-verification" content="cjp8RdeEPVVaxkI00qfGanWpt78Zcck9RQ__F__Os-g" />
+
         {/* ── ページタイトル・説明 ── */}
         <title>Reach — クリエイターとファンをつなぐ配信プラットフォーム</title>
         <meta name="description" content="Reachは、クリエイターの配信がアルゴリズムに埋もれることなくフォロワー全員に確実に届くプラットフォームです。テキスト・画像・メンバーシップなど多彩な機能でファンとつながろう。" />
