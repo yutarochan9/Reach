@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Stack, router, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as Sentry from '@sentry/react-native'
@@ -14,6 +14,8 @@ import CookieBanner from './components/CookieBanner'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
+import { BETA_GATE } from '../constants/config'
+import BetaGate, { isBetaUnlocked } from './beta-gate'
 
 const SIDEBAR_W = 68
 
@@ -104,6 +106,27 @@ export default function RootLayout() {
 
   const navigated = useRef(false)
   const currentUserId = useRef<string | null>(null)
+
+  // ── ベータゲート ────────────────────────────────────────
+  // BETA_GATE = true のとき、パスワード未入力ならゲート画面を表示
+  const [gateChecked, setGateChecked] = useState(false)
+  const [gateUnlocked, setGateUnlocked] = useState(false)
+
+  useEffect(() => {
+    if (!BETA_GATE) { setGateUnlocked(true); setGateChecked(true); return }
+    isBetaUnlocked().then(unlocked => {
+      setGateUnlocked(unlocked)
+      setGateChecked(true)
+    })
+  }, [])
+
+  // ゲート確認中は何も表示しない（チラつき防止）
+  if (!gateChecked) return null
+
+  // パスワード未入力ならゲート画面だけ表示
+  if (BETA_GATE && !gateUnlocked) {
+    return <BetaGate onUnlock={() => setGateUnlocked(true)} />
+  }
 
   // パスが変わるたびに保存（認証・オンボーディング画面は除く）
   useEffect(() => {
