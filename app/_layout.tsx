@@ -101,6 +101,7 @@ export default function RootLayout() {
   const pathname = usePathname()
   const isDesktop = Platform.OS === 'web' && width >= 900
   const isAuthRoute = pathname.startsWith('/(auth)') || pathname === '/onboarding'
+    || pathname === '/login' || pathname === '/signup'
   const isLanding = pathname === '/landing'
   const showSidebar = isDesktop && !isAuthRoute && !isLanding
 
