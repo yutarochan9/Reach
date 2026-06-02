@@ -53,14 +53,16 @@ serve(async (req) => {
       throw new Error('有効なメンバーシップが見つかりません')
     }
 
-    // Stripe で期間終了時キャンセルに設定
-    await stripe.subscriptions.update(sub.stripe_subscription_id, {
+    // Stripe で期間終了時キャンセルに設定し、終了日を取得
+    const updatedSub = await stripe.subscriptions.update(sub.stripe_subscription_id, {
       cancel_at_period_end: true,
     })
+    const expiresAt = new Date(updatedSub.current_period_end * 1000).toISOString()
 
-    // DB を即座に 'canceling' に更新（次回更新日までは利用可能）
+    // DB を即座に 'canceling' に更新（expires_at に終了日を保存）
     await supabase.from('subscriptions').update({
       status: 'canceling',
+      expires_at: expiresAt,
       updated_at: new Date().toISOString(),
     }).eq('id', sub.id)
 
@@ -71,7 +73,7 @@ serve(async (req) => {
       actor_id: user.id,
     })
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, expiresAt }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {

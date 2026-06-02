@@ -167,10 +167,28 @@ export default function BankAccountScreen() {
       }
 
       setBankRegistered(true)
+
+      // 本人確認情報が未入力なら続けて入力を促す
+      const { data: profile } = await supabase.from('profiles')
+        .select('kyc_completed_at').eq('id', userId).single()
+      const kycDone = !!profile?.kyc_completed_at
+
       if (Platform.OS === 'web') {
         window.alert('振込先口座を登録しました')
+        if (!kycDone) router.push('/payout-profile' as any)
       } else {
-        Alert.alert('登録完了', '振込先口座を登録しました')
+        if (kycDone) {
+          Alert.alert('登録完了', '振込先口座を登録しました')
+        } else {
+          Alert.alert(
+            '登録完了',
+            '振込先口座を登録しました。\n次に本人確認情報を入力してください。',
+            [
+              { text: 'あとで', style: 'cancel' },
+              { text: '入力する', onPress: () => router.push('/payout-profile' as any) },
+            ]
+          )
+        }
       }
     } catch (e: any) {
       Alert.alert('エラー', e.message ?? '保存に失敗しました')

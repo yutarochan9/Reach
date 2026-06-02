@@ -1,7 +1,8 @@
 /**
  * device-sessions.tsx
  * 設定 › ログイン中のデバイス 画面。
- * 承認待ちデバイスの承認・拒否と、ログイン済みデバイスのログアウトを管理する。
+ * ログイン済みデバイスの一覧表示・ログアウトを管理する。
+ * ホスト承認フローは廃止済み。
  */
 
 import { useState, useCallback } from 'react'
@@ -10,7 +11,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
-import { getDeviceKey, promoteNewHost } from '../lib/deviceSession'
+import { getDeviceKey, upsertDeviceSession } from '../lib/deviceSession'
 
 type DeviceSession = {
   id: string
@@ -18,8 +19,24 @@ type DeviceSession = {
   platform: string
   device_key: string
   last_seen: string
-  is_host: boolean
+  location: string | null
   status: 'approved' | 'pending' | 'denied'
+}
+
+// last_seen を「X分前」などの相対表現に変換
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 60000)    return 'たった今'
+  if (diff < 3600000)  return `${Math.floor(diff / 60000)}分前`
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}時間前`
+  return `${Math.floor(diff / 86400000)}日前`
+}
+
+// last_seen を「YYYY/MM/DD HH:mm」形式に変換
+function formatDatetime(iso: string): string {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export default function DeviceSessionsScreen() {
@@ -28,15 +45,23 @@ export default function DeviceSessionsScreen() {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const [{ data: sessions }, deviceKey] = await Promise.all([
-      supabase.from('device_sessions')
-        .select('id, device_name, platform, device_key, last_seen, is_host, status')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true }),
-      getDeviceKey(),
-    ])
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (!user) { console.warn('[device-sessions] getUser failed:', userError?.message); return }
+
+    const deviceKey = await getDeviceKey()
+
+    // 現在のデバイスを upsert（画面を開くたびに last_seen を更新 & 未登録なら登録）
+    const result = await upsertDeviceSession(user.id)
+    console.log('[device-sessions] upsert result:', result)
+
+    const { data: sessions, error: fetchError } = await supabase.from('device_sessions')
+      .select('id, device_name, platform, device_key, last_seen, location, status')
+      .eq('user_id', user.id)
+      .eq('status', 'approved')
+      .order('last_seen', { ascending: false })
+
+    if (fetchError) console.error('[device-sessions] fetch error:', fetchError.message)
+
     setDeviceSessions((sessions as DeviceSession[]) ?? [])
     setCurrentDeviceKey(deviceKey)
     setLoading(false)
@@ -51,8 +76,6 @@ export default function DeviceSessionsScreen() {
       ? 'このデバイスからログアウトします。よろしいですか？'
       : `「${session.device_name}」のセッションを終了します。よろしいですか？`
     const doLogout = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (session.is_host && user) await promoteNewHost(user.id, session.device_key)
       await supabase.from('device_sessions').delete().eq('id', session.id)
       if (isCurrentDevice) {
         await supabase.auth.signOut()
@@ -91,24 +114,6 @@ export default function DeviceSessionsScreen() {
     }
   }
 
-  // 承認待ちデバイスを承認する
-  const handleApproveDevice = async (session: DeviceSession) => {
-    await supabase.from('device_sessions').update({ status: 'approved' }).eq('id', session.id)
-    setDeviceSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: 'approved' } : s))
-  }
-
-  // 承認待ちデバイスを拒否する
-  const handleDenyDevice = async (session: DeviceSession) => {
-    await supabase.from('device_sessions').update({ status: 'denied' }).eq('id', session.id)
-    setTimeout(async () => {
-      await supabase.from('device_sessions').delete().eq('id', session.id)
-    }, 500)
-    setDeviceSessions(prev => prev.filter(s => s.id !== session.id))
-  }
-
-  const pendingSessions = deviceSessions.filter(s => s.status === 'pending')
-  const approvedSessions = deviceSessions.filter(s => s.status === 'approved')
-
   return (
     <View style={styles.container}>
       {/* ヘッダー */}
@@ -127,85 +132,58 @@ export default function DeviceSessionsScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
 
-          {/* 承認待ちデバイス */}
-          {pendingSessions.length > 0 && (
-            <>
-              <Text style={styles.sectionLabel}>承認待ちのデバイス</Text>
-              <View style={styles.section}>
-                {pendingSessions.map((session, idx) => (
-                  <View key={session.id}>
-                    {idx > 0 && <View style={styles.divider} />}
-                    <View style={styles.deviceRow}>
-                      <View style={[styles.deviceIconWrap, { backgroundColor: '#FEF3C7' }]}>
-                        <Ionicons
-                          name={session.platform === 'ios' ? 'phone-portrait-outline' : session.platform === 'android' ? 'logo-android' : 'desktop-outline' as any}
-                          size={20} color="#D97706"
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.deviceName} numberOfLines={1}>{session.device_name}</Text>
-                        <Text style={styles.deviceSub}>承認をリクエスト中</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', gap: 6 }}>
-                        <TouchableOpacity style={styles.approveBtn} onPress={() => handleApproveDevice(session)}>
-                          <Text style={styles.approveBtnText}>承認</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.denyBtn} onPress={() => handleDenyDevice(session)}>
-                          <Text style={styles.denyBtnText}>拒否</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </>
-          )}
-
-          {/* ログイン済みデバイス */}
+          {/* ログイン済みデバイス一覧 */}
           <Text style={styles.sectionLabel}>ログイン中</Text>
           <View style={styles.section}>
-            {approvedSessions.length === 0 ? (
+            {deviceSessions.length === 0 ? (
               <View style={styles.deviceRow}>
                 <Text style={styles.deviceSub}>デバイスがありません</Text>
               </View>
             ) : (
-              approvedSessions.map((session, idx) => {
+              deviceSessions.map((session, idx) => {
                 const isCurrent = session.device_key === currentDeviceKey
+                // デバイス名からアイコンを選択
+                // platform='web' でもiPhone/Androidなら携帯アイコンを使う
+                const name = session.device_name.toLowerCase()
                 const platformIcon =
-                  session.platform === 'ios' ? 'phone-portrait-outline' :
-                  session.platform === 'android' ? 'logo-android' : 'desktop-outline'
-                const lastSeen = (() => {
-                  const diff = Date.now() - new Date(session.last_seen).getTime()
-                  if (diff < 60000)    return 'たった今'
-                  if (diff < 3600000)  return `${Math.floor(diff / 60000)}分前`
-                  if (diff < 86400000) return `${Math.floor(diff / 3600000)}時間前`
-                  return `${Math.floor(diff / 86400000)}日前`
-                })()
+                  session.platform === 'ios' || name.includes('iphone') || name.includes('ipad')
+                    ? 'phone-portrait-outline'
+                  : session.platform === 'android' || name.includes('android') || name.includes('pixel') || name.includes('galaxy') || name.includes('samsung')
+                    ? 'logo-android'
+                  : 'desktop-outline'
                 return (
                   <View key={session.id}>
                     {idx > 0 && <View style={styles.divider} />}
                     <View style={styles.deviceRow}>
+                      {/* デバイスアイコン */}
                       <View style={[styles.deviceIconWrap, isCurrent && styles.deviceIconWrapCurrent]}>
                         <Ionicons name={platformIcon as any} size={18} color={isCurrent ? Colors.accent : Colors.textLight} />
                       </View>
-                      <View style={{ flex: 1, gap: 3 }}>
+
+                      {/* デバイス情報 */}
+                      <View style={{ flex: 1, gap: 2 }}>
+                        {/* デバイス名 + "このデバイス"バッジ */}
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
                           <Text style={styles.deviceName} numberOfLines={1}>{session.device_name}</Text>
-                          {session.is_host && (
-                            <View style={styles.hostBadge}>
-                              <Ionicons name="shield-checkmark" size={9} color={Colors.white} />
-                              <Text style={styles.hostBadgeText}>ホスト</Text>
-                            </View>
-                          )}
                           {isCurrent && (
                             <View style={styles.currentBadge}>
                               <Text style={styles.currentBadgeText}>このデバイス</Text>
                             </View>
                           )}
                         </View>
-                        <Text style={styles.deviceSub}>最終アクセス：{lastSeen}</Text>
+                        {/* 場所（取得できた場合のみ表示） */}
+                        {session.location ? (
+                          <Text style={styles.deviceSub}>
+                            <Ionicons name="location-outline" size={10} color={Colors.textLight} /> {session.location}
+                          </Text>
+                        ) : null}
+                        {/* 最終ログイン日時：相対時間 + 絶対時間 */}
+                        <Text style={styles.deviceSub}>
+                          最終ログイン：{relativeTime(session.last_seen)}（{formatDatetime(session.last_seen)}）
+                        </Text>
                       </View>
-                      {/* ⋯ ボタン（押すと確認ダイアログ） */}
+
+                      {/* ⋯ メニューボタン */}
                       <TouchableOpacity
                         onPress={() => handleLogoutDevice(session)}
                         style={styles.deviceMoreBtn}
@@ -221,7 +199,7 @@ export default function DeviceSessionsScreen() {
           </View>
 
           {/* 他のすべてのデバイスをログアウト */}
-          {approvedSessions.length > 1 && (
+          {deviceSessions.length > 1 && (
             <TouchableOpacity style={styles.logoutAllBtn} onPress={handleLogoutOtherDevices}>
               <Ionicons name="log-out-outline" size={15} color={Colors.textLight} />
               <Text style={styles.logoutAllText}>他のすべてのデバイスをログアウト</Text>
@@ -272,29 +250,13 @@ const styles = StyleSheet.create({
   },
   deviceIconWrapCurrent: { backgroundColor: `${Colors.accent}15` },
   deviceName: { fontSize: 14, fontWeight: '600', color: Colors.text },
-  deviceSub: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
+  deviceSub: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
   deviceMoreBtn: { padding: 6, borderRadius: 16 },
   currentBadge: {
     backgroundColor: `${Colors.accent}20`, borderRadius: 4,
     paddingHorizontal: 6, paddingVertical: 2,
   },
   currentBadgeText: { fontSize: 10, color: Colors.accent, fontWeight: '700' },
-  hostBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: Colors.accent, borderRadius: 4,
-    paddingHorizontal: 6, paddingVertical: 2,
-  },
-  hostBadgeText: { fontSize: 10, color: Colors.white, fontWeight: '700' },
-  approveBtn: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 8, backgroundColor: Colors.accent,
-  },
-  approveBtnText: { fontSize: 12, color: Colors.white, fontWeight: '700' },
-  denyBtn: {
-    paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 8, borderWidth: 1, borderColor: Colors.border,
-  },
-  denyBtnText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
   logoutAllBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingVertical: 12, paddingHorizontal: 4,

@@ -36,10 +36,15 @@ type Creator = {
   username: string | null
 }
 
+// ── モジュールレベルキャッシュ（再マウント時のフラッシュ防止）──────────
+let _cachedScored: Creator[] = []
+let _cachedProfiles: Creator[] = []
+let _shopLoaded = false
+
 export default function DiscoverScreen() {
-  const [allScored, setAllScored] = useState<Creator[]>([])
-  const [allProfiles, setAllProfiles] = useState<Creator[]>([])
-  const [loading, setLoading] = useState(true)
+  const [allScored, setAllScored] = useState<Creator[]>(_cachedScored)
+  const [allProfiles, setAllProfiles] = useState<Creator[]>(_cachedProfiles)
+  const [loading, setLoading] = useState(!_shopLoaded)
   const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -59,7 +64,7 @@ export default function DiscoverScreen() {
     // 2. 自分のプロフィール（タグ取得）と候補プロフィール（未フォロー・自分以外、最大300件）
     const [{ data: myProfile }, { data: profiles }] = await Promise.all([
       supabase.from('profiles').select('tags').eq('id', user.id).single(),
-      supabase.from('profiles').select('id, display_name, bio, avatar_url, tags, username').neq('id', user.id).limit(300),
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, tags, username').neq('id', user.id).neq('is_test', true).limit(300),
     ])
     const myTags: string[] = (myProfile as any)?.tags ?? []
     const myTagSet = new Set(myTags.map((t: string) => t.toLowerCase()))
@@ -175,6 +180,9 @@ export default function DiscoverScreen() {
     // フォロー済みを除いたリスト（おすすめ・ランキング表示用）
     const scored = allScoredFull.filter(c => !c.is_following)
 
+    _cachedScored = scored
+    _cachedProfiles = allScoredFull
+    _shopLoaded = true
     setAllScored(scored)
     setAllProfiles(allScoredFull)
     setPage(1)

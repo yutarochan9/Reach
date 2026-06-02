@@ -42,6 +42,7 @@ export default function BroadcastThreadScreen() {
   const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null)
   const [creatorName, setCreatorName] = useState('')
   const [blocks, setBlocks] = useState<BroadcastBlock[]>([])
+  const [commentsDisabled, setCommentsDisabled] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [inputText, setInputText] = useState('')
@@ -59,7 +60,7 @@ export default function BroadcastThreadScreen() {
 
     const { data: anchor } = await supabase
       .from('broadcasts')
-      .select('id, content, image_url, block_order, group_id, sender_id')
+      .select('id, content, image_url, block_order, group_id, sender_id, comments_disabled')
       .eq('id', anchorId)
       .single()
 
@@ -68,6 +69,7 @@ export default function BroadcastThreadScreen() {
     const self = user.id === anchor.sender_id
     setIsSelf(self)
     setBroadcastSenderId(anchor.sender_id)
+    setCommentsDisabled(anchor.comments_disabled ?? false)
 
     let broadcastIds: string[] = [anchorId as string]
     let allBlocks: BroadcastBlock[] = [anchor]
@@ -471,40 +473,47 @@ export default function BroadcastThreadScreen() {
       )}
 
       {/* 入力エリア */}
-      <View style={styles.inputArea}>
-        {isCommentMode && (
-          <View style={styles.replyContext}>
-            <Ionicons name="return-down-forward-outline" size={14} color={Colors.accent} />
-            <Text style={styles.replyContextText} numberOfLines={1}>
-              @{replyToComment.sender_name} に返信
-            </Text>
-            <TouchableOpacity onPress={() => setReplyToComment(null)}>
-              <Ionicons name="close" size={16} color={Colors.textLight} />
+      {commentsDisabled ? (
+        <View style={styles.commentsDisabledBar}>
+          <Ionicons name="chatbubble-outline" size={14} color={Colors.textLight} />
+          <Text style={styles.commentsDisabledText}>このブロードキャストはコメントが無効です</Text>
+        </View>
+      ) : (
+        <View style={styles.inputArea}>
+          {isCommentMode && (
+            <View style={styles.replyContext}>
+              <Ionicons name="return-down-forward-outline" size={14} color={Colors.accent} />
+              <Text style={styles.replyContextText} numberOfLines={1}>
+                @{replyToComment.sender_name} に返信
+              </Text>
+              <TouchableOpacity onPress={() => setReplyToComment(null)}>
+                <Ionicons name="close" size={16} color={Colors.textLight} />
+              </TouchableOpacity>
+            </View>
+          )}
+          <View style={styles.inputRow}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              placeholder={isCommentMode ? `@${replyToComment?.sender_name} に返信...` : 'コメントを追加...'}
+              placeholderTextColor={Colors.textLight}
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendDisabled]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || sending}
+            >
+              {sending
+                ? <ActivityIndicator size="small" color={Colors.white} />
+                : <Ionicons name="send" size={18} color={Colors.white} />
+              }
             </TouchableOpacity>
           </View>
-        )}
-        <View style={styles.inputRow}>
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            placeholder={isCommentMode ? `@${replyToComment?.sender_name} に返信...` : 'コメントを追加...'}
-            placeholderTextColor={Colors.textLight}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-          >
-            {sending
-              ? <ActivityIndicator size="small" color={Colors.white} />
-              : <Ionicons name="send" size={18} color={Colors.white} />
-            }
-          </TouchableOpacity>
         </View>
-      </View>
+      )}
     </KeyboardAvoidingView>
   )
 }
@@ -625,6 +634,13 @@ const styles = StyleSheet.create({
 
   emptyWrap: { alignItems: 'center', padding: 48, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight, textAlign: 'center' },
+
+  commentsDisabledBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border,
+    paddingVertical: 12, paddingHorizontal: 16,
+  },
+  commentsDisabledText: { fontSize: 13, color: Colors.textLight },
 
   inputArea: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
   replyContext: {

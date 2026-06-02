@@ -53,17 +53,26 @@ export default function MembershipPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [myId, setMyId] = useState<string | null>(null)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [isPrivate, setIsPrivate] = useState(false)
 
   useEffect(() => {
     const fetch = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setMyId(user?.id ?? null)
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, display_name, bio, avatar_url, membership_active, membership_price, membership_benefits, membership_description, membership_welcome, membership_community, membership_close_date')
-        .eq('id', creatorId)
-        .single()
+      const [{ data }, followResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, display_name, bio, avatar_url, membership_active, membership_price, membership_benefits, membership_description, membership_welcome, membership_community, membership_close_date, is_private')
+          .eq('id', creatorId)
+          .single(),
+        user
+          ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', creatorId).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
       setProfile(data)
+      setIsPrivate((data as any)?.is_private ?? false)
+      setIsFollowing(!!(followResult as any)?.data)
       setLoading(false)
     }
     fetch()
@@ -88,6 +97,24 @@ export default function MembershipPage() {
         <Ionicons name="lock-closed-outline" size={40} color={Colors.textLight} />
         <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.text, textAlign: 'center' }}>
           このメンバーシップは現在非公開です
+        </Text>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace(`/creator/${creatorId}` as any)}>
+          <Text style={{ color: Colors.accent, fontSize: 14 }}>戻る</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
+
+  // 鍵垢かつ未承認フォロワーはメンバーシップページにアクセス不可
+  if (isPrivate && !isOwner && !isFollowing) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', gap: 16, padding: 32 }]}>
+        <Ionicons name="lock-closed-outline" size={40} color={Colors.textLight} />
+        <Text style={{ fontSize: 16, fontWeight: '700', color: Colors.text, textAlign: 'center' }}>
+          フォロワー限定のメンバーシップです
+        </Text>
+        <Text style={{ fontSize: 13, color: Colors.textLight, textAlign: 'center', lineHeight: 20 }}>
+          フォローが承認されると{'\n'}メンバーシップに加入できます
         </Text>
         <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace(`/creator/${creatorId}` as any)}>
           <Text style={{ color: Colors.accent, fontSize: 14 }}>戻る</Text>

@@ -15,7 +15,6 @@ type DeviceSession = {
   platform: string
   device_key: string
   last_seen: string
-  is_host: boolean
   status: 'approved' | 'pending' | 'denied'
 }
 const PLAN_LABELS: Record<Plan, string> = { free: '無料', standard: 'スタンダード', pro: 'プロ' }
@@ -50,22 +49,94 @@ export default function SettingsScreen() {
     setSubscriptionStatus(profile?.subscription_status ?? null)
     setIsAdmin(profile?.is_admin ?? false)
 
-    // 承認待ちバッジ表示用にデバイス一覧を取得
+    // ログイン中デバイス数を取得（バッジ表示用）
     const { data: sessions } = await supabase.from('device_sessions')
-      .select('id, device_name, platform, device_key, last_seen, is_host, status')
-      .eq('user_id', user.id).order('created_at', { ascending: true })
+      .select('id, device_name, platform, device_key, last_seen, status')
+      .eq('user_id', user.id)
+      .eq('status', 'approved')
     setDeviceSessions((sessions as DeviceSession[]) ?? [])
     setLoading(false)
   }, [])
 
-  const handlePrivateToggle = async (val: boolean) => {
-    setSavingPrivate(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      await supabase.from('profiles').update({ is_private: val }).eq('id', user.id)
+  const handlePrivateToggle = (val: boolean) => {
+    // 鍵アカウントにする（公開 → 鍵）
+    if (val) {
+      const doSave = async () => {
+        setSavingPrivate(true)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { error } = await supabase.from('profiles').update({ is_private: true }).eq('id', user.id)
+          if (error) {
+            Alert.alert('エラー', '設定の保存に失敗しました')
+            setSavingPrivate(false)
+            return
+          }
+        }
+        setIsPrivate(true)
+        setSavingPrivate(false)
+      }
+      if (Platform.OS === 'web') {
+        if (window.confirm('鍵アカウントに変更しますか？\n新しいフォロワーには承認が必要になります。')) doSave()
+      } else {
+        Alert.alert(
+          '鍵アカウントに変更',
+          '新しいフォロワーには承認が必要になります。よろしいですか？',
+          [{ text: 'キャンセル', style: 'cancel' }, { text: '変更する', onPress: doSave }]
+        )
+      }
+      return
     }
-    setIsPrivate(val)
-    setSavingPrivate(false)
+
+    // 公開アカウントにする（鍵 → 公開）— 承認待ちフォロワーを自動承認する
+    const doSave = async () => {
+      setSavingPrivate(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setSavingPrivate(false); return }
+
+      // 1. プロフィールを公開に更新
+      const { error } = await supabase.from('profiles').update({ is_private: false }).eq('id', user.id)
+      if (error) {
+        Alert.alert('エラー', '設定の保存に失敗しました')
+        setSavingPrivate(false)
+        return
+      }
+
+      // 2. 承認待ちのフォローリクエストをすべて follows テーブルに移動
+      const { data: pendingRequests } = await supabase
+        .from('follow_requests')
+        .select('id, requester_id')
+        .eq('target_id', user.id)
+        .eq('status', 'pending')
+
+      if (pendingRequests && pendingRequests.length > 0) {
+        // follows テーブルに一括挿入
+        await supabase.from('follows').upsert(
+          pendingRequests.map(r => ({
+            follower_id:  r.requester_id,
+            following_id: user.id,
+          })),
+          { onConflict: 'follower_id,following_id' }
+        )
+        // follow_requests から削除
+        await supabase.from('follow_requests')
+          .delete()
+          .eq('target_id', user.id)
+          .eq('status', 'pending')
+      }
+
+      setIsPrivate(false)
+      setSavingPrivate(false)
+    }
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('公開アカウントに変更しますか？\n承認待ちのフォロワーは自動的にフォロー中になります。')) doSave()
+    } else {
+      Alert.alert(
+        '公開アカウントに変更',
+        '承認待ちのフォロワーは自動的にフォロー中になります。よろしいですか？',
+        [{ text: 'キャンセル', style: 'cancel' }, { text: '変更する', onPress: doSave }]
+      )
+    }
   }
 
   useFocusEffect(useCallback(() => { load() }, [load]))
@@ -74,7 +145,12 @@ export default function SettingsScreen() {
     setSavingPush(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('profiles').update({ push_enabled: val }).eq('id', user.id)
+      const { error } = await supabase.from('profiles').update({ push_enabled: val }).eq('id', user.id)
+      if (error) {
+        Alert.alert('エラー', '設定の保存に失敗しました')
+        setSavingPush(false)
+        return
+      }
     }
     setPushEnabled(val)
     setSavingPush(false)
@@ -274,11 +350,6 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/device-sessions' as any)}>
             <Ionicons name="phone-portrait-outline" size={18} color={Colors.accent} />
             <Text style={styles.actionLabel}>ログイン中のデバイス</Text>
-            {deviceSessions.some(s => s.status === 'pending') && (
-              <View style={styles.pendingBadge}>
-                <Text style={styles.pendingBadgeText}>{deviceSessions.filter(s => s.status === 'pending').length}</Text>
-              </View>
-            )}
             <Ionicons name="chevron-forward" size={16} color={Colors.border} />
           </TouchableOpacity>
         </View>

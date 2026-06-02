@@ -8,6 +8,7 @@ const SERVICE_NAME = 'Reach'
 const COMPANY = 'Reach運営事務局'
 const CONTACT_X = '@Reach_X_PR'
 const CONTACT_X_URL = 'https://x.com/Reach_X_PR'
+const CONTACT_EMAIL = 'reach.official.jp@gmail.com'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -35,7 +36,7 @@ export default function TermsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/landing' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>利用規約</Text>
@@ -163,6 +164,9 @@ export default function TermsScreen() {
           <Body>{`本規約に関するお問い合わせは、以下の窓口までご連絡ください。\n\n${COMPANY}`}</Body>
           <TouchableOpacity onPress={() => Linking.openURL(CONTACT_X_URL)}>
             <Text style={styles.contactLink}>X（DM）：{CONTACT_X}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => Linking.openURL(`mailto:${CONTACT_EMAIL}`)}>
+            <Text style={styles.contactLink}>メール：{CONTACT_EMAIL}</Text>
           </TouchableOpacity>
         </Section>
       </ScrollView>

@@ -2,15 +2,15 @@ import { useEffect, useRef } from 'react'
 import { Stack, router, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as Sentry from '@sentry/react-native'
+import * as Updates from 'expo-updates'
 import { Platform, AppState, View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
-import { upsertDeviceSession, getDeviceSessionStatus, getDeviceName } from '../lib/deviceSession'
 import { sendPushToUsers } from '../lib/notifications'
+import { upsertDeviceSession } from '../lib/deviceSession'
 import CookieBanner from './components/CookieBanner'
-import PwaPrompt from './components/PwaPrompt'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
@@ -91,7 +91,7 @@ const isRestorable = (p: string) =>
   p && p !== '/' && !SKIP_SAVE.some(s => p.startsWith(s))
 
 // 未ログインでも閲覧を許可するパス
-const PUBLIC_PREFIXES = ['/creator/', '/talk/']
+const PUBLIC_PREFIXES = ['/creator/', '/talk/', '/terms', '/tokutei', '/privacy', '/landing']
 const isPublicPath = (p: string) => PUBLIC_PREFIXES.some(prefix => p.startsWith(prefix))
 
 export default function RootLayout() {
@@ -120,19 +120,6 @@ export default function RootLayout() {
         return
       }
 
-      // ── デバイスセッション登録 & ホスト承認チェック ─────────────────────────
-      // 新規端末の場合は 'pending' が返り、承認待ち画面へ遷移する。
-      // 既存端末（approved）はそのまま通常フローへ。
-      const deviceStatus = await upsertDeviceSession(userId).catch(() => 'approved' as const)
-      if (deviceStatus === 'pending') {
-        router.replace('/device-pending' as any)
-        return
-      }
-      if (deviceStatus === 'denied') {
-        await supabase.auth.signOut({ scope: 'local' })
-        router.replace('/(auth)/login')
-        return
-      }
 
       // Web: すでに有効な画面のURLにいる場合はそのまま留まる
       // isRestorable: タブ画面など通常の保存対象パス
@@ -166,6 +153,8 @@ export default function RootLayout() {
         navigated.current = true
         currentUserId.current = session.user.id
         registerPushToken().catch(() => {})
+        // セッション復元時は少し遅延させてからデバイス登録（認証トークンの準備を待つ）
+        setTimeout(() => upsertDeviceSession(session.user.id).catch(e => console.error('[layout] upsert error:', e)), 1500)
         navigateTo(session.user.id).catch(() => router.replace('/(tabs)/'))
       }
     }).catch(() => {
@@ -186,6 +175,8 @@ export default function RootLayout() {
         navigated.current = true
         currentUserId.current = session!.user.id
         registerPushToken().catch(() => {})
+        // ログイン直後は即実行（SIGNED_IN イベントなので認証済み確実）
+        upsertDeviceSession(session!.user.id).catch(e => console.error('[layout] upsert error:', e))
         navigateTo(session!.user.id).catch(() => router.replace('/(tabs)/'))
       }
     })
@@ -193,26 +184,64 @@ export default function RootLayout() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // ── リモートログアウト検知 ──────────────────────────────────────────────────
-  // 他の端末からこの端末のセッションが削除されたとき、次にアプリが前面に来たタイミングで
-  // 強制サインアウトする。ネットワーク障害時は無視（checkDeviceSessionValid が true を返す）。
+  // ── Web: バージョンポーリング（1分ごとに version.json をチェックして自動リロード）─
+  useEffect(() => {
+    if (Platform.OS !== 'web') return
+    let currentHash: string | null = null
+
+    const check = async () => {
+      try {
+        const res = await fetch('/version.json?t=' + Date.now())
+        if (!res.ok) return
+        const { hash } = await res.json()
+        if (currentHash === null) {
+          // 初回: 現在のハッシュを記録するだけ
+          currentHash = hash
+          return
+        }
+        if (currentHash !== hash) {
+          // 新しいバージョンが検出されたら自動リロード
+          window.location.reload()
+        }
+      } catch {
+        // ネットワークエラーは無視
+      }
+    }
+
+    check()
+    const timer = setInterval(check, 60 * 1000) // 1分ごと
+    return () => clearInterval(timer)
+  }, [])
+
+  // ── ネイティブ: EAS Update（起動時・フォアグラウンド復帰時に OTA 更新チェック）─
+  useEffect(() => {
+    if (Platform.OS === 'web') return
+    if (!Updates.isEnabled) return  // 開発中 (Expo Go / metro) はスキップ
+
+    const checkUpdate = async () => {
+      try {
+        const result = await Updates.checkForUpdateAsync()
+        if (!result.isAvailable) return
+        await Updates.fetchUpdateAsync()
+        await Updates.reloadAsync()  // 新バージョンを即適用して再起動
+      } catch {
+        // ネットワーク障害など → 無視して続行
+      }
+    }
+
+    checkUpdate()
+
+    // アプリがフォアグラウンドに戻るたびにもチェック
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') checkUpdate()
+    })
+    return () => sub.remove()
+  }, [])
+
+  // ── アプリ前面復帰時の処理（デバイスセッション承認は無効化済み）─────────────
   useEffect(() => {
     const handleActive = async () => {
-      const uid = currentUserId.current
-      if (!uid) return
-      const status = await getDeviceSessionStatus(uid)
-      if (status === null || status === 'denied') {
-        // セッション行が削除された（リモートログアウト）か、拒否された
-        await supabase.auth.signOut({ scope: 'local' })
-        router.replace('/(auth)/login')
-      } else if (status === 'pending') {
-        // 何らかの理由で pending に戻った場合は承認待ち画面へ
-        router.replace('/device-pending' as any)
-      }
-      // approved: last_seen 更新のみ
-      if (status === 'approved') {
-        upsertDeviceSession(uid).catch(() => {})
-      }
+      // 現在はデバイス承認フローを使用していないため何もしない
     }
 
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -234,7 +263,6 @@ export default function RootLayout() {
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }} />
         <CookieBanner />
-        <PwaPrompt />
       </View>
     </View>
   )

@@ -18,6 +18,8 @@ type Block = {
   imageUri: string | null
   imageUrl: string | null
   imageLinkUrl: string   // 画像タップで開くURL（任意）
+  videoUri: string | null
+  videoUrl: string | null
   uploading: boolean
 }
 
@@ -49,16 +51,16 @@ export default function ComposeScreen() {
   const [activeTab, setActiveTab] = useState<'new' | 'drafts' | 'tools'>('new')
 
   // 新規配信
-  const [blocks, setBlocks] = useState<Block[]>([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
+  const [blocks, setBlocks] = useState<Block[]>([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', videoUri: null, videoUrl: null, uploading: false }])
   const [target] = useState<Target>('all')
   const [scheduledAt, setScheduledAt] = useState('')
   const [showSchedule, setShowSchedule] = useState(false)
-  const [showReaction, setShowReaction] = useState(false)
+  const [showCommentOption, setShowCommentOption] = useState(false)
   const [showArchive, setShowArchive] = useState(false)
   const [showSubscriber, setShowSubscriber] = useState(false)
   const [isSubscriberOnly, setIsSubscriberOnly] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [publicReactions, setPublicReactions] = useState(false)
+  const [commentsDisabled, setCommentsDisabled] = useState(false)
   const [visibleToNew, setVisibleToNew] = useState(true)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -109,12 +111,15 @@ export default function ComposeScreen() {
     supabase.from('broadcasts').select('id', { count: 'exact', head: true })
       .eq('sender_id', userId).in('status', ['draft', 'scheduled'])
       .then(({ count }) => setDraftCount(count ?? 0))
-    // スケジュール済みで時刻が来たものを公開
+    // スケジュール済みで時刻が来たものを公開（status=scheduledのみ対象なので二重公開しない）
     supabase.from('broadcasts')
       .update({ status: 'published' })
       .eq('sender_id', userId).eq('status', 'scheduled')
       .lte('scheduled_at', new Date().toISOString())
-      .then(() => {})
+      .select('id')
+      .then(({ data }) => {
+        if (data && data.length > 0) loadDrafts()
+      })
   }, [userId]))
 
   // ─── 下書き読み込み ──────────────────────────────────────
@@ -179,7 +184,7 @@ export default function ComposeScreen() {
   }
 
   // ─── 新規配信操作 ─────────────────────────────────────────
-  const hasContent = blocks.some(b => b.text.trim() || b.imageUrl)
+  const hasContent = blocks.some(b => b.text.trim() || b.imageUrl || b.videoUrl)
 
   const updateBlock = (id: string, patch: Partial<Block>) => {
     setBlocks(prev => prev.map(b => b.id === id ? { ...b, ...patch } : b))
@@ -187,7 +192,7 @@ export default function ComposeScreen() {
   }
 
   const addBlock = () => {
-    setBlocks(prev => [...prev, { id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
+    setBlocks(prev => [...prev, { id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', videoUri: null, videoUrl: null, uploading: false }])
   }
 
   const removeBlock = (id: string) => {
@@ -224,6 +229,34 @@ export default function ComposeScreen() {
 
   const removeImage = (blockId: string) => updateBlock(blockId, { imageUri: null, imageUrl: null })
 
+  const pickVideo = async (blockId: string) => {
+    if (!userId) { Alert.alert('エラー', 'ログイン情報を読み込み中です'); return }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('許可が必要です', 'フォトライブラリへのアクセスを許可してください'); return }
+
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, videoMaxDuration: 300 })
+    if (result.canceled || !result.assets[0]) return
+
+    const asset = result.assets[0]
+    updateBlock(blockId, { videoUri: asset.uri, uploading: true, text: '', imageUri: null, imageUrl: null })
+
+    try {
+      const rawExt = asset.uri.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'mp4'
+      const ext = ['mp4', 'mov', 'avi', 'webm'].includes(rawExt) ? rawExt : 'mp4'
+      const path = `${userId}/${Date.now()}.${ext}`
+      const blob = await (await fetch(asset.uri)).blob()
+      const { error } = await supabase.storage.from('broadcast-videos').upload(path, blob, { contentType: `video/${ext === 'mov' ? 'quicktime' : ext}`, upsert: true })
+      if (error) { Alert.alert('アップロードエラー', error.message); updateBlock(blockId, { uploading: false }); return }
+      const { data: { publicUrl } } = supabase.storage.from('broadcast-videos').getPublicUrl(path)
+      updateBlock(blockId, { videoUrl: publicUrl, uploading: false })
+    } catch (e: any) {
+      Alert.alert('エラー', e?.message ?? '動画のアップロードに失敗しました')
+      updateBlock(blockId, { uploading: false })
+    }
+  }
+
+  const removeVideo = (blockId: string) => updateBlock(blockId, { videoUri: null, videoUrl: null })
+
   const getTargetFollowers = async (): Promise<string[]> => {
     // 通常配信は全フォロワー対象
     const { data } = await supabase.from('follows').select('follower_id').eq('following_id', userId)
@@ -235,7 +268,10 @@ export default function ComposeScreen() {
     const m = scheduledAt.trim().match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})\s+(\d{1,2}):(\d{2})$/)
     if (!m) return null
     const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
-    return isNaN(d.getTime()) ? null : d
+    if (isNaN(d.getTime())) return null
+    // JS は月・日・時のオーバーフローを自動補正するため、元の数値と照合して弾く
+    if (d.getFullYear() !== +m[1] || d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[3] || d.getHours() !== +m[4] || d.getMinutes() !== +m[5]) return null
+    return d
   }
 
   const handlePost = async (asDraft = false) => {
@@ -262,22 +298,25 @@ export default function ComposeScreen() {
     asDraft ? setSaving(true) : setLoading(true)
     const scheduledDate = !asDraft ? parseScheduledAt() : null
     const status = asDraft ? 'draft' : scheduledDate ? 'scheduled' : 'published'
-    const readyBlocks = blocks.filter(b => b.text.trim() || b.imageUrl)
+    const readyBlocks = blocks.filter(b => b.text.trim() || b.imageUrl || b.videoUrl)
     const groupId = readyBlocks.length > 1 ? genUUID() : null
     const inserts = readyBlocks.map((b, i) => ({
       sender_id: userId, content: b.text.trim() || '　',
       image_url: b.imageUrl ?? null,
       image_link_url: b.imageLinkUrl.trim() || null,
+      video_url: b.videoUrl ?? null,
       block_order: i,
       status, scheduled_at: scheduledDate?.toISOString() ?? null, target,
       group_id: groupId,
-      public_reactions: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? publicReactions : false,
+      public_reactions: true,  // いいねは全員に表示
+      comments_disabled: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? commentsDisabled : false,
       visible_to_new_followers: visibleToNew,
       is_subscriber_only: isSubscriberOnly,
     }))
     const { error } = await supabase.from('broadcasts').insert(inserts)
     if (error) { Alert.alert('エラー', error.message); asDraft ? setSaving(false) : setLoading(false); return }
     if (status === 'published') {
+      setMonthlyCount(prev => prev + 1)
       let notifyIds: string[]
       if (isSubscriberOnly) {
         // MB限定配信：サブスクリプション登録者のみに通知
@@ -291,17 +330,16 @@ export default function ComposeScreen() {
         notifyIds = await getTargetFollowers()
       }
       sendPushToUsers(notifyIds, senderName, readyBlocks[0]?.text.trim().slice(0, 80) || '画像が届きました')
-      setMonthlyCount(prev => prev + 1)
     }
     if (status === 'draft') {
       Alert.alert('下書き保存', '下書きを保存しました。「下書き・予約」タブから配信できます。')
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
-      setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
+      setScheduledAt(''); setConfirmed(false); setCommentsDisabled(false); setIsSubscriberOnly(false)
       setActiveTab('drafts')
     } else if (status === 'scheduled') {
       Alert.alert('予約完了', `${scheduledLabel}に配信予定として保存しました。`)
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
-      setScheduledAt(''); setConfirmed(false); setPublicReactions(false); setIsSubscriberOnly(false)
+      setScheduledAt(''); setConfirmed(false); setCommentsDisabled(false); setIsSubscriberOnly(false)
       setActiveTab('drafts')
     } else {
       // 配信後は自分のトーク画面へ遷移して送信内容を確認できる
@@ -339,12 +377,12 @@ export default function ComposeScreen() {
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
-            style={[styles.toolBtn, showReaction && styles.toolBtnActive]}
-            onPress={() => { setShowReaction(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
+            style={[styles.toolBtn, (showCommentOption || commentsDisabled) && styles.toolBtnActive]}
+            onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
           >
-            <Ionicons name="heart-outline" size={15} color={showReaction ? Colors.white : Colors.accent} />
-            <Text style={[styles.toolBtnText, showReaction && styles.toolBtnTextActive]} numberOfLines={1}>
-              {publicReactions ? '公開' : '非公開'}
+            <Ionicons name="chatbubble-outline" size={15} color={(showCommentOption || commentsDisabled) ? Colors.white : Colors.accent} />
+            <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]} numberOfLines={1}>
+              {commentsDisabled ? 'コメント非表示' : 'コメント'}
             </Text>
           </TouchableOpacity>
         )}
@@ -368,20 +406,20 @@ export default function ComposeScreen() {
         </TouchableOpacity>
       </View>
 
-      {showReaction && (
+      {showCommentOption && (
         <View style={styles.optionCard}>
-          <Text style={styles.optionTitle}>リアクション表示</Text>
+          <Text style={styles.optionTitle}>コメント欄</Text>
           {[
-            { value: true,  label: '公開',   desc: 'いいねなどのリアクションを全員に表示する' },
-            { value: false, label: '非公開', desc: 'リアクションを自分だけに表示する' },
+            { value: false, label: '表示',   desc: 'フォロワーがコメントできる' },
+            { value: true,  label: '非表示', desc: 'この配信へのコメントを受け付けない' },
           ].map(opt => (
-            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, publicReactions === opt.value && styles.optionRowActive]}
-              onPress={() => { setPublicReactions(opt.value); setShowReaction(false) }}>
+            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, commentsDisabled === opt.value && styles.optionRowActive]}
+              onPress={() => { setCommentsDisabled(opt.value); setShowCommentOption(false) }}>
               <View style={styles.optionLeft}>
-                <Text style={[styles.optionLabel, publicReactions === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                <Text style={[styles.optionLabel, commentsDisabled === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
                 <Text style={styles.optionDesc}>{opt.desc}</Text>
               </View>
-              {publicReactions === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+              {commentsDisabled === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
             </TouchableOpacity>
           ))}
         </View>
@@ -506,7 +544,7 @@ export default function ComposeScreen() {
               </TouchableOpacity>
             )}
           </View>
-          {!block.imageUri && (
+          {!block.imageUri && !block.videoUri && (
             <TextInput
               style={styles.textarea}
               placeholder="メッセージを入力..."
@@ -525,7 +563,6 @@ export default function ComposeScreen() {
                   : <TouchableOpacity style={styles.imageRemove} onPress={() => removeImage(block.id)}><Ionicons name="close-circle" size={24} color={Colors.white} /></TouchableOpacity>
                 }
               </View>
-              {/* 画像タップで開くURLリンク（全プラン利用可） */}
               <View style={styles.imageLinkRow}>
                 <Ionicons name="link-outline" size={14} color={Colors.textLight} />
                 <TextInput
@@ -540,11 +577,31 @@ export default function ComposeScreen() {
               </View>
             </>
           )}
+          {block.videoUri && (
+            <View style={styles.imagePreviewWrap}>
+              <View style={styles.videoPreview}>
+                <Ionicons name="videocam" size={36} color={Colors.white} />
+                <Text style={styles.videoPreviewText} numberOfLines={1}>
+                  {block.videoUri.split('/').pop() ?? '動画'}
+                </Text>
+              </View>
+              {block.uploading
+                ? <View style={styles.uploadOverlay}><ActivityIndicator color={Colors.white} /><Text style={styles.uploadText}>アップロード中...</Text></View>
+                : <TouchableOpacity style={styles.imageRemove} onPress={() => removeVideo(block.id)}><Ionicons name="close-circle" size={24} color={Colors.white} /></TouchableOpacity>
+              }
+            </View>
+          )}
           <View style={styles.blockFooter}>
-            <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(block.id)} disabled={block.uploading}>
-              <Ionicons name="image-outline" size={16} color={Colors.accent} />
-              <Text style={styles.imageBtnText}>画像を追加</Text>
-            </TouchableOpacity>
+            <View style={styles.mediaButtons}>
+              <TouchableOpacity style={styles.imageBtn} onPress={() => pickImage(block.id)} disabled={block.uploading || !!block.videoUri}>
+                <Ionicons name="image-outline" size={16} color={block.videoUri ? Colors.border : Colors.accent} />
+                <Text style={[styles.imageBtnText, block.videoUri && { color: Colors.border }]}>画像</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.imageBtn} onPress={() => pickVideo(block.id)} disabled={block.uploading || !!block.imageUri}>
+                <Ionicons name="videocam-outline" size={16} color={block.imageUri ? Colors.border : Colors.accent} />
+                <Text style={[styles.imageBtnText, block.imageUri && { color: Colors.border }]}>動画</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={[styles.counter, block.text.length > 450 && styles.counterWarn]}>{block.text.length} / 500</Text>
           </View>
         </View>
@@ -1021,8 +1078,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10,
     borderTopWidth: 1, borderTopColor: Colors.border,
   },
+  mediaButtons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   imageBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   imageBtnText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
+  videoPreview: {
+    width: '100%', height: 160, borderRadius: 8,
+    backgroundColor: '#2D2D2D', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  videoPreviewText: { color: Colors.white, fontSize: 12, paddingHorizontal: 16 },
   counter: { fontSize: 12, color: Colors.textLight },
   counterWarn: { color: '#E53E3E' },
 

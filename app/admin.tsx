@@ -407,9 +407,9 @@ export default function AdminScreen() {
       { data: activeSubs },
       { data: supportData },
     ] = await Promise.all([
-      supabase.from('profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).gte('created_at', weekStart),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).neq('is_test', true),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).neq('is_test', true).gte('created_at', todayStart),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).neq('is_test', true).gte('created_at', weekStart),
       supabase.from('broadcasts').select('id', { count: 'exact', head: true }),
       supabase.from('messages').select('id', { count: 'exact', head: true }),
       supabase.from('broadcasts').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),
@@ -1055,11 +1055,13 @@ export default function AdminScreen() {
                     { v: row.dms,        max: trendMax.dms,   color: D.orange },
                     { v: row.comments,   max: trendMax.comm,  color: D.purple },
                   ].map((col, ci) => (
-                    <View key={ci} style={{ flex: 1, gap: 2 }}>
-                      <Text style={dk.trendNum}>{col.v}</Text>
+                    <View key={ci} style={{ flex: 1 }}>
                       <View style={dk.trendBarBg}>
-                        <View style={[dk.trendBar, { width: `${(col.v / col.max) * 100}%` as any, backgroundColor: col.color }]} />
+                        <View style={[dk.trendBar, { width: `${Math.max(col.v / col.max * 100, col.v > 0 ? 8 : 0)}%` as any, backgroundColor: col.color, alignItems: 'center', justifyContent: 'center' as const }]}>
+                          {col.v > 0 && <Text style={{ fontSize: 10, fontWeight: '800', color: '#fff', paddingHorizontal: 3 }} numberOfLines={1}>{col.v}</Text>}
+                        </View>
                       </View>
+                      {col.v === 0 && <Text style={[dk.trendNum, { fontSize: 10, color: Colors.textLight }]}>0</Text>}
                     </View>
                   ))}
                 </View>
@@ -1561,8 +1563,8 @@ const dk = StyleSheet.create({
   trendRowToday:{ backgroundColor: '#F0E8DE' },
   trendDate:  { width: 40, fontSize: 12, fontWeight: '600', color: D.sub },
   trendNum:   { fontSize: 12, fontWeight: '700', color: D.text },
-  trendBarBg: { height: 3, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden' },
-  trendBar:   { height: 3, borderRadius: 2, minWidth: 2 },
+  trendBarBg: { height: 20, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end' as const },
+  trendBar:   { height: 20, borderRadius: 4, minWidth: 2 },
 })
 
 // ── 通常タブ スタイル ─────────────────────────────────────────
@@ -1665,7 +1667,13 @@ const st = StyleSheet.create({
   rankTypeBtnText: { fontSize: 12, fontWeight: '600', color: Colors.textLight },
   rankTypeBtnTextActive: { color: Colors.white },
 
-  rankSectionTitle: { fontSize: 13, fontWeight: '800', color: Colors.textLight, letterSpacing: 0.5, marginBottom: 8, paddingTop: 4, textTransform: 'uppercase' as const },
+  rankSectionTitle: {
+    fontSize: 15, fontWeight: '800', color: Colors.text, letterSpacing: 0.3,
+    marginBottom: 8, marginTop: 4,
+    paddingLeft: 10, paddingVertical: 6,
+    borderLeftWidth: 3, borderLeftColor: Colors.accent,
+    backgroundColor: Colors.background, borderRadius: 4,
+  },
   expandBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 4, paddingVertical: 10, marginTop: 2 },
   expandBtnText: { fontSize: 13, fontWeight: '600' as const, color: Colors.accent },
 

@@ -171,7 +171,7 @@ function BarChart({ data, color, width, height = 110 }:
   const labelH = 18, baseH = 6
   const barAreaH = height - labelH - baseH
   const slotW = width / data.length
-  const barW = Math.max(slotW * 0.3, 3)
+  const barW = Math.min(Math.max(slotW * 0.55, 6), 32)
 
   return (
     <Svg width={width} height={height}>
@@ -191,7 +191,7 @@ function BarChart({ data, color, width, height = 110 }:
         return (
           <G key={i}>
             <Rect x={barX} y={barY} width={barW} height={barH}
-              rx={barW / 2} fill="url(#barGrad)" opacity={v === 0 ? 0.15 : 1} />
+              rx={4} fill="url(#barGrad)" opacity={v === 0 ? 0.15 : 1} />
             {v > 0 && (
               <SvgText x={cx} y={barY - 3} textAnchor="middle"
                 fontSize={9} fontWeight="700" fill={color}>{v}</SvgText>

@@ -77,8 +77,14 @@ export default function MembershipSettingsScreen() {
   const [saving, setSaving] = useState(false)
   const [memberCount, setMemberCount] = useState(0)
 
-  // 振込先口座
+  // 振込先口座 & 本人確認
   const [bankRegistered, setBankRegistered] = useState(false)
+  const [kycCompleted,   setKycCompleted]   = useState(false)
+
+  // Stripe アカウント審査状況
+  type StripeStatus = { connected: boolean; ok: boolean; reason?: string | null }
+  const [stripeStatus, setStripeStatus] = useState<StripeStatus | null>(null)
+
   const params = useLocalSearchParams<{ connect?: string }>()
 
   // 設定値
@@ -113,7 +119,7 @@ export default function MembershipSettingsScreen() {
       // 設定読み込み & 期限切れ閉鎖処理を実行
       const [{ data: prof }, { count }] = await Promise.all([
         supabase.from('profiles')
-          .select('membership_price, membership_active, membership_welcome, membership_benefits, membership_close_date, membership_close_message, membership_description, bank_account_number')
+          .select('membership_price, membership_active, membership_welcome, membership_benefits, membership_close_date, membership_close_message, membership_description, bank_account_number, kyc_completed_at')
           .eq('id', user.id).single(),
         supabase.from('subscriptions')
           .select('subscriber_id', { count: 'exact', head: true })
@@ -124,6 +130,7 @@ export default function MembershipSettingsScreen() {
 
       if (prof) {
         setBankRegistered(!!prof.bank_account_number)
+        setKycCompleted(!!prof.kyc_completed_at)
         setIsActive(prof.membership_active ?? false)
         const saved = prof.membership_price ?? 500
         setPrice(PRICE_OPTIONS.some(p => p.value === saved) ? saved : 500)
@@ -144,6 +151,21 @@ export default function MembershipSettingsScreen() {
         setCloseMessage(prof.membership_close_message ?? '')
       }
       setMemberCount(count ?? 0)
+
+      // Stripe アカウント審査状況を取得（口座登録済みの場合のみ）
+      if (prof?.bank_account_number) {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session) {
+          fetch(
+            `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/stripe-account-status`,
+            { headers: { Authorization: `Bearer ${session.access_token}` } }
+          )
+            .then(r => r.json())
+            .then(data => setStripeStatus(data))
+            .catch(() => setStripeStatus({ connected: true, ok: true })) // エラー時はブロックしない
+        }
+      }
+
       setLoading(false)
     }
     load()
@@ -196,11 +218,34 @@ export default function MembershipSettingsScreen() {
       setModalMessage(closeMessage || defaultMsg)
       setShowCloseModal(true)
     } else if (newValue && !isActive) {
-      // ON にする前に振込先口座が登録済みか確認
-      if (!bankRegistered) {
+      // Stripe アカウントが審査NGの場合はブロック
+      if (stripeStatus?.connected && !stripeStatus.ok) {
         Alert.alert(
-          '振込先口座が未登録です',
-          'メンバーシップを公開するには、先に振込先口座を登録してください。'
+          '収益受け取りの審査が完了していません',
+          stripeStatus.reason ?? '本人確認情報を確認してください。',
+          [
+            { text: 'キャンセル', style: 'cancel' },
+            { text: '本人確認を確認する', onPress: () => router.push('/payout-profile' as any) },
+          ]
+        )
+        return
+      }
+
+      // ON にする前に口座情報・本人確認が両方登録済みか確認
+      if (!bankRegistered || !kycCompleted) {
+        const missing = !bankRegistered && !kycCompleted
+          ? '振込先口座と本人確認情報'
+          : !bankRegistered ? '振込先口座' : '本人確認情報'
+        Alert.alert(
+          `${missing}が未登録です`,
+          `メンバーシップを公開するには、先に${missing}を登録してください。`,
+          [
+            { text: 'キャンセル', style: 'cancel' },
+            {
+              text: '登録する',
+              onPress: () => router.push((!bankRegistered ? '/bank-account' : '/payout-profile') as any),
+            },
+          ]
         )
         return
       }
@@ -326,34 +371,80 @@ export default function MembershipSettingsScreen() {
             </View>
           )}
 
-          {/* ── 振込先口座設定 ── */}
+          {/* ── 収益受け取り設定（口座 + 本人確認） ── */}
           <View style={s.connectCard}>
             <View style={s.connectHeader}>
-              <View style={[s.connectDot, bankRegistered && s.connectDotActive]} />
-              <Text style={s.connectTitle}>振込先口座</Text>
-              {bankRegistered && (
+              <View style={[s.connectDot, (bankRegistered && kycCompleted) && s.connectDotActive]} />
+              <Text style={s.connectTitle}>収益受け取り設定</Text>
+              {bankRegistered && kycCompleted && (
                 <View style={s.connectBadge}>
                   <Ionicons name="checkmark" size={11} color="#fff" />
-                  <Text style={s.connectBadgeText}>登録済み</Text>
+                  <Text style={s.connectBadgeText}>設定済み</Text>
                 </View>
               )}
             </View>
             <Text style={s.connectDesc}>
-              {bankRegistered
-                ? '毎月末に収益の70%をご登録の口座へ振り込みます。'
-                : 'メンバーシップ収益を受け取るには、振込先口座を登録してください。'}
+              メンバーシップを公開するには、振込先口座と本人確認情報の両方が必要です。
             </Text>
+
+            {/* 口座情報ステータス行 */}
             <TouchableOpacity
-              style={s.connectBtn}
+              style={s.setupRow}
               onPress={() => router.push('/bank-account' as any)}
-              activeOpacity={0.85}
+              activeOpacity={0.8}
             >
-              <Ionicons name="business-outline" size={16} color={Colors.white} />
-              <Text style={s.connectBtnText}>
-                {bankRegistered ? '口座情報を確認・変更する' : '振込先口座を登録する'}
-              </Text>
+              <View style={[s.setupIcon, bankRegistered && s.setupIconDone]}>
+                <Ionicons name="business-outline" size={16} color={bankRegistered ? '#22c55e' : Colors.textLight} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.setupRowTitle}>振込先口座</Text>
+                <Text style={s.setupRowDesc}>{bankRegistered ? '登録済み' : '未登録'}</Text>
+              </View>
+              <Ionicons
+                name={bankRegistered ? 'checkmark-circle' : 'chevron-forward'}
+                size={18}
+                color={bankRegistered ? '#22c55e' : Colors.textLight}
+              />
+            </TouchableOpacity>
+
+            {/* 本人確認ステータス行 */}
+            <TouchableOpacity
+              style={s.setupRow}
+              onPress={() => router.push('/payout-profile' as any)}
+              activeOpacity={0.8}
+            >
+              <View style={[s.setupIcon, kycCompleted && s.setupIconDone]}>
+                <Ionicons name="shield-checkmark-outline" size={16} color={kycCompleted ? '#22c55e' : Colors.textLight} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.setupRowTitle}>本人確認情報</Text>
+                <Text style={s.setupRowDesc}>{kycCompleted ? '入力済み' : '未入力'}</Text>
+              </View>
+              <Ionicons
+                name={kycCompleted ? 'checkmark-circle' : 'chevron-forward'}
+                size={18}
+                color={kycCompleted ? '#22c55e' : Colors.textLight}
+              />
             </TouchableOpacity>
           </View>
+
+          {/* ── Stripe 審査NGの警告カード ── */}
+          {stripeStatus?.connected && !stripeStatus.ok && (
+            <View style={s.stripeNgCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="warning" size={18} color="#D32F2F" />
+                <Text style={s.stripeNgTitle}>収益受け取りの審査が未完了</Text>
+              </View>
+              <Text style={s.stripeNgDesc}>{stripeStatus.reason}</Text>
+              <TouchableOpacity
+                style={s.stripeNgBtn}
+                onPress={() => router.push('/payout-profile' as any)}
+              >
+                <Ionicons name="shield-checkmark-outline" size={14} color={Colors.accent} />
+                <Text style={s.stripeNgBtnText}>本人確認情報を確認・修正する</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* ── 閉鎖スケジュール中の警告カード ── */}
           {closeDate && (
@@ -382,8 +473,10 @@ export default function MembershipSettingsScreen() {
               <View style={s.rowInfo}>
                 <Text style={s.rowTitle}>メンバーシップを公開する</Text>
                 <Text style={s.rowDesc}>
-                  {!bankRegistered
-                    ? '⚠ 先に振込先口座を登録してください'
+                  {stripeStatus?.connected && !stripeStatus.ok
+                    ? '⚠ Stripeの審査が完了するまで公開できません'
+                  : (!bankRegistered || !kycCompleted)
+                    ? '⚠ 先に収益受け取り設定を完了してください'
                     : isActive
                       ? 'フォロワーが加入できます'
                       : closeDate
@@ -696,6 +789,35 @@ const s = StyleSheet.create({
     justifyContent: 'center', gap: 8, marginTop: 4,
   },
   connectBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
+
+  // 収益受け取り設定の各行
+  setupRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 10, paddingHorizontal: 4,
+    borderTopWidth: 1, borderTopColor: Colors.border,
+  },
+  setupIcon: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  setupIconDone: { backgroundColor: '#F0FDF4', borderColor: '#86efac' },
+  setupRowTitle: { fontSize: 13, fontWeight: '600', color: Colors.text },
+  setupRowDesc: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
+
+  stripeNgCard: {
+    backgroundColor: '#FFF3F3', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#F44336', padding: 16, gap: 10,
+  },
+  stripeNgTitle: { fontSize: 14, fontWeight: '800', color: '#D32F2F', flex: 1 },
+  stripeNgDesc: { fontSize: 13, color: '#D32F2F', lineHeight: 19 },
+  stripeNgBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.white, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.accent,
+    paddingHorizontal: 12, paddingVertical: 9, alignSelf: 'flex-start',
+  },
+  stripeNgBtnText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
 
   closeWarningCard: {
     backgroundColor: '#FFF3F3', borderRadius: 14,

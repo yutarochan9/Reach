@@ -19,6 +19,7 @@ type Membership = {
   creator_id: string
   status: 'active' | 'canceling' | 'canceled'
   created_at: string
+  expires_at: string | null
   creator: {
     display_name: string
     avatar_url: string | null
@@ -43,6 +44,9 @@ export default function MyMembershipsScreen() {
   const [cancelTarget, setCancelTarget] = useState<Membership | null>(null)
   const [selectedReason, setSelectedReason] = useState<string>('')
 
+  // 解約完了モーダル用ステート
+  const [canceledInfo, setCanceledInfo] = useState<{ creatorName: string; expiresAt: string } | null>(null)
+
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.replace('/(auth)/login' as any); return }
@@ -54,6 +58,7 @@ export default function MyMembershipsScreen() {
         creator_id,
         status,
         created_at,
+        expires_at,
         creator:profiles!creator_id (
           display_name,
           avatar_url,
@@ -103,11 +108,11 @@ export default function MyMembershipsScreen() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
 
-      if (Platform.OS === 'web') {
-        window.alert('解約手続きが完了しました。次回更新日まで引き続きご利用いただけます。')
-      } else {
-        Alert.alert('解約完了', '次回更新日まで引き続きご利用いただけます。')
-      }
+      // 解約完了モーダルを表示（終了日付き）
+      setCanceledInfo({
+        creatorName: m.creator.display_name,
+        expiresAt: json.expiresAt ?? '',
+      })
       load()
     } catch (e: any) {
       Alert.alert('エラー', e.message ?? '解約処理に失敗しました')
@@ -119,6 +124,13 @@ export default function MyMembershipsScreen() {
   const formatDate = (iso: string) => {
     const d = new Date(iso)
     return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  // 解約完了モーダル用：「〇年〇月〇日」形式
+  const formatDateJa = (iso: string) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
   }
 
   // 解約理由モーダルを確定したときの処理
@@ -135,6 +147,39 @@ export default function MyMembershipsScreen() {
 
   return (
     <View style={s.container}>
+
+      {/* ── 解約完了モーダル ── */}
+      <Modal
+        visible={canceledInfo !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCanceledInfo(null)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <View style={s.doneIconWrap}>
+              <Ionicons name="checkmark-circle" size={48} color="#16a34a" />
+            </View>
+            <Text style={s.doneTitle}>解約手続きが完了しました</Text>
+            <Text style={s.doneSub}>
+              <Text style={s.doneCreator}>{canceledInfo?.creatorName}</Text>
+              {'\n'}のメンバーシップは
+            </Text>
+            {canceledInfo?.expiresAt ? (
+              <View style={s.doneExpiry}>
+                <Text style={s.doneExpiryDate}>{formatDateJa(canceledInfo.expiresAt)}</Text>
+                <Text style={s.doneExpiryLabel}>まで引き続きご利用いただけます</Text>
+              </View>
+            ) : (
+              <Text style={s.doneSub}>次回更新日まで引き続きご利用いただけます。</Text>
+            )}
+            <Text style={s.doneNote}>それ以降は自動的に解約され、請求は発生しません。</Text>
+            <TouchableOpacity style={s.doneBtn} onPress={() => setCanceledInfo(null)}>
+              <Text style={s.doneBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── 解約理由モーダル ── */}
       <Modal
@@ -241,7 +286,11 @@ export default function MyMembershipsScreen() {
                 {m.status === 'canceling' && (
                   <View style={s.cancelingNote}>
                     <Ionicons name="information-circle-outline" size={14} color="#D97706" />
-                    <Text style={s.cancelingNoteText}>次回更新日に自動解約されます</Text>
+                    <Text style={s.cancelingNoteText}>
+                      {m.expires_at
+                        ? `${formatDateJa(m.expires_at)}まで利用可能です`
+                        : '次回更新日に自動解約されます'}
+                    </Text>
                   </View>
                 )}
 
@@ -396,4 +445,19 @@ const s = StyleSheet.create({
     paddingVertical: 12, alignItems: 'center',
   },
   modalConfirmText: { fontSize: 14, fontWeight: '700', color: Colors.white },
+
+  // 解約完了モーダル
+  doneIconWrap: { alignItems: 'center', marginBottom: 8 },
+  doneTitle: { fontSize: 18, fontWeight: '800', color: Colors.text, textAlign: 'center', marginBottom: 12 },
+  doneSub: { fontSize: 14, color: Colors.textLight, textAlign: 'center', lineHeight: 22 },
+  doneCreator: { fontWeight: '700', color: Colors.text },
+  doneExpiry: { alignItems: 'center', marginTop: 8, marginBottom: 4 },
+  doneExpiryDate: { fontSize: 22, fontWeight: '800', color: '#16a34a' },
+  doneExpiryLabel: { fontSize: 13, color: Colors.textLight, marginTop: 2 },
+  doneNote: { fontSize: 12, color: Colors.textLight, textAlign: 'center', lineHeight: 18, marginTop: 8, marginBottom: 16 },
+  doneBtn: {
+    backgroundColor: Colors.accent, borderRadius: 12,
+    paddingVertical: 13, alignItems: 'center',
+  },
+  doneBtnText: { fontSize: 15, fontWeight: '700', color: Colors.white },
 })

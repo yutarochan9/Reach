@@ -10,6 +10,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Platform } from 'react-native'
+import * as Device from 'expo-device'
 import { supabase } from './supabase'
 import { sendPushToUsers } from './notifications'
 
@@ -31,29 +32,83 @@ export async function getDeviceKey(): Promise<string> {
 }
 
 // ─── 人間が読みやすいデバイス名 ───────────────────────────────────────────────
+// ネイティブ(iOS/Android)では expo-device の modelName を使う（例: "iPhone 15 Pro"）
+// Web では UserAgent を解析してブラウザ/OSを返す（例: "Chrome / Windows"）
 export function getDeviceName(): string {
-  if (Platform.OS === 'ios')     return 'iPhone / iPad'
-  if (Platform.OS === 'android') return 'Android'
+  // ── ネイティブアプリ（iOS / Android） ──
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    // Device.modelName: "iPhone 15 Pro", "Pixel 8", "iPad Air (5th generation)" など
+    if (Device.modelName) return Device.modelName
+    // フォールバック: OS名とバージョン
+    const os = Platform.OS === 'ios' ? 'iPhone' : 'Android'
+    return Device.osVersion ? `${os} ${Device.osVersion}` : os
+  }
+
+  // ── Web ──
   if (typeof navigator === 'undefined') return 'Web'
   const ua = navigator.userAgent
+
+  // モバイルWebの場合もモデル名を試みる
+  if (ua.includes('iPhone')) {
+    // iOSバージョンからモデルを推定してブラウザ名を付ける
+    const match = ua.match(/iPhone OS (\d+)_/)
+    const major = match ? parseInt(match[1], 10) : 0
+    let model = 'iPhone'
+    if (major >= 19) model = 'iPhone 17'
+    else if (major === 18) model = 'iPhone 16'
+    else if (major === 17) model = 'iPhone 15'
+    else if (major === 16) model = 'iPhone 14'
+    else if (major === 15) model = 'iPhone 13'
+    else if (major === 14) model = 'iPhone 12'
+    // ブラウザも付ける（Safari / Chrome on iOS など）
+    let browser = 'Safari'
+    if (ua.includes('CriOS')) browser = 'Chrome'
+    else if (ua.includes('FxiOS')) browser = 'Firefox'
+    return `${model} / ${browser}`
+  }
+  if (ua.includes('iPad')) return 'iPad'
+  if (ua.includes('Android')) {
+    // Android の機種名（例: SM-G991B → "Samsung Galaxy S21"）
+    const m = ua.match(/Android [^;]+;\s*([^)]+)\)/)
+    if (m) return m[1].trim()
+    return 'Android'
+  }
+
+  // デスクトップブラウザ
   let browser = 'ブラウザ'
-  if      (ua.includes('Edg'))                                    browser = 'Edge'
-  else if (ua.includes('Chrome') && !ua.includes('Edg'))          browser = 'Chrome'
-  else if (ua.includes('Firefox'))                                 browser = 'Firefox'
-  else if (ua.includes('Safari') && !ua.includes('Chrome'))        browser = 'Safari'
+  if      (ua.includes('Edg'))                               browser = 'Edge'
+  else if (ua.includes('Chrome') && !ua.includes('Edg'))     browser = 'Chrome'
+  else if (ua.includes('Firefox'))                            browser = 'Firefox'
+  else if (ua.includes('Safari') && !ua.includes('Chrome'))  browser = 'Safari'
   let os = 'PC'
-  if      (ua.includes('iPhone') || ua.includes('iPad'))           os = 'iOS'
-  else if (ua.includes('Android'))                                  os = 'Android'
-  else if (ua.includes('Windows'))                                  os = 'Windows'
-  else if (ua.includes('Mac'))                                      os = 'Mac'
-  else if (ua.includes('Linux'))                                    os = 'Linux'
+  if      (ua.includes('Windows'))  os = 'Windows'
+  else if (ua.includes('Mac'))      os = 'Mac'
+  else if (ua.includes('Linux'))    os = 'Linux'
   return `${browser} / ${os}`
 }
 
+// ─── IPジオロケーションで現在地を取得 ──────────────────────────────────────────
+// ipapi.co の無料APIを使って「都市名, 国コード」を返す（例: "Tokyo, JP"）
+// 失敗・タイムアウト時は null を返す
+export async function getLocation(): Promise<string | null> {
+  try {
+    // AbortSignal.timeout は古いブラウザで未対応のため Promise.race でタイムアウト実装
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 4000)
+    const res = await fetch('https://ipapi.co/json/', { signal: controller.signal })
+      .finally(() => clearTimeout(timer))
+    if (!res.ok) return null
+    const data = await res.json()
+    const city    = data.city    ?? ''
+    const country = data.country ?? ''
+    return [city, country].filter(Boolean).join(', ') || null
+  } catch {
+    return null
+  }
+}
+
 // ─── セッション登録・更新 ──────────────────────────────────────────────────────
-// 戻り値:
-//   'approved' → そのまま通常画面へ
-//   'pending'  → /device-pending 画面で承認待ち
+// 戻り値: 'approved'（常に通常画面へ）— 承認フローは無効化済み
 export async function upsertDeviceSession(userId: string): Promise<DeviceStatus> {
   const deviceKey  = await getDeviceKey()
   const deviceName = getDeviceName()
@@ -62,7 +117,7 @@ export async function upsertDeviceSession(userId: string): Promise<DeviceStatus>
   // 既存セッションがあれば last_seen を更新して現在ステータスを返す
   const { data: existing } = await supabase
     .from('device_sessions')
-    .select('id, status, is_host')
+    .select('id, status')
     .eq('user_id', userId)
     .eq('device_key', deviceKey)
     .maybeSingle()
@@ -71,39 +126,29 @@ export async function upsertDeviceSession(userId: string): Promise<DeviceStatus>
     await supabase.from('device_sessions')
       .update({ last_seen: new Date().toISOString() })
       .eq('id', existing.id)
-    return existing.status as DeviceStatus
+    return 'approved'
   }
 
-  // 新規端末 — 承認済みセッションが1件でもあればホスト承認が必要
-  const { count } = await supabase
-    .from('device_sessions')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('status', 'approved')
+  // 新規端末 — 承認フローなしで即 approved として登録
+  // ロケーション取得（失敗しても登録は続行）
+  const location = await getLocation().catch(() => null)
 
-  const isFirstDevice = (count ?? 0) === 0
-  const status: DeviceStatus = isFirstDevice ? 'approved' : 'pending'
-
-  await supabase.from('device_sessions').insert({
+  const { error } = await supabase.from('device_sessions').insert({
     user_id:     userId,
     device_key:  deviceKey,
     device_name: deviceName,
     platform,
     last_seen:   new Date().toISOString(),
-    status,
-    is_host:     isFirstDevice,
+    status:      'approved',
+    is_host:     false,
+    location:    location ?? null,
   })
 
-  // 新規端末が pending の場合はホスト端末（同ユーザーの全端末）に通知
-  if (!isFirstDevice) {
-    sendPushToUsers(
-      [userId],
-      '新しいデバイスのログイン申請',
-      `「${deviceName}」からのログイン申請があります。設定画面で承認してください。`
-    ).catch(() => {})
+  if (error) {
+    console.error('[deviceSession] insert error:', error.message, error.details)
   }
 
-  return status
+  return 'approved'
 }
 
 // ─── 現在のデバイスのステータスを取得 ────────────────────────────────────────

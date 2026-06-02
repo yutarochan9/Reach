@@ -27,14 +27,22 @@ type HomeRow =
   | { type: 'following-item'; data: FollowedCreator }
   | { type: 'follower-item'; data: FollowerProfile }
 
+// ── モジュールレベルキャッシュ（再マウント時のフラッシュ防止）──────────
+let _cachedCreators: FollowedCreator[] = []
+let _cachedFollowers: FollowerProfile[] = []
+let _cachedMyDisplayName = ''
+let _cachedMyAvatar: string | null = null
+let _cachedMyUserId: string | null = null
+let _homeLoaded = false
+
 // ── ホーム画面 ────────────────────────────────────────────
 export default function HomeScreen() {
-  const [creators, setCreators] = useState<FollowedCreator[]>([])
-  const [followers, setFollowers] = useState<FollowerProfile[]>([])
-  const [myDisplayName, setMyDisplayName] = useState('')
-  const [myAvatar, setMyAvatar] = useState<string | null>(null)
-  const [myUserId, setMyUserId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [creators, setCreators] = useState<FollowedCreator[]>(_cachedCreators)
+  const [followers, setFollowers] = useState<FollowerProfile[]>(_cachedFollowers)
+  const [myDisplayName, setMyDisplayName] = useState(_cachedMyDisplayName)
+  const [myAvatar, setMyAvatar] = useState<string | null>(_cachedMyAvatar)
+  const [myUserId, setMyUserId] = useState<string | null>(_cachedMyUserId)
+  const [loading, setLoading] = useState(!_homeLoaded)
   const [refreshing, setRefreshing] = useState(false)
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [followingOpen, setFollowingOpen] = useState(true)
@@ -55,8 +63,11 @@ export default function HomeScreen() {
       supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false),
     ])
 
-    setMyDisplayName(profile?.display_name ?? '')
-    setMyAvatar(profile?.avatar_url ?? null)
+    _cachedMyDisplayName = profile?.display_name ?? ''
+    _cachedMyAvatar = profile?.avatar_url ?? null
+    _cachedMyUserId = user.id
+    setMyDisplayName(_cachedMyDisplayName)
+    setMyAvatar(_cachedMyAvatar)
     setUnreadNotifs(notifCount ?? 0)
 
     const followingIds = (follows ?? []).map((f: any) => f.following_id)
@@ -71,10 +82,11 @@ export default function HomeScreen() {
         : Promise.resolve({ data: [] }),
     ])
 
-    setCreators((followingProfiles.data ?? []) as FollowedCreator[])
-    setFollowers((followerProfiles.data ?? []) as FollowerProfile[])
-
-
+    _cachedCreators = (followingProfiles.data ?? []) as FollowedCreator[]
+    _cachedFollowers = (followerProfiles.data ?? []) as FollowerProfile[]
+    _homeLoaded = true
+    setCreators(_cachedCreators)
+    setFollowers(_cachedFollowers)
     setLoading(false)
   }, [])
 

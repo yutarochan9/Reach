@@ -17,7 +17,7 @@ const PLANS = [
     period: '',
     color: Colors.textLight,
     features: [
-      'フォロワー1万人まで',
+      'フォロワー500人まで',
       '月50回まで配信',
       '基本配信（テキスト・画像）',
       'コメント・リアクション確認',

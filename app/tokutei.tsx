@@ -24,7 +24,7 @@ export default function TokuteiScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/landing' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>特定商取引法に基づく表記</Text>
@@ -32,28 +32,9 @@ export default function TokuteiScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.updated}>最終更新日：{LAST_UPDATED}</Text>
+        <Text style={styles.updated}>最終更新：{LAST_UPDATED}</Text>
 
-        <View style={styles.card}>
-          <Row label="販売者名" value="Yasui Yutaro" />
-          <View style={styles.divider} />
-          <Row
-            label="所在地"
-            value="請求があり次第、遅滞なく開示いたします"
-          />
-          <View style={styles.divider} />
-          <Row
-            label="電話番号"
-            value="請求があり次第、遅滞なく開示いたします"
-          />
-          <View style={styles.divider} />
-          <Row
-            label="メールアドレス"
-            value="reach.official.jp@gmail.com"
-            isLink
-          />
-        </View>
-
+        {/* ── 販売価格 ── */}
         <Text style={styles.sectionTitle}>販売価格</Text>
         <View style={styles.card}>
           <Row label="スタンダードプラン" value="¥2,980（税込）/ 月" />
@@ -62,65 +43,45 @@ export default function TokuteiScreen() {
           <View style={styles.divider} />
           <Row label="開発支援金" value="¥300 / ¥500 / ¥1,000（各税込・一回払い）" />
           <View style={styles.divider} />
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>クリエイターメンバーシップ</Text>
-            <Text style={styles.rowValue}>各クリエイターが設定する金額（¥500 / ¥1,000 / ¥3,000、各税込）/ 月{'\n'}※金額はクリエイターにより異なります</Text>
-          </View>
+          <Row label="メンバーシップ" value="各クリエイター設定（¥500〜¥3,000、税込）/ 月" />
           <View style={styles.divider} />
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>プラットフォーム手数料</Text>
-            <Text style={styles.rowValue}>販売価格の30%（決済手数料を含む）{'\n'}クリエイターへのお支払いは販売価格の70%です</Text>
-          </View>
+          <Row label="プラットフォーム手数料" value="販売価格の30%（決済手数料含む）" />
         </View>
 
-        <Text style={styles.sectionTitle}>支払方法</Text>
+        {/* ── 支払方法・時期 ── */}
+        <Text style={styles.sectionTitle}>支払方法 / 時期</Text>
         <View style={styles.card}>
           <Row label="Web" value="クレジットカード（Stripe）" />
           <View style={styles.divider} />
-          <Row label="iOS / Android" value="App Store / Google Play 経由のアプリ内課金" />
+          <Row label="iOS / Android" value="App Store / Google Play アプリ内課金" />
+          <View style={styles.divider} />
+          <Row label="請求タイミング" value="申込時に初回課金、以降は毎月同日に自動更新" />
         </View>
 
-        <Text style={styles.sectionTitle}>支払時期</Text>
+        {/* ── 返品・キャンセル ── */}
+        <Text style={styles.sectionTitle}>返品・キャンセル</Text>
         <View style={styles.card}>
           <View style={styles.row}>
             <Text style={styles.bodyText}>
-              サブスクリプションプランおよびメンバーシップは、申し込み時に初回課金が行われ、以降は毎月同日に自動更新されます。開発支援金は申し込み時に一回のみ課金されます。
+              デジタルサービスの性質上、原則として返金・キャンセル不可。サブスクリプションはいつでも解約でき、解約後は翌更新日以降の請求は発生しません。App Store / Google Play 経由は各ストアの返金ポリシーに従います。
             </Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>役務の提供時期</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.bodyText}>
-              決済完了後、直ちにサービスをご利用いただけます。
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>返品・キャンセルについて</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Text style={styles.bodyText}>
-              デジタルコンテンツ・サービスの性質上、原則として返金・キャンセルはお受けしておりません。{'\n\n'}
-              サブスクリプションはいつでも解約でき、解約後は次の更新日以降の請求は発生しません。解約月の残り期間は引き続きご利用いただけます。{'\n\n'}
-              App Store / Google Play 経由の購入については、各ストアの返金ポリシーに従います。
-            </Text>
-          </View>
-        </View>
-
+        {/* ── 動作環境 ── */}
         <Text style={styles.sectionTitle}>動作環境</Text>
         <View style={styles.card}>
-          <Row label="Web" value="最新版のChrome / Safari / Edge 推奨" />
+          <Row label="Web" value="Chrome / Safari / Edge 最新版推奨" />
           <View style={styles.divider} />
-          <Row label="iOS" value="iOS 16以上" />
-          <View style={styles.divider} />
-          <Row label="Android" value="Android 10以上" />
+          <Row label="iOS / Android" value="iOS 16以上 / Android 10以上" />
         </View>
 
-        <Text style={styles.note}>
-          本表記に関するお問い合わせは reach.official.jp@gmail.com までご連絡ください。
-        </Text>
+        {/* ── 連絡先（目立たない） ── */}
+        <View style={styles.footer}>
+          <Text style={styles.footerItem}>メール：reach.official.jp@gmail.com</Text>
+          <Text style={styles.footerItem}>所在地・電話番号：請求があり次第開示</Text>
+          <Text style={styles.footerItem}>販売者名：Yasui Yutaro</Text>
+        </View>
       </ScrollView>
     </View>
   )
@@ -135,34 +96,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
 
-  content: { padding: 16, gap: 8, paddingBottom: 48 },
-  updated: { fontSize: 12, color: Colors.textLight, textAlign: 'right', marginBottom: 4 },
+  content: { padding: 16, gap: 6, paddingBottom: 48 },
+  updated: { fontSize: 11, color: Colors.textLight, textAlign: 'right', marginBottom: 2 },
 
   sectionTitle: {
-    fontSize: 12, fontWeight: '700', color: Colors.textLight,
+    fontSize: 11, fontWeight: '700', color: Colors.textLight,
     textTransform: 'uppercase', letterSpacing: 0.4,
-    paddingHorizontal: 4, paddingTop: 12, paddingBottom: 2,
+    paddingHorizontal: 4, paddingTop: 10, paddingBottom: 2,
   },
-
   card: {
-    backgroundColor: Colors.white, borderRadius: 14,
+    backgroundColor: Colors.white, borderRadius: 12,
     borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
   },
-  row: {
-    paddingHorizontal: 16, paddingVertical: 14,
-    flexDirection: 'column', gap: 4,
-  },
-  rowLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight },
-  rowValue: { fontSize: 14, color: Colors.text, lineHeight: 21 },
+  row: { paddingHorizontal: 14, paddingVertical: 11, flexDirection: 'column', gap: 3 },
+  rowLabel: { fontSize: 11, fontWeight: '700', color: Colors.textLight },
+  rowValue: { fontSize: 13, color: Colors.text, lineHeight: 19 },
   rowLink: { color: Colors.accent },
-  divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 16 },
+  divider: { height: 1, backgroundColor: Colors.border, marginHorizontal: 14 },
+  bodyText: { fontSize: 13, color: Colors.text, lineHeight: 20 },
 
-  bodyText: { fontSize: 14, color: Colors.text, lineHeight: 22 },
-
-  note: {
-    fontSize: 12, color: Colors.textLight, textAlign: 'center',
-    lineHeight: 20, paddingTop: 8, paddingHorizontal: 8,
+  footer: {
+    marginTop: 16, gap: 4, alignItems: 'center', paddingBottom: 8,
+  },
+  footerItem: {
+    fontSize: 11, color: Colors.textLight, opacity: 0.55, textAlign: 'center',
   },
 })

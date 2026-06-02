@@ -18,9 +18,10 @@ import { useLocalSearchParams, router } from 'expo-router'
 import Head from 'expo-router/head'
 // react-native-view-shot / expo-sharing はネイティブ専用（将来対応）
 
-// セッション内メモリキャッシュ（ナビゲーション往復で即時表示）
-const richMenuMem = new Map<string, any>()
+// セッション内メモリキャッシュ（5分TTL）
+const richMenuMem = new Map<string, { value: any; expiresAt: number }>()
 import { Ionicons } from '@expo/vector-icons'
+import { Video, ResizeMode } from 'expo-av'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { sendPushToUsers } from '../../lib/notifications'
@@ -30,6 +31,7 @@ type Broadcast = {
   content: string
   image_url: string | null
   image_link_url: string | null
+  video_url: string | null
   created_at: string
   block_order: number
   group_id: string | null
@@ -122,9 +124,10 @@ export default function TalkDetailScreen() {
   useEffect(() => {
     const key = `rich_menu_${senderId}`
 
-    // 1. メモリキャッシュ（同セッション内は即時・同期）
-    if (richMenuMem.has(senderId)) {
-      setRichMenu(richMenuMem.get(senderId))
+    // 1. メモリキャッシュ（5分TTL・同セッション内は即時・同期）
+    const cached = richMenuMem.get(senderId)
+    if (cached && cached.expiresAt > Date.now()) {
+      setRichMenu(cached.value)
       setRichMenuLoading(false)
     } else {
       // 2. AsyncStorageキャッシュ（アプリ再起動後も即時）
@@ -132,7 +135,7 @@ export default function TalkDetailScreen() {
         if (cached) {
           try {
             const parsed = JSON.parse(cached)
-            richMenuMem.set(senderId, parsed)
+            richMenuMem.set(senderId, { value: parsed, expiresAt: Date.now() + 5 * 60 * 1000 })
             setRichMenu(parsed)
           } catch {}
         }
@@ -147,7 +150,7 @@ export default function TalkDetailScreen() {
       .maybeSingle()
       .then(({ data: menu }) => {
         const val = menu?.is_active ? menu : null
-        richMenuMem.set(senderId, val)
+        richMenuMem.set(senderId, { value: val, expiresAt: Date.now() + 5 * 60 * 1000 })
         setRichMenu(val)
         if (val) AsyncStorage.setItem(key, JSON.stringify(val)).catch(() => {})
         else AsyncStorage.removeItem(key).catch(() => {})
@@ -164,9 +167,10 @@ export default function TalkDetailScreen() {
       const [{ data: profile }, { data: broadcasts }, myFollowResult, viewerProfileResult] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username, is_private').eq('id', senderId).single(),
         supabase.from('broadcasts')
-          .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
+          .select('id, content, image_url, image_link_url, video_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId)
           .eq('status', 'published')
+          .or(`recipient_id.is.null,recipient_id.eq.${user?.id ?? 'none'}`)
           .order('created_at', { ascending: true }),
         user && !self
           ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle()
@@ -421,7 +425,7 @@ export default function TalkDetailScreen() {
           if (bc.is_subscriber_only && !isSelf && !isSubscriber) return
           const newBlock: Broadcast = {
             id: bc.id, content: bc.content, image_url: bc.image_url ?? null,
-            image_link_url: bc.image_link_url ?? null,
+            image_link_url: bc.image_link_url ?? null, video_url: bc.video_url ?? null,
             created_at: bc.created_at, block_order: bc.block_order,
             group_id: bc.group_id ?? null, public_reactions: bc.public_reactions ?? false,
             is_subscriber_only: bc.is_subscriber_only ?? false,
@@ -859,7 +863,8 @@ export default function TalkDetailScreen() {
                     const urlMatch = block.content.match(/(https?:\/\/[^\s]+)/)
                     const linkUrl = urlMatch?.[1] ?? null
                     const hasText = block.content.trim() && block.content !== '　'
-                    const isImageOnly = !!block.image_url && !hasText
+                    const isImageOnly = !!block.image_url && !hasText && !block.video_url
+                    const isVideoOnly = !!block.video_url && !hasText && !block.image_url
 
                     const openImgLink = () => {
                       if (!block.image_link_url) return
@@ -868,6 +873,19 @@ export default function TalkDetailScreen() {
                       } else {
                         Linking.openURL(block.image_link_url).catch(() => {})
                       }
+                    }
+
+                    if (isVideoOnly) {
+                      return (
+                        <Video
+                          key={block.id}
+                          source={{ uri: block.video_url! }}
+                          style={[styles.broadcastVideoOnly, idx > 0 && { marginTop: 4 }]}
+                          useNativeControls
+                          resizeMode={ResizeMode.CONTAIN}
+                          isLooping={false}
+                        />
+                      )
                     }
 
                     if (isImageOnly) {
@@ -892,6 +910,15 @@ export default function TalkDetailScreen() {
                     const imgDims = block.image_url ? getImgStyle(block.image_url, Math.min(Math.floor(width * 0.72), 300)) : null
                     return (
                       <View key={block.id} style={[styles.broadcastBubble, idx > 0 && { marginTop: 4 }]}>
+                        {block.video_url && (
+                          <Video
+                            source={{ uri: block.video_url }}
+                            style={styles.broadcastVideo}
+                            useNativeControls
+                            resizeMode={ResizeMode.CONTAIN}
+                            isLooping={false}
+                          />
+                        )}
                         {block.image_url && (
                           block.image_link_url ? (
                             <TouchableOpacity onPress={openImgLink} activeOpacity={0.85}>
@@ -1483,6 +1510,16 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+  },
+  // 動画（吹き出しなし）
+  broadcastVideoOnly: {
+    width: 280, height: 180, borderRadius: 14,
+    backgroundColor: '#000',
+  },
+  // 吹き出し内の動画
+  broadcastVideo: {
+    width: '100%', height: 180, borderRadius: 8, marginBottom: 4,
+    backgroundColor: '#000',
   },
   broadcastText: { fontSize: 14, color: Colors.text, lineHeight: 21 },
   broadcastLink: { color: '#1D9BF0', textDecorationLine: 'underline' },

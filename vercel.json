@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx expo export --platform web && node scripts/inject-pwa.js && node scripts/gen-og-image.js",
+  "buildCommand": "npx expo export --platform web && node scripts/inject-pwa.js && node scripts/gen-og-image.js && node scripts/gen-version.js",
   "outputDirectory": "dist",
   "alias": ["reach-pi-one.vercel.app"],
   "headers": [

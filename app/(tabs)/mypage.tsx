@@ -126,6 +126,8 @@ export default function MyPageScreen() {
   // キャッシュがあれば初期値として使う（フォーカス時のかくつき防止）
   const [user, setUser] = useState<any>(_cachedUser)
   const [profile, setProfile] = useState<any>(_cachedProfile)
+  // キャッシュがない初回ロードのみスピナーを表示する（2回目以降はバックグラウンド更新）
+  const [loading, setLoading] = useState(_cachedProfile === null)
   const [editVisible, setEditVisible] = useState(false)
   const [editName, setEditName] = useState('')
   const [editBio, setEditBio] = useState('')
@@ -171,6 +173,7 @@ export default function MyPageScreen() {
       .eq('target_id', data.user.id)
       .eq('status', 'pending')
     setPendingFollowCount(count ?? 0)
+    setLoading(false)
   }, [])
 
   // フォーカスのたびにバックグラウンドで最新データを取得
@@ -376,6 +379,14 @@ const openEdit = () => {
   const snsLinks: Record<string, string> = profile?.sns_links ?? {}
   const hasSns = SNS_FIELDS.some(f => snsLinks[f.key])
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={Colors.accent} />
+      </View>
+    )
+  }
+
   return (
     <View style={styles.container}>
       {cropVisible && cropUri && (
@@ -563,7 +574,7 @@ const openEdit = () => {
                         : <View style={styles.pinThumbPlaceholder}><Ionicons name="image-outline" size={18} color={Colors.textLight} /></View>
                       }
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.pinContent} numberOfLines={2}>{bc.content.trim() || '📷 画像のみ'}</Text>
+                        <Text style={styles.pinContent} numberOfLines={2}>{bc.content.trim() || ((bc as any).video_url ? '動画を送信しました' : '画像を送信しました')}</Text>
                         <Text style={styles.pinDate}>{new Date(bc.created_at).toLocaleDateString('ja-JP')}</Text>
                       </View>
                       {editPinnedId === bc.id && <Ionicons name="bookmark" size={16} color={Colors.accent} />}

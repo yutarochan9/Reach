@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { BETA_MODE } from '../../constants/config'
 
-const FREE_FOLLOWER_LIMIT = 10000
+const FREE_FOLLOWER_LIMIT = 500
 
 const SNS_FIELDS = [
   { key: 'x', label: 'X', icon: 'logo-twitter' as const },
@@ -52,6 +52,7 @@ export default function CreatorScreen() {
   const [reportReason, setReportReason] = useState<string | null>(null)
   const [reportDetails, setReportDetails] = useState('')
   const [reportSubmitting, setReportSubmitting] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -152,7 +153,8 @@ export default function CreatorScreen() {
   }
 
   const handleFollow = async () => {
-    if (!myId) return
+    if (!myId || followLoading) return
+    setFollowLoading(true)
     if (isFollowing) {
       // フォロー解除前に影響を説明して確認
       const msg =
@@ -162,11 +164,12 @@ export default function CreatorScreen() {
         '• フロー配信の受信が停止します（再フォロー時はリセットされます）\n\n' +
         'DM履歴は引き続き確認できます。'
       if (Platform.OS === 'web') {
-        if (window.confirm(msg)) await doUnfollow()
+        if (window.confirm(msg)) { await doUnfollow(); setFollowLoading(false) }
+        else setFollowLoading(false)
       } else {
         Alert.alert('フォローを外しますか？', msg, [
-          { text: 'キャンセル', style: 'cancel' },
-          { text: 'フォローを外す', style: 'destructive', onPress: doUnfollow },
+          { text: 'キャンセル', style: 'cancel', onPress: () => setFollowLoading(false) },
+          { text: 'フォローを外す', style: 'destructive', onPress: async () => { await doUnfollow(); setFollowLoading(false) } },
         ])
       }
       return
@@ -178,37 +181,26 @@ export default function CreatorScreen() {
         setFollowRequestStatus('none')
       } else {
         // 既存の行（rejected / approved / 重複）を消してから新規 insert
-        // upsert は unique constraint がないと INSERT になり重複行が生まれるため delete+insert で確実に1行
-        await supabase.from('follow_requests')
-          .delete()
-          .eq('requester_id', myId)
-          .eq('target_id', id)
-        await supabase.from('follow_requests')
-          .insert({ requester_id: myId, target_id: id, status: 'pending' })
+        await supabase.from('follow_requests').delete().eq('requester_id', myId).eq('target_id', id)
+        await supabase.from('follow_requests').insert({ requester_id: myId, target_id: id, status: 'pending' })
         setFollowRequestStatus('pending')
       }
     } else {
       // 通常フォロー
-      // フォロワー上限チェック（無料プランは500人まで・ベータ期間中はスキップ）
       if (!BETA_MODE && creatorPlan === 'free' && followerCount >= FREE_FOLLOWER_LIMIT) {
-        Alert.alert(
-          'フォローできません',
-          `このクリエイターは無料プランのフォロワー上限（${FREE_FOLLOWER_LIMIT}人）に達しています。`,
-          [{ text: 'OK' }]
-        )
+        Alert.alert('フォローできません', `このクリエイターは無料プランのフォロワー上限（${FREE_FOLLOWER_LIMIT}人）に達しています。`, [{ text: 'OK' }])
+        setFollowLoading(false)
         return
       }
       await supabase.from('follows').insert({ follower_id: myId, following_id: id })
       setIsFollowing(true)
       setFollowerCount(c => c + 1)
 
-      // フロー配信シーケンスへエンロール＋day_offset=0のメッセージを即時DM送信
-      // SECURITY DEFINER RPC でクリエイター名義のDMを挿入する
-      await supabase.rpc('enroll_step_sequences', {
-        p_creator_id: id,
-        p_follower_id: myId,
-      }).catch(() => {})
+      // フロー配信シーケンスへエンロール（シーケンス未設定のクリエイターはエラーになるが無視）
+      supabase.rpc('enroll_step_sequences', { p_creator_id: id, p_follower_id: myId })
+        .then(({ error }) => { if (error) console.error('enroll_step_sequences:', error.message) })
     }
+    setFollowLoading(false)
   }
 
 
@@ -348,8 +340,9 @@ export default function CreatorScreen() {
               {myId ? (
                 <>
                   <TouchableOpacity
-                    style={[styles.followButton, (isFollowing || followRequestStatus === 'pending') && styles.followingButton]}
+                    style={[styles.followButton, (isFollowing || followRequestStatus === 'pending') && styles.followingButton, followLoading && { opacity: 0.5 }]}
                     onPress={handleFollow}
+                    disabled={followLoading}
                   >
                     {isFollowing
                       ? <><Ionicons name="checkmark" size={16} color={Colors.accent} /><Text style={styles.followingButtonText}>フォロー中</Text></>

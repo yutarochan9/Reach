@@ -321,7 +321,7 @@ export default function TalkScreen() {
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', user.id).single(),
       supabase.from('broadcasts')
-        .select('id, content, created_at, public_reactions')
+        .select('id, content, image_url, video_url, created_at, public_reactions')
         .eq('sender_id', user.id).eq('status', 'published')
         .order('created_at', { ascending: false }).limit(1),
       supabase.from('dm_escalations')
@@ -345,7 +345,11 @@ export default function TalkScreen() {
       myCommentCount = (myComments ?? []).length
     }
     const myRawContent = myLastBroadcast?.content ?? ''
-    const myDisplayContent = myRawContent.trim() ? myRawContent.trim() : myLastBroadcast ? '📷 画像' : 'まだ配信がありません'
+    const myDisplayContent = myRawContent.trim() ? myRawContent.trim()
+      : myLastBroadcast?.video_url ? '動画を送信しました'
+      : myLastBroadcast?.image_url ? '画像を送信しました'
+      : myLastBroadcast ? '画像を送信しました'
+      : 'まだ配信がありません'
     setMyItem({
       name: myProfile?.display_name ?? 'あなた',
       avatar: myProfile?.avatar_url ?? null,
@@ -379,9 +383,10 @@ export default function TalkScreen() {
     if (followingIds.length > 0) {
       const [{ data: broadcasts }, { data: reads }, { data: profiles }, { data: subs }] = await Promise.all([
         supabase.from('broadcasts')
-          .select('id, sender_id, content, created_at, public_reactions, is_subscriber_only')
+          .select('id, sender_id, content, image_url, video_url, created_at, public_reactions, is_subscriber_only')
           .in('sender_id', followingIds)
           .eq('status', 'published')
+          .or(`recipient_id.is.null,recipient_id.eq.${user.id}`)
           .order('created_at', { ascending: false }),
         supabase.from('talk_reads').select('sender_id, last_read_at').eq('user_id', user.id),
         supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followingIds),
@@ -432,7 +437,11 @@ export default function TalkScreen() {
         const lastRead = readMap[id]
         const unread = lastRead ? visibleBcs.filter((b: any) => b.created_at > lastRead).length : visibleBcs.length
         const rawContent = latest?.content ?? ''
-        const displayContent = rawContent.trim() ? rawContent.trim() : latest ? '📷 画像' : 'まだ配信がありません'
+        const displayContent = rawContent.trim() ? rawContent.trim()
+          : latest?.video_url ? '動画を送信しました'
+          : latest?.image_url ? '画像を送信しました'
+          : latest ? '画像を送信しました'
+          : 'まだ配信がありません'
         return {
           id,
           name: profMap[id]?.display_name ?? '?',

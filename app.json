@@ -33,14 +33,39 @@
         "name": "Reach",
         "short_name": "Reach",
         "icons": [
-          { "src": "/icon.png", "sizes": "192x192", "type": "image/png" },
-          { "src": "/icon.png", "sizes": "512x512", "type": "image/png" }
+          {
+            "src": "/icon.png",
+            "sizes": "192x192",
+            "type": "image/png"
+          },
+          {
+            "src": "/icon.png",
+            "sizes": "512x512",
+            "type": "image/png"
+          }
         ]
       }
     },
+    "updates": {
+      "url": "https://u.expo.dev/f3782ce6-b211-41c3-803d-e4d3e8e8f27c",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "plugins": [
       "expo-router",
-      "expo-font"
-    ]
+      "expo-font",
+      "expo-updates"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f3782ce6-b211-41c3-803d-e4d3e8e8f27c"
+      }
+    },
+    "owner": "reach_pr"
   }
 }
