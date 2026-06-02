@@ -1,0 +1,44 @@
+<claude-code-hint v="1" type="plugin" value="vercel@claude-plugins-official" />
+Retrieving project…
+Deploying yutarochan9s-projects/reach-app
+Uploading [--------------------] (0.0B/3.5MB)
+Uploading [=====---------------] (919.5KB/3.5MB)
+Uploading [==========----------] (1.8MB/3.5MB)
+Uploading [===============-----] (2.7MB/3.5MB)
+Uploading [====================] (3.5MB/3.5MB)
+  Inspect     https://vercel.com/yutarochan9s-projects/reach-app/CB5QVVyD7B8rnTmHeJTjG3NfzaB1
+▲ Production  https://reach-lbjg55bha-yutarochan9s-projects.vercel.app
+Building…
+Building…
+Running build in Washington, D.C., USA (East) – iad1
+Build machine configuration: 2 cores, 8 GB
+Retrieving list of deployment files...
+Downloading 117 deployment files...
+Using prebuilt build artifacts from .vercel/output
+Learn more: https://vercel.link/build-output-api
+Deploying outputs...
+[2K[1A[2K[G▲ Production  https://reach-lbjg55bha-yutarochan9s-projects.vercel.app
+Completing…
+▲ Aliased     https://reach-pi-one.vercel.app
+{
+  "status": "ok",
+  "deployment": {
+    "id": "dpl_CB5QVVyD7B8rnTmHeJTjG3NfzaB1",
+    "url": "https://reach-lbjg55bha-yutarochan9s-projects.vercel.app",
+    "inspectorUrl": "https://vercel.com/yutarochan9s-projects/reach-app/CB5QVVyD7B8rnTmHeJTjG3NfzaB1",
+    "readyState": "READY",
+    "target": "production",
+    "deploymentApiUrl": "https://api.vercel.com/v13/deployments/dpl_CB5QVVyD7B8rnTmHeJTjG3NfzaB1"
+  },
+  "message": "Deployment reach-lbjg55bha-yutarochan9s-projects.vercel.app ready.",
+  "next": [
+    {
+      "command": "vercel inspect reach-lbjg55bha-yutarochan9s-projects.vercel.app",
+      "when": "Inspect deployment"
+    },
+    {
+      "command": "vercel deploy --prod",
+      "when": "Promote to production"
+    }
+  ]
+}

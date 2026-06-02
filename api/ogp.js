@@ -1,65 +1,72 @@
-// Vercel Serverless Function: OGP HTML を返す（動的 og:image 対応）v3
-// プロジェクトルートの /api フォルダは vercel.json の outputDirectory に関係なく常にデプロイされる
-// DEPLOYED_AT: 2026-05-28-OGPV3
+// api/ogp.js — Vercel サーバーレス関数
+// メッセージ内のURLからOGP（Open Graph Protocol）メタ情報を取得して返す
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET')
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
-const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_Gtl_1E7WDa-H-r7HK5UZNg_I4R8Ta5B'
-const BASE = 'https://reach-pi-one.vercel.app'
+  const { url } = req.query
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'url is required' })
+  }
 
-// /api/og-image でサーバーサイド生成した画像を使用
-function ogImageUrl(id, type) {
-  return `${BASE}/api/og-image?type=${type}&id=${encodeURIComponent(id)}`
-}
-
-function esc(s) {
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-module.exports = async (req, res) => {
-  const { id, type = 'creator' } = req.query
-  if (!id) { res.status(404).send('Not found'); return }
-
-  let name = 'クリエーター'
-  let bio = 'Reach でクリエーターをフォローして配信を楽しもう'
-  // サーバーサイドで動的生成した OGP 画像（/api/og-image）を使用
-  let image = ogImageUrl(id, type)
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({ error: 'invalid url' })
+  }
 
   try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(id)}&select=display_name,bio,avatar_url&limit=1`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
-    )
-    const rows = await r.json()
-    const p = rows?.[0]
-    if (p) {
-      if (p.display_name) name = p.display_name
-      if (p.bio) bio = p.bio
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ReachBot/1.0; +https://reach-pi-one.vercel.app)',
+      },
+      signal: AbortSignal.timeout(5000),
+      redirect: 'follow',
+    })
+
+    if (!response.ok) {
+      return res.status(200).json({})
     }
-  } catch {}
 
-  const pageUrl = type === 'talk' ? `${BASE}/talk/${id}` : `${BASE}/creator/${id}`
-  const title = `${name} | Reach`
+    const reader = response.body?.getReader()
+    if (!reader) return res.status(200).json({})
+    let html = ''
+    let totalBytes = 0
+    const decoder = new TextDecoder()
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      html += decoder.decode(value, { stream: true })
+      totalBytes += value.byteLength
+      if (totalBytes > 100000) break
+    }
+    reader.cancel().catch(() => {})
 
-  res.setHeader('content-type', 'text/html; charset=utf-8')
-  res.setHeader('cache-control', 'no-store')
-  res.setHeader('x-ogp-handler', 'ogp-v3-DEPLOYED_AT_2026-05-28')
-  res.send(`<!DOCTYPE html>
-<!-- og.js v3 DEPLOYED_AT_2026-05-28 -->
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<title>${esc(title)}</title>
-<meta property="og:title" content="${esc(title)}" />
-<meta property="og:description" content="${esc(bio)}" />
-<meta property="og:image" content="${esc(image)}" />
-<meta property="og:url" content="${esc(pageUrl)}" />
-<meta property="og:site_name" content="Reach" />
-<meta property="og:type" content="profile" />
-<meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="${esc(title)}" />
-<meta name="twitter:description" content="${esc(bio)}" />
-<meta name="twitter:image" content="${esc(image)}" />
-</head>
-<body><a href="${esc(pageUrl)}">${esc(title)}</a></body>
-</html>`)
+    const getMeta = (prop) => {
+      const re1 = new RegExp(
+        `<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']*)["']`, 'i'
+      )
+      const re2 = new RegExp(
+        `<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'
+      )
+      return (html.match(re1) || html.match(re2))?.[1] ?? null
+    }
+
+    const getTitle = () => {
+      const og = getMeta('og:title')
+      if (og) return og
+      const m = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+      return m?.[1]?.trim() ?? null
+    }
+
+    const result = {
+      title:       getTitle(),
+      description: getMeta('og:description') ?? getMeta('description'),
+      image:       getMeta('og:image'),
+      siteName:    getMeta('og:site_name'),
+    }
+
+    res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=600')
+    return res.status(200).json(result)
+  } catch {
+    return res.status(200).json({})
+  }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, ActivityIndicator, Image, Alert, Platform, KeyboardAvoidingView,
@@ -7,24 +7,35 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import { IS_NATIVE, getMembershipSku, initIAP, endIAP, purchaseMembershipIAP } from '../../lib/iap'
+
+// Webでのカード入力フォームは不要 — Stripe Checkoutへリダイレクトする
+const IS_WEB = Platform.OS === 'web'
 
 type Profile = {
   id: string
   display_name: string
   avatar_url: string | null
   membership_price: number | null
+  membership_close_date: string | null
+  membership_welcome: string | null
+}
+
+const formatDate = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
 }
 
 const DEFAULT_PRICE = 500
 
 export default function MembershipCheckout() {
-  const { creatorId } = useLocalSearchParams<{ creatorId: string }>()
+  const { creatorId, payment } = useLocalSearchParams<{ creatorId: string; payment?: string }>()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [myId, setMyId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
 
-  // カード入力フィールド
+  // ネイティブ用カード入力フィールド（Webでは未使用）
   const [cardName, setCardName] = useState('')
   const [cardNumber, setCardNumber] = useState('')
   const [expiry, setExpiry] = useState('')
@@ -37,14 +48,30 @@ export default function MembershipCheckout() {
       setMyId(user.id)
       const { data } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, membership_price')
+        .select('id, display_name, avatar_url, membership_price, membership_close_date, membership_welcome')
         .eq('id', creatorId)
         .single()
       setProfile(data)
       setLoading(false)
+
+      // Stripe決済完了後にリダイレクトで戻ってきた場合
+      if (payment === 'success') {
+        const welcomeMsg = data?.membership_welcome?.trim()
+        const baseMsg = `${data?.display_name ?? 'クリエーター'} のメンバーシップに加入しました！`
+        const fullMsg = welcomeMsg ? `${baseMsg}\n\n${welcomeMsg}` : baseMsg
+        if (IS_WEB) {
+          window.alert(`加入完了 🎉\n${fullMsg}`)
+        } else {
+          Alert.alert('加入完了 🎉', fullMsg)
+        }
+        router.replace(`/creator/${creatorId}` as any)
+      }
     }
     fetch()
-  }, [creatorId])
+    // iOS: IAP 接続を初期化
+    if (IS_NATIVE) { initIAP().catch(() => {}) }
+    return () => { if (IS_NATIVE) endIAP().catch(() => {}) }
+  }, [creatorId, payment])
 
   // カード番号フォーマット: 4桁ごとにスペース
   const formatCardNumber = (text: string) => {
@@ -65,39 +92,49 @@ export default function MembershipCheckout() {
     expiry.length === 5 &&
     cvv.length >= 3
 
+  // 加入完了後の共通処理
+  const onJoinSuccess = () => {
+    const welcomeMsg = profile?.membership_welcome?.trim()
+    const baseMsg = `${profile?.display_name ?? 'クリエーター'} のメンバーシップに加入しました！`
+    const fullMsg = welcomeMsg ? `${baseMsg}\n\n${welcomeMsg}` : baseMsg
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.alert(fullMsg)
+    } else {
+      Alert.alert('加入完了 🎉', fullMsg)
+    }
+    router.replace(`/creator/${creatorId}` as any)
+  }
+
   const handlePayment = async () => {
-    if (!isFormValid || !myId) return
+    if (!myId) return
     setProcessing(true)
 
-    // 実際の決済処理はここにStripe等のSDKを組み込む
-    // 現在はサブスクリプションをDBに直接登録（デモ）
-    const { error } = await supabase.from('subscriptions').insert({
-      subscriber_id: myId,
-      creator_id: creatorId,
-      status: 'active',
-    })
-
-    setProcessing(false)
-
-    if (error) {
-      if (error.code === '23505') {
-        // 既に加入済みの場合（重複エラー）
-        router.replace(`/creator/${creatorId}` as any)
-        return
+    try {
+      if (IS_NATIVE) {
+        // ── iOS / Android: App Store IAP ─────────────────────────
+        const priceVal = profile?.membership_price ?? DEFAULT_PRICE
+        const sku = getMembershipSku(priceVal)
+        await purchaseMembershipIAP(sku, myId, creatorId as string)
+        onJoinSuccess()
+      } else {
+        // ── Web: Stripe Checkout へリダイレクト ──────────────────
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) { Alert.alert('エラー', 'ログインが必要です'); return }
+        const price = profile?.membership_price ?? DEFAULT_PRICE
+        const res = await supabase.functions.invoke('stripe-checkout', {
+          body: { type: 'membership', creatorId, amount: price },
+        })
+        if (res.error) throw new Error(res.error.message)
+        window.location.href = res.data.url
+        return // リダイレクト後は処理不要
       }
-      Alert.alert('エラー', error.message)
-      return
+    } catch (e: any) {
+      if (e?.code !== 'E_USER_CANCELLED') {
+        Alert.alert('エラー', e.message ?? '購入に失敗しました')
+      }
+    } finally {
+      setProcessing(false)
     }
-
-    // 成功
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.alert(`${profile?.display_name ?? 'クリエーター'} のメンバーシップに加入しました！`)
-    } else {
-      Alert.alert('加入完了', `${profile?.display_name ?? 'クリエーター'} のメンバーシップに加入しました！`)
-    }
-
-    // クリエーターページに戻る（スタックをリセット）
-    router.replace(`/creator/${creatorId}` as any)
   }
 
   if (loading) {
@@ -129,6 +166,21 @@ export default function MembershipCheckout() {
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
+          {/* 閉鎖予定警告バナー */}
+          {profile.membership_close_date && (
+            <View style={styles.closeWarningBanner}>
+              <Ionicons name="warning" size={18} color="#D32F2F" />
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={styles.closeWarningTitle}>終了予定のメンバーシップです</Text>
+                <Text style={styles.closeWarningBody}>
+                  このメンバーシップは{' '}
+                  <Text style={styles.closeWarningDate}>{formatDate(profile.membership_close_date)}</Text>
+                  {' '}に閉鎖予定です。加入後1ヶ月以内に終了する可能性があります。それでもよろしければ下記で支払いを確定してください。
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* 注文内容サマリー */}
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>加入内容</Text>
@@ -152,71 +204,50 @@ export default function MembershipCheckout() {
             </View>
           </View>
 
-          {/* お支払い方法 */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="card-outline" size={18} color={Colors.accent} />
-              <Text style={styles.sectionTitle}>クレジットカード</Text>
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>カード名義（ローマ字）</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="TARO YAMADA"
-                placeholderTextColor={Colors.textLight}
-                value={cardName}
-                onChangeText={setCardName}
-                autoCapitalize="characters"
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.fieldLabel}>カード番号</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="1234 5678 9012 3456"
-                placeholderTextColor={Colors.textLight}
-                value={cardNumber}
-                onChangeText={t => setCardNumber(formatCardNumber(t))}
-                keyboardType="numeric"
-                maxLength={19}
-              />
-            </View>
-
-            <View style={styles.fieldRow}>
-              <View style={[styles.fieldGroup, { flex: 1 }]}>
-                <Text style={styles.fieldLabel}>有効期限</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="MM/YY"
-                  placeholderTextColor={Colors.textLight}
-                  value={expiry}
-                  onChangeText={t => setExpiry(formatExpiry(t))}
-                  keyboardType="numeric"
-                  maxLength={5}
-                />
+          {IS_NATIVE ? (
+            /* ── iOS / Android: App Store IAP ── */
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="storefront-outline" size={18} color={Colors.accent} />
+                <Text style={styles.sectionTitle}>App Store 経由で加入</Text>
               </View>
-              <View style={[styles.fieldGroup, { flex: 1 }]}>
-                <Text style={styles.fieldLabel}>セキュリティコード</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="123"
-                  placeholderTextColor={Colors.textLight}
-                  value={cvv}
-                  onChangeText={t => setCvv(t.replace(/\D/g, '').slice(0, 4))}
-                  keyboardType="numeric"
-                  maxLength={4}
-                  secureTextEntry
-                />
+              <View style={{ padding: 16, gap: 6 }}>
+                <Text style={{ fontSize: 13, color: Colors.textLight, lineHeight: 20 }}>
+                  App Store の安全な決済システムを使って加入します。{'\n'}
+                  クレジットカード情報はAppleが管理します。
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                  <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textLight} />
+                  <Text style={{ fontSize: 11, color: Colors.textLight }}>Apple ID の支払い方法が使われます</Text>
+                </View>
               </View>
             </View>
-          </View>
+          ) : (
+            /* ── Web: Stripe Checkout へリダイレクト ── */
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="card-outline" size={18} color={Colors.accent} />
+                <Text style={styles.sectionTitle}>クレジットカード決済</Text>
+              </View>
+              <View style={{ padding: 16, gap: 8 }}>
+                <Text style={{ fontSize: 13, color: Colors.textLight, lineHeight: 20 }}>
+                  Stripe の安全な決済ページに移動してお支払いいただきます。{'\n'}
+                  カード情報はStripeが管理し、Reachには保存されません。
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textLight} />
+                  <Text style={{ fontSize: 11, color: Colors.textLight }}>SSL暗号化・PCI DSS準拠</Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* セキュリティ表示 */}
           <View style={styles.securityRow}>
             <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textLight} />
-            <Text style={styles.securityText}>SSL暗号化で安全にお支払い情報を保護します</Text>
+            <Text style={styles.securityText}>
+              {IS_NATIVE ? 'Apple の安全な決済システムで保護されます' : 'Stripe の安全な決済システムで保護されます'}
+            </Text>
           </View>
 
           {/* 利用規約 */}
@@ -229,9 +260,9 @@ export default function MembershipCheckout() {
         {/* 支払いボタン（固定フッター） */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.payBtn, (!isFormValid || processing) && styles.payBtnDisabled]}
+            style={[styles.payBtn, processing && styles.payBtnDisabled]}
             onPress={handlePayment}
-            disabled={!isFormValid || processing}
+            disabled={processing}
             activeOpacity={0.85}
           >
             {processing
@@ -252,12 +283,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backBtn: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
 
   content: { padding: 16, gap: 16, paddingBottom: 120 },
 
@@ -308,6 +339,15 @@ const styles = StyleSheet.create({
   termsText: {
     fontSize: 11, color: Colors.textLight, textAlign: 'center', lineHeight: 17,
   },
+
+  closeWarningBanner: {
+    backgroundColor: '#FFF3F3', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#F44336',
+    padding: 14, flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+  },
+  closeWarningTitle: { fontSize: 13, fontWeight: '800', color: '#D32F2F' },
+  closeWarningBody: { fontSize: 12, color: Colors.text, lineHeight: 18 },
+  closeWarningDate: { fontWeight: '800', color: '#D32F2F' },
 
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,

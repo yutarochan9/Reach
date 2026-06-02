@@ -2,16 +2,34 @@
   "buildCommand": "npx expo export --platform web && node scripts/inject-pwa.js && node scripts/gen-og-image.js",
   "outputDirectory": "dist",
   "alias": ["reach-pi-one.vercel.app"],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options",  "value": "nosniff" },
+        { "key": "X-Frame-Options",          "value": "DENY" },
+        { "key": "X-XSS-Protection",         "value": "1; mode=block" },
+        { "key": "Referrer-Policy",           "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy",        "value": "camera=(), microphone=(), geolocation=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/creator/:id",
-      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot).*" }],
-      "destination": "/api/ogp?type=creator&id=:id"
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot|LINEbot|LINEproxy|Googlebot|bingbot|curl|python-requests).*" }],
+      "destination": "/api/og?type=creator&id=:id"
     },
     {
       "source": "/talk/:id",
-      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot).*" }],
-      "destination": "/api/ogp?type=talk&id=:id"
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot|LINEbot|LINEproxy|Googlebot|bingbot|curl|python-requests).*" }],
+      "destination": "/api/og?type=talk&id=:id"
+    },
+    {
+      "source": "/broadcast-thread/:id",
+      "has": [{ "type": "header", "key": "user-agent", "value": ".*(Twitterbot|facebookexternalhit|LinkedInBot|Discordbot|Slackbot|TelegramBot|LINEbot|LINEproxy|Googlebot|bingbot|curl|python-requests).*" }],
+      "destination": "/api/og?type=broadcast&id=:id"
     },
     { "source": "/(.*)", "destination": "/" }
   ]

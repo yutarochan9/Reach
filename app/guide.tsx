@@ -1,4 +1,4 @@
-﻿import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
@@ -6,21 +6,25 @@ import { Colors } from '../constants/colors'
 const STEPS = [
   { step: '1', title: 'アカウントを作成する', desc: 'メールアドレスとパスワードで登録します。登録後すぐに使い始められます。誰でも無料でクリエイターにもなれます。', icon: 'person-add-outline' as const },
   { step: '2', title: 'クリエイターをフォローする', desc: 'お気に入りのクリエイターのプロフィールページからフォローします。フォロー後、配信が確実に届くようになります。', icon: 'heart-outline' as const },
-  { step: '3', title: '配信を受け取る', desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像・動画など様々な形式に対応しています。アルゴリズムに左右されず、必ず手元に届くのが特徴です。', icon: 'notifications-outline' as const },
+  { step: '3', title: '配信を受け取る', desc: 'クリエイターが配信するとトーク画面に届きます。テキスト・画像など様々な形式に対応しています。アルゴリズムに左右されず、必ず手元に届くのが特徴です。', icon: 'notifications-outline' as const },
   { step: '4', title: '配信にいいね・コメントをする', desc: '配信メッセージを長押しするといいね・コメントができます。クリエイターに気持ちを伝えてみましょう。', icon: 'heart-circle-outline' as const },
-  { step: '5', title: 'DMで直接やり取りする', desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。', icon: 'chatbubble-ellipses-outline' as const },
-  { step: '6', title: '自分でも投稿を作成する', desc: '右下の＋ボタンからいつでも配信を作成できます。テキスト・画像・動画をまとめて送ることも可能です。フォロワー全員に確実に届けられます。', icon: 'add-circle-outline' as const },
-  { step: '7', title: 'ツールを活用する', desc: 'タイルメニュー・自動応答・予約配信・フロー配信など、配信をより便利にする機能が揃っています。設定画面から自由にカスタマイズできます。', icon: 'construct-outline' as const },
+  { step: '5', title: 'DMで直接やり取りする', desc: 'クリエイターとダイレクトメッセージでやり取りできます。質問や感想を気軽に送りましょう。内容はあなたとクリエイターだけが見られます。', icon: 'chatbubble-ellipses-outline' as const },
+  { step: '6', title: 'メンバーシップに加入する', desc: 'クリエイターのプロフィールページから月額メンバーシップに加入できます。限定配信やコンテンツを受け取りながら、クリエイターを継続的にサポートできます。', icon: 'star-outline' as const },
+  { step: '7', title: '自分でも配信を作成する', desc: '画面下部の＋ボタンからいつでも配信を作成できます。テキスト・画像をまとめて送ることも可能です。フォロワー全員に確実に届けられます。', icon: 'add-circle-outline' as const },
+  { step: '8', title: 'ツールを活用する', desc: 'タイルメニュー・自動応答・予約配信・フロー配信など、配信をより便利にする機能が揃っています。マイページから自由にカスタマイズできます。', icon: 'construct-outline' as const },
 ]
 
 const TOOLS = [
-  { icon: 'radio-outline' as const, title: '配信メッセージ', desc: 'クリエイターからの配信がここに届きます。テキスト・画像・動画など様々な形式に対応しています。フォロワー全員に確実に届くのが特徴です。' },
+  { icon: 'radio-outline' as const, title: '配信メッセージ', desc: 'クリエイターからの配信がここに届きます。テキスト・画像など様々な形式に対応しています。フォロワー全員に確実に届くのが特徴です。' },
   { icon: 'chatbubble-ellipses-outline' as const, title: 'ダイレクトメッセージ（DM）', desc: 'クリエイターと1対1でやり取りできます。質問・感想・相談など、気軽にメッセージを送りましょう。内容はあなたとクリエイターだけが見られます。' },
-  { icon: 'grid-outline' as const, title: 'タイルメニュー', desc: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。タップするだけで簡単に使えます。' },
+  { icon: 'star-outline' as const, title: 'メンバーシップ', desc: 'クリエイターへの月額サポート機能です。加入するとメンバーシップ限定の配信を受け取れます。クリエイターは独自の料金と特典を設定できます。' },
+  { icon: 'grid-outline' as const, title: 'タイルメニュー', desc: 'トーク画面の下部に表示されるボタンメニューです。クリエイターが設定したリンクや自動返信ボタンが並んでいます。タップするだけで簡単に使えます。メッセージ画面をスクロールすると自動で閉じます。' },
   { icon: 'time-outline' as const, title: '下書き・予約配信', desc: '配信内容を下書きとして保存し、指定した日時に自動送信できます。事前に準備しておくことで、計画的な情報発信が可能です。' },
   { icon: 'archive-outline' as const, title: '過去配信', desc: '過去に送った配信メッセージの一覧を確認できます。閲覧数・いいね・返信などの実績もあわせて確認できます。' },
   { icon: 'flash-outline' as const, title: '自動応答', desc: 'キーワードに反応して自動でメッセージを返信する機能です。よくある質問への対応や入力促進など、さまざまな場面で活用できます。' },
-  { icon: 'git-network-outline' as const, title: 'フロー配信', desc: '複数のメッセージをシナリオとして組み合わせ、条件分岐しながら順番に届ける機能です。ストーリー性のある体験を作れます。' },
+  { icon: 'git-network-outline' as const, title: 'フロー配信', desc: 'フォロー後に自動で順番にメッセージを届けるシナリオ配信機能です。ウェルカムメッセージや複数ステップのコンテンツ配信に活用できます。' },
+  { icon: 'bar-chart-outline' as const, title: 'アナリティクス', desc: '配信の閲覧数・いいね数・フォロワー推移などをグラフで確認できます。どの配信が反響を呼んだかを把握して、次の配信に活かせます。' },
+  { icon: 'cash-outline' as const, title: '収益・振込管理', desc: 'メンバーシップや応援支援の収益を確認・管理できます。Stripeと連携することで毎月の振込が自動化されます。' },
 ]
 
 export default function GuideScreen() {
@@ -37,7 +41,7 @@ export default function GuideScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.conceptCard}>
           <Text style={styles.conceptText}>
-            Reachの基本的な使い方を説明します。{'\n\n'}
+            Reachは、クリエイターの発信がアルゴリズムに埋もれることなくフォロワー全員に確実に届くプラットフォームです。{'\n\n'}
             アカウントを作成してクリエイターをフォローするだけで、すぐに配信を受け取れます。
           </Text>
         </View>

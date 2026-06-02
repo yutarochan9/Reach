@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
@@ -65,6 +65,7 @@ export default function TalkDetailScreen() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [isSubscriber, setIsSubscriber] = useState(false)
   const [isPrivateGated, setIsPrivateGated] = useState(false) // 鍵垢で未承認フォロワーの場合
+  const [isAdmin, setIsAdmin] = useState(false) // 管理者は鍵垢もバイパス可能
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
   // 画像の自然サイズキャッシュ（URL → {w, h}）
   const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
@@ -84,6 +85,29 @@ export default function TalkDetailScreen() {
   // フッター（タイムスタンプ+シェアボタン）のDOM要素キャッシュ（キャプチャ前に非表示にする）
   const footerRefs = useRef<Map<string, any>>(new Map())
   const [webKbHeight, setWebKbHeight] = useState(0)
+  // 検索
+  const [searchActive, setSearchActive] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // 検索フィルター済みグループ
+  // キーワード検索 + 日付部分一致（例: "2025-05" "5月" "05-20" など）を1つの入力で賄う
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim()
+    if (!searchActive || !q) return groups
+    const qLower = q.toLowerCase()
+    return groups.filter(g => {
+      const anchor = g.blocks[0]
+      if (!anchor) return false
+      // 日付文字列（YYYY-MM-DD / YYYY/MM/DD どちらでも部分一致）
+      const dateStr = anchor.created_at.slice(0, 10) // "2025-05-20"
+      const dateSlash = dateStr.replace(/-/g, '/')   // "2025/05/20"
+      const d = new Date(anchor.created_at)
+      const dateJa = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+      if (dateStr.includes(q) || dateSlash.includes(q) || dateJa.includes(q)) return true
+      // コンテンツのキーワード一致
+      return g.blocks.some(b => b.content.toLowerCase().includes(qLower))
+    })
+  }, [groups, searchActive, searchQuery])
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return
@@ -137,7 +161,7 @@ export default function TalkDetailScreen() {
       const self = user?.id === senderId
       setIsSelf(self)
 
-      const [{ data: profile }, { data: broadcasts }, myFollowResult] = await Promise.all([
+      const [{ data: profile }, { data: broadcasts }, myFollowResult, viewerProfileResult] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official, bio, username, is_private').eq('id', senderId).single(),
         supabase.from('broadcasts')
           .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
@@ -147,7 +171,14 @@ export default function TalkDetailScreen() {
         user && !self
           ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', senderId).maybeSingle()
           : Promise.resolve({ data: null }),
+        // 閲覧者の管理者フラグを取得（鍵垢バイパス・分析への影響排除のため）
+        user && !self
+          ? supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+          : Promise.resolve({ data: null }),
       ])
+
+      const viewerIsAdmin = !!(viewerProfileResult as any)?.data?.is_admin
+      setIsAdmin(viewerIsAdmin)
 
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
@@ -157,9 +188,9 @@ export default function TalkDetailScreen() {
       const following = !!(myFollowResult as any)?.data
       setIsFollowing(following)
 
-      // 鍵アカウントで未フォローなら配信を表示しない
+      // 鍵アカウントで未フォローなら配信を表示しない（管理者はバイパス）
       const senderIsPrivate = (profile as any)?.is_private ?? false
-      if (senderIsPrivate && !self && !following) {
+      if (senderIsPrivate && !self && !following && !viewerIsAdmin) {
         setIsPrivateGated(true)
         setLoading(false)
         return
@@ -234,7 +265,8 @@ export default function TalkDetailScreen() {
       })
       setGroups(result)
 
-      if (user && !self && bcIds.length > 0) {
+      // 管理者は既読・閲覧数に影響しないようスキップ
+      if (user && !self && bcIds.length > 0 && !viewerIsAdmin) {
         const alreadyRead = new Set(
           (reads ?? []).filter((r: any) => r.user_id === user.id).map((r: any) => r.broadcast_id)
         )
@@ -493,7 +525,7 @@ export default function TalkDetailScreen() {
   // og:image 付きのシェア URL を作成して共有する。
   // アップロード失敗時はURLシェア（OGP はデフォルトのReachロゴ）にフォールバック。
   const handleShare = async (group: BroadcastGroup) => {
-    const talkUrl = `https://reach-pi-one.vercel.app/talk/${senderId}`
+    const talkUrl = `https://reachapp.jp/talk/${senderId}`
 
     if (isWeb && typeof window !== 'undefined') {
       // --- Web: スクリーンショット → Supabase アップロード → OGP 付き URL シェア ---
@@ -691,6 +723,17 @@ export default function TalkDetailScreen() {
     router.push(`/im/${senderId}` as any)
   }
 
+  // 検索結果タップ → 検索を閉じてそのメッセージへスクロール
+  const navigateToGroup = (anchorId: string) => {
+    const idx = groups.findIndex(g => g.anchorId === anchorId)
+    setSearchActive(false)
+    setSearchQuery('')
+    if (idx < 0) return
+    setTimeout(() => {
+      flatListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.2 })
+    }, 80)
+  }
+
   const formatTime = (iso: string) => {
     const d = new Date(iso)
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
@@ -735,7 +778,7 @@ export default function TalkDetailScreen() {
   const BroadcastList = (
     <FlatList
       ref={flatListRef}
-      data={groups}
+      data={filteredGroups}
       keyExtractor={item => item.anchorId}
       style={{ flex: 1 }}
       contentContainerStyle={[styles.messageList, tileVisible && { paddingBottom: 20 }]}
@@ -751,6 +794,10 @@ export default function TalkDetailScreen() {
           // 全既読・自分の配信 → 常に最下部へ（画像・プレビュー読み込み後も追従）
           flatListRef.current?.scrollToEnd({ animated: false })
         }
+      }}
+      onScrollBeginDrag={() => {
+        // メッセージ一覧をスクロール操作したらタイルを閉じる
+        if (tileOpen) setTileOpen(false)
       }}
       onScrollToIndexFailed={(info) => {
         // アイテムが未描画の場合は推定位置へスクロール
@@ -769,7 +816,7 @@ export default function TalkDetailScreen() {
       )}
       renderItem={({ item: group, index }) => {
         if (!group.blocks.length) return null
-        const prevGroup = index > 0 ? groups[index - 1] : null
+        const prevGroup = index > 0 ? filteredGroups[index - 1] : null
         const showDate = !prevGroup || !prevGroup.blocks.length ||
           new Date(group.blocks[0].created_at).toDateString() !== new Date(prevGroup.blocks[0].created_at).toDateString()
         return (
@@ -781,8 +828,9 @@ export default function TalkDetailScreen() {
                 </Text>
               </View>
             )}
-            <View
-              style={styles.groupWrap}
+            <Pressable
+              style={[styles.groupWrap, searchActive && { backgroundColor: 'transparent' }]}
+              onPress={searchActive ? () => navigateToGroup(group.anchorId) : undefined}
               ref={(ref: any) => {
                 // DOM要素をシェア用にキャッシュ（unmount時は削除）
                 if (ref) groupRefs.current.set(group.anchorId, ref)
@@ -866,6 +914,7 @@ export default function TalkDetailScreen() {
                   })}
                 </View>
               </View>
+            </Pressable>
 
               {/* 時刻 + シェア + ···ボタン（footerRefs でスクショから除外） */}
               <View
@@ -892,7 +941,6 @@ export default function TalkDetailScreen() {
                   <Text style={styles.moreBtnText}>···</Text>
                 </TouchableOpacity>
               </View>
-            </View>
           </>
         )
       }}
@@ -1051,8 +1099,35 @@ export default function TalkDetailScreen() {
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>あなたの配信</Text>
-          <View style={{ width: 32 }} />
+          <TouchableOpacity style={styles.backButton} onPress={() => { setSearchActive(v => !v); setSearchQuery(''); setSearchDateFrom(''); setSearchDateTo('') }} activeOpacity={0.7}>
+            <Ionicons name={searchActive ? 'close' : 'search'} size={20} color={Colors.accent} />
+          </TouchableOpacity>
         </View>
+        {/* 検索バー（isSelf） */}
+        {searchActive && (
+          <View style={styles.searchBar}>
+            <View style={styles.searchInputWrap}>
+              <Ionicons name="search" size={15} color={Colors.textLight} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="キーワード・日付（例: 2025-05）"
+                placeholderTextColor={Colors.textLight}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={15} color={Colors.textLight} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {searchQuery ? (
+              <Text style={styles.searchResultCount}>{filteredGroups.length} / {groups.length} 件</Text>
+            ) : null}
+          </View>
+        )}
+
         {/* flex:1 + overflow:hidden でFlatListが溢れないよう固定し、DM欄を常に最下部に表示 */}
         <View style={{ flex: 1, overflow: 'hidden' }}>
           {BroadcastList}
@@ -1160,10 +1235,10 @@ export default function TalkDetailScreen() {
           <title>{senderName ? `${senderName} | Reach` : 'Reach'}</title>
           <meta property="og:title" content={senderName ? `${senderName} | Reach` : 'Reach'} />
           <meta property="og:description" content={senderBio ?? 'Reach でクリエーターをフォローして配信を楽しもう'} />
-          <meta property="og:image" content={senderAvatar ?? 'https://reach-pi-one.vercel.app/icon.png'} />
+          <meta property="og:image" content={senderAvatar ?? 'https://reachapp.jp/icon.png'} />
           <meta property="og:site_name" content="Reach" />
           <meta name="twitter:card" content="summary" />
-          <meta name="twitter:image" content={senderAvatar ?? 'https://reach-pi-one.vercel.app/icon.png'} />
+          <meta name="twitter:image" content={senderAvatar ?? 'https://reachapp.jp/icon.png'} />
         </Head>
       )}
       {RightPanel}
@@ -1193,7 +1268,9 @@ export default function TalkDetailScreen() {
               {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
             </View>
           </View>
-          <View style={{ width: 32 }} />
+          <TouchableOpacity style={{ width: 32, padding: 4, alignItems: 'center' }} onPress={() => { setSearchActive(v => !v); setSearchQuery(''); setSearchDateFrom(''); setSearchDateTo('') }} activeOpacity={0.7}>
+            <Ionicons name={searchActive ? 'close' : 'search'} size={20} color={Colors.accent} />
+          </TouchableOpacity>
         </View>
 
         {/* サブスク登録中バナー（受け手のみ表示） */}
@@ -1201,6 +1278,31 @@ export default function TalkDetailScreen() {
           <View style={styles.subscriberBanner}>
             <Ionicons name="star" size={12} color={Colors.accent} />
             <Text style={styles.subscriberBannerText}>メンバーシップ登録中</Text>
+          </View>
+        )}
+
+        {/* 検索バー（トグル表示） */}
+        {searchActive && (
+          <View style={styles.searchBar}>
+            <View style={styles.searchInputWrap}>
+              <Ionicons name="search" size={15} color={Colors.textLight} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="キーワード・日付（例: 2025-05）"
+                placeholderTextColor={Colors.textLight}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle" size={15} color={Colors.textLight} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {searchQuery ? (
+              <Text style={styles.searchResultCount}>{filteredGroups.length} / {groups.length} 件</Text>
+            ) : null}
           </View>
         )}
 
@@ -1463,6 +1565,20 @@ const styles = StyleSheet.create({
   loginCtaBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
+  // 検索バー
+  searchBar: {
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    paddingHorizontal: 12, paddingVertical: 10, gap: 6,
+  },
+  searchInputWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.background, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  // fontSize: 16 以上にすることでiOS Safariの自動ズームを防止
+  searchInput: { flex: 1, fontSize: 16, color: Colors.text, paddingVertical: 0 },
+  searchResultCount: { fontSize: 11, color: Colors.textLight, textAlign: 'right' },
   tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
   panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   tileHandle: {
@@ -1524,7 +1640,7 @@ function LinkPreview({ url }: { url: string }) {
   useEffect(() => {
     const apiUrl = isWeb
       ? `/api/ogp?url=${encodeURIComponent(url)}`
-      : `https://reach-pi-one.vercel.app/api/ogp?url=${encodeURIComponent(url)}`
+      : `https://reachapp.jp/api/ogp?url=${encodeURIComponent(url)}`
     fetch(apiUrl)
       .then(r => r.json())
       .then(d => { if (d.title || d.image) setOgp(d) })

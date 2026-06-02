@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+﻿import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, Animated
@@ -202,12 +202,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
   infoBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',

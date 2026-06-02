@@ -59,15 +59,14 @@ module.exports = async (req, res) => {
           .map(r => (r.content || '').trim())
           .filter(c => c && c !== '　' && !c.match(/^https?:\/\//))
           .join('\n')
-          .slice(0, 150)
+          .slice(0, 120)
       }
     } catch (_) {}
   }
 
   const fontData = await getFont()
 
-  // アバター画像を base64 で取得（satori は外部URLをサポートしているが
-  // タイムアウトや CORS の問題を避けるため data URI に変換して渡す）
+  // アバター画像を base64 で取得
   let avatarDataUri = null
   if (avatar) {
     try {
@@ -83,16 +82,29 @@ module.exports = async (req, res) => {
 
   // アバター要素（画像ありなら img、なければ頭文字サークル）
   const avatarEl = avatarDataUri
-    ? h('img', {
-        src: avatarDataUri,
-        width: '96', height: '96',
-        style: { width: '96px', height: '96px', borderRadius: '50%', objectFit: 'cover' },
-      })
+    ? h('div', {
+        style: {
+          width: '100px', height: '100px', borderRadius: '20px',
+          background: '#FFFFFF', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', overflow: 'hidden',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          flexShrink: '0',
+        }
+      },
+        h('img', {
+          src: avatarDataUri,
+          width: '100', height: '100',
+          style: { width: '100px', height: '100px', objectFit: 'contain' },
+        })
+      )
     : h('div', {
         style: {
-          width: '96px', height: '96px', borderRadius: '50%',
-          background: '#B85042', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', color: 'white', fontSize: '40px', fontWeight: '700',
+          width: '100px', height: '100px', borderRadius: '20px',
+          background: 'linear-gradient(135deg, #B85042 0%, #8B3529 100%)',
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'center', color: 'white', fontSize: '44px', fontWeight: '700',
+          flexShrink: '0',
+          boxShadow: '0 4px 16px rgba(184,80,66,0.4)',
         }
       }, name[0] || 'R')
 
@@ -101,33 +113,118 @@ module.exports = async (req, res) => {
     style: {
       display: 'flex', flexDirection: 'column',
       width: '100%', height: '100%',
-      background: '#F5EFE6', padding: '64px',
+      background: '#F5EFE6',
       fontFamily: fontData ? '"NotoSansJP", sans-serif' : 'sans-serif',
+      position: 'relative',
+      overflow: 'hidden',
     }
   },
-    // ヘッダー（アバター + 名前）
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' } },
-      avatarEl,
-      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px', flex: '1' } },
-        h('div', { style: { fontSize: '36px', fontWeight: '700', color: '#1A1A1A' } }, name),
-        h('div', { style: { fontSize: '20px', color: '#AAAAAA' } }, 'Reach')
-      ),
-    ),
-    // 区切り線
-    h('div', { style: { height: '2px', background: '#F0F0F0', marginBottom: '32px' } }),
-    // 本文
+    // 上部アクセントバー（細め）
     h('div', {
       style: {
-        flex: '1', fontSize: '36px', lineHeight: '1.7', color: '#1A1A1A',
-        overflow: 'hidden', display: 'flex', flexDirection: 'column',
-        justifyContent: content ? 'flex-start' : 'center',
-        alignItems: content ? 'flex-start' : 'center',
+        position: 'absolute', top: '0', left: '0', right: '0',
+        height: '6px',
+        background: 'linear-gradient(90deg, #B85042 0%, #D4705A 50%, #B85042 100%)',
       }
-    }, content || h('span', { style: { fontSize: '28px', color: '#CCCCCC' } }, '配信をチェック')),
+    }),
+
+    // メインコンテンツエリア
+    h('div', {
+      style: {
+        display: 'flex', flexDirection: 'column', flex: '1',
+        padding: '56px 64px 48px 64px',
+        gap: '0',
+      }
+    },
+      // ヘッダー（アバター + 名前 + Reachバッジ）
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '36px' } },
+        avatarEl,
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', flex: '1', minWidth: '0' } },
+          h('div', {
+            style: {
+              fontSize: '40px', fontWeight: '700', color: '#1A1A1A',
+              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+            }
+          }, name),
+          h('div', {
+            style: {
+              display: 'flex', alignItems: 'center', gap: '8px',
+            }
+          },
+            h('div', {
+              style: {
+                background: '#B85042', borderRadius: '20px',
+                paddingLeft: '14px', paddingRight: '14px',
+                paddingTop: '5px', paddingBottom: '5px',
+                display: 'flex', alignItems: 'center',
+              }
+            },
+              h('span', { style: { fontSize: '18px', fontWeight: '700', color: '#FFFFFF', letterSpacing: '1px' } }, 'Reach')
+            )
+          )
+        ),
+      ),
+
+      // 区切り線
+      h('div', {
+        style: {
+          height: '1px',
+          background: 'linear-gradient(90deg, rgba(184,80,66,0.3) 0%, rgba(184,80,66,0.1) 100%)',
+          marginBottom: '32px',
+        }
+      }),
+
+      // 本文エリア
+      h('div', {
+        style: {
+          flex: '1',
+          display: 'flex', flexDirection: 'column',
+          justifyContent: content ? 'flex-start' : 'center',
+          alignItems: content ? 'flex-start' : 'center',
+          overflow: 'hidden',
+        }
+      },
+        content
+          ? h('div', {
+              style: {
+                fontSize: '30px', lineHeight: '1.75', color: '#2A2A2A',
+                overflow: 'hidden',
+                display: '-webkit-box',
+              }
+            }, content)
+          : h('div', {
+              style: {
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+              }
+            },
+              h('span', { style: { fontSize: '28px', color: '#B85042', fontWeight: '700' } }, '配信をチェック'),
+              h('span', { style: { fontSize: '20px', color: '#AAAAAA' } }, 'reach-pi-one.vercel.app')
+            )
+      ),
+    ),
+
     // フッター
-    h('div', { style: { display: 'flex', flexDirection: 'column' } },
-      h('div', { style: { height: '1px', background: '#EEEEEE', marginBottom: '16px' } }),
-      h('div', { style: { fontSize: '18px', color: '#CCCCCC' } }, 'reach-pi-one.vercel.app')
+    h('div', {
+      style: {
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        paddingLeft: '64px', paddingRight: '64px',
+        paddingBottom: '28px',
+      }
+    },
+      h('span', { style: { fontSize: '18px', color: '#BBBBBB' } }, 'reach-pi-one.vercel.app'),
+      h('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: '6px',
+        }
+      },
+        h('div', {
+          style: {
+            width: '8px', height: '8px', borderRadius: '50%',
+            background: '#B85042',
+          }
+        }),
+        h('span', { style: { fontSize: '16px', color: '#BBBBBB' } }, 'クリエーターズプラットフォーム')
+      )
     )
   )
 

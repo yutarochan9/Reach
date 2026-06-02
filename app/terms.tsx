@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native'
+﻿import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
 
-const LAST_UPDATED = '2026年5月24日'
+const LAST_UPDATED = '2026年5月31日'
 const SERVICE_NAME = 'Reach'
 const COMPANY = 'Reach運営事務局'
 const CONTACT_X = '@Reach_X_PR'
@@ -106,7 +106,17 @@ export default function TermsScreen() {
           </Body>
         </Section>
 
-        <Section title="第9条　免責事項">
+        <Section title="第9条　運営によるコンテンツへのアクセス">
+          <Body>
+            当社は、本サービスの適正な運営および利用規約の執行を目的として、以下のとおりコンテンツにアクセスすることがあります。
+          </Body>
+          <Item n={1}>ユーザーが投稿・配信した全てのコンテンツ（配信・メッセージ・プロフィール等）は、規約違反の調査・サービス品質の維持・改善のために当社が参照することがあります。</Item>
+          <Item n={2}>ダイレクトメッセージ（DM）は原則として第三者に開示しませんが、重大な規約違反（ハラスメント・脅迫・違法コンテンツの共有等）に関する調査が必要と当社が判断した場合に限り、当該調査の範囲内で閲覧することがあります。</Item>
+          <Item n={3}>上記によるコンテンツへのアクセスは、最小限の範囲にとどめ、調査目的以外には利用しません。</Item>
+          <Item n={4}>本サービスをご利用いただくことにより、ユーザーは本条に定める取扱いに同意したものとみなします。</Item>
+        </Section>
+
+        <Section title="第10条　免責事項">
           <Body>当社は以下について責任を負いません。</Body>
           <Item n={1}>本サービスの中断・停止・終了によって生じた損害</Item>
           <Item n={2}>ユーザー間のトラブルによって生じた損害</Item>
@@ -115,25 +125,25 @@ export default function TermsScreen() {
           <Body>{'\n'}当社の責任が生じる場合でも、故意・重過失による場合を除き、賠償額はユーザーが直近1ヶ月に支払った利用料金を上限とします。</Body>
         </Section>
 
-        <Section title="第10条　サービスの終了">
+        <Section title="第11条　サービスの終了">
           <Body>
             当社は、30日前までに本サービス内でお知らせのうえ、本サービスを終了することがあります。
           </Body>
         </Section>
 
-        <Section title="第11条　規約の変更">
+        <Section title="第12条　規約の変更">
           <Body>
             当社は本規約を変更することがあります。重要な変更は本サービス内でお知らせし、変更後も継続してご利用いただいた場合は変更後の規約に同意したものとみなします。
           </Body>
         </Section>
 
-        <Section title="第12条　準拠法・管轄裁判所">
+        <Section title="第13条　準拠法・管轄裁判所">
           <Body>
             本規約は日本法に準拠します。本サービスに関する紛争は、当社所在地を管轄する日本の裁判所を第一審の専属的合意管轄裁判所とします。
           </Body>
         </Section>
 
-        <Section title="第13条　お問い合わせ">
+        <Section title="第14条　お問い合わせ">
           <Body>{`本規約に関するお問い合わせは、以下の窓口までご連絡ください。\n\n${COMPANY}`}</Body>
           <TouchableOpacity onPress={() => Linking.openURL(CONTACT_X_URL)}>
             <Text style={styles.contactLink}>X（DM）：{CONTACT_X}</Text>
@@ -147,12 +157,12 @@ export default function TermsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 20, gap: 4, paddingBottom: 48 },
   updated: { fontSize: 12, color: Colors.textLight, marginBottom: 12 },
   section: { marginTop: 20, gap: 6 },

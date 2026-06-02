@@ -1,5 +1,5 @@
 ﻿import { useState, useCallback } from 'react'
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, useWindowDimensions, TextInput, Platform } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Pressable, useWindowDimensions, TextInput, Platform, Alert } from 'react-native'
 import Svg, {
   Polyline, Circle, Rect, G, Line, Path,
   Defs, LinearGradient as SvgLinearGradient, Stop,
@@ -69,7 +69,7 @@ function RateRing({ pct, color, label, gradId }: { pct: number; color: string; l
           cx={cx} cy={cy} r={r}
           fill="none" stroke={`url(#${gradId})`}
           strokeWidth={stroke} strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`}
+          strokeDasharray={`${dash} ${Math.max(circ - dash, 0)}`}
           strokeDashoffset={circ / 4}
         />
         <SvgText x={cx} y={cy + 5} textAnchor="middle" fontSize={11} fontWeight="800" fill={C.text}>{display}</SvgText>
@@ -103,7 +103,7 @@ function MonthlyRing({ used, limit, color }: { used: number; limit: number; colo
           stroke="url(#ringGrad)"
           strokeWidth={stroke}
           strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`}
+          strokeDasharray={`${dash} ${Math.max(circ - dash, 0)}`}
           strokeDashoffset={circ / 4}
         />
         <SvgText x={cx} y={cy - 6} textAnchor="middle" fontSize={22} fontWeight="800" fill={C.text}>{used}</SvgText>
@@ -337,14 +337,28 @@ export default function AnalyticsScreen() {
   const fmtShort = (n: number) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K` : String(n)
   const truncate = (s: string, n = 28) => s.length > n ? s.slice(0, n) + '…' : s
 
-  const handleDeleteBc = async (bc: Broadcast) => {
+  const handleDeleteBc = (bc: Broadcast) => {
     setMenuBc(null)
-    if (bc.group_id) {
-      await supabase.from('broadcasts').delete().eq('group_id', bc.group_id)
-      setBroadcasts(prev => prev.filter(b => b.group_id !== bc.group_id))
+    const doDelete = async () => {
+      if (bc.group_id) {
+        await supabase.from('broadcasts').delete().eq('group_id', bc.group_id)
+        setBroadcasts(prev => prev.filter(b => b.group_id !== bc.group_id))
+      } else {
+        await supabase.from('broadcasts').delete().eq('id', bc.id)
+        setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
+      }
+    }
+    if (Platform.OS === 'web') {
+      if (window.confirm('この配信を削除しますか？\n削除すると元に戻せません。')) doDelete()
     } else {
-      await supabase.from('broadcasts').delete().eq('id', bc.id)
-      setBroadcasts(prev => prev.filter(b => b.id !== bc.id))
+      Alert.alert(
+        '配信を削除',
+        'この配信を削除しますか？\n削除すると元に戻せません。',
+        [
+          { text: 'キャンセル', style: 'cancel' },
+          { text: '削除する', style: 'destructive', onPress: doDelete },
+        ]
+      )
     }
   }
 

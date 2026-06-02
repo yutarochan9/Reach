@@ -20,24 +20,52 @@ module.exports = async (req, res) => {
 
   let name = 'クリエーター'
   let bio = 'Reach でクリエーターをフォローして配信を楽しもう'
-  // サーバーサイドで動的生成した OGP 画像（/api/og-image）を使用
   let image = ogImageUrl(id, type)
+  let pageUrl = `${BASE}/creator/${id}`
 
-  try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(id)}&select=display_name,bio,avatar_url&limit=1`,
-      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
-    )
-    const rows = await r.json()
-    const p = rows?.[0]
-    if (p) {
-      if (p.display_name) name = p.display_name
-      if (p.bio) bio = p.bio
-    }
-  } catch {}
+  if (type === 'broadcast') {
+    // 配信IDからsender_idと本文を取得
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/broadcasts?id=eq.${encodeURIComponent(id)}&select=content,sender_id&limit=1`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      )
+      const rows = await r.json()
+      const b = rows?.[0]
+      if (b) {
+        const senderId = b.sender_id
+        pageUrl = `${BASE}/broadcast-thread/${id}`
+        // クリエーター情報を取得
+        const pr = await fetch(
+          `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(senderId)}&select=display_name,bio&limit=1`,
+          { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+        )
+        const prows = await pr.json()
+        const p = prows?.[0]
+        if (p?.display_name) name = p.display_name
+        // 本文の先頭を description に使用
+        const rawContent = (b.content || '').replace(/\r?\n/g, ' ').trim()
+        bio = rawContent ? rawContent.slice(0, 120) + (rawContent.length > 120 ? '…' : '') : `${name} の配信`
+        image = ogImageUrl(senderId, type)
+      }
+    } catch {}
+  } else {
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(id)}&select=display_name,bio,avatar_url&limit=1`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      )
+      const rows = await r.json()
+      const p = rows?.[0]
+      if (p) {
+        if (p.display_name) name = p.display_name
+        if (p.bio) bio = p.bio
+      }
+    } catch {}
+    pageUrl = type === 'talk' ? `${BASE}/talk/${id}` : `${BASE}/creator/${id}`
+  }
 
-  const pageUrl = type === 'talk' ? `${BASE}/talk/${id}` : `${BASE}/creator/${id}`
-  const title = `${name} | Reach`
+  const title = `${name} の配信 | Reach`
 
   res.setHeader('content-type', 'text/html; charset=utf-8')
   res.setHeader('cache-control', 'no-store')

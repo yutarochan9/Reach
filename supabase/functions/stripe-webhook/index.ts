@@ -37,46 +37,148 @@ serve(async (req) => {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.CheckoutSession
-        const userId = session.subscription_data?.metadata?.supabase_user_id
-        const plan = session.subscription_data?.metadata?.plan
-        if (userId && plan) {
-          await supabase.from('profiles').update({
-            plan,
-            subscription_id: session.subscription as string,
-            subscription_status: 'active',
-            plan_expires_at: null,
-          }).eq('id', userId)
+        const meta = session.subscription_data?.metadata ?? {}
+
+        if (meta.type === 'membership') {
+          // ── メンバーシップ加入 ────────────────────────────────
+          const subscriberId = meta.subscriber_id
+          const creatorId = meta.creator_id
+          const amount = parseInt(meta.amount ?? '0', 10)
+
+          if (subscriberId && creatorId) {
+            // 既存レコードがあれば更新（重複防止）
+            const { data: existing } = await supabase
+              .from('subscriptions')
+              .select('id')
+              .eq('subscriber_id', subscriberId)
+              .eq('creator_id', creatorId)
+              .maybeSingle()
+
+            if (existing) {
+              await supabase.from('subscriptions').update({
+                status: 'active',
+                stripe_subscription_id: session.subscription as string,
+                updated_at: new Date().toISOString(),
+              }).eq('id', existing.id)
+            } else {
+              await supabase.from('subscriptions').insert({
+                subscriber_id: subscriberId,
+                creator_id: creatorId,
+                status: 'active',
+                stripe_subscription_id: session.subscription as string,
+              })
+            }
+
+            // 収益を記録（クリエイター70%・Reach30%）
+            if (amount > 0) {
+              const creatorAmount = Math.floor(amount * 0.7)
+              const reachAmount = amount - creatorAmount
+              await supabase.from('creator_earnings').insert({
+                creator_id: creatorId,
+                subscriber_id: subscriberId,
+                amount,
+                creator_amount: creatorAmount,
+                reach_amount: reachAmount,
+                stripe_subscription_id: session.subscription as string,
+                payout_status: 'pending',
+              })
+            }
+
+            // クリエイターへ通知（新規メンバー加入）
+            await supabase.from('notifications').insert({
+              user_id: creatorId,
+              type: 'membership_joined',
+              actor_id: subscriberId,
+              metadata: { amount },
+            })
+          }
+        } else {
+          // ── プランサブスクリプション ──────────────────────────
+          const userId = meta.supabase_user_id
+          const plan = meta.plan
+          if (userId && plan) {
+            await supabase.from('profiles').update({
+              plan,
+              subscription_id: session.subscription as string,
+              subscription_status: 'active',
+              plan_expires_at: null,
+            }).eq('id', userId)
+          }
         }
         break
       }
 
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription
-        const userId = sub.metadata?.supabase_user_id
-        const priceId = sub.items.data[0]?.price.id
-        const plan = PRICE_TO_PLAN[priceId] ?? 'free'
-        if (userId) {
-          await supabase.from('profiles').update({
-            plan: sub.status === 'active' ? plan : 'free',
-            subscription_status: sub.status,
-            plan_expires_at: ['canceled', 'unpaid'].includes(sub.status)
-              ? new Date(sub.current_period_end * 1000).toISOString()
-              : null,
-          }).eq('id', userId)
+        const meta = sub.metadata ?? {}
+
+        if (meta.type === 'membership') {
+          // メンバーシップのステータス更新
+          const subscriberId = meta.subscriber_id
+          const creatorId = meta.creator_id
+          if (subscriberId && creatorId) {
+            await supabase.from('subscriptions').update({
+              status: sub.status === 'active' ? 'active' : 'canceled',
+              updated_at: new Date().toISOString(),
+            }).eq('subscriber_id', subscriberId).eq('creator_id', creatorId)
+          }
+        } else {
+          // プランのステータス更新
+          const userId = meta.supabase_user_id
+          const priceId = sub.items.data[0]?.price.id
+          const plan = PRICE_TO_PLAN[priceId] ?? 'free'
+          if (userId) {
+            await supabase.from('profiles').update({
+              plan: sub.status === 'active' ? plan : 'free',
+              subscription_status: sub.status,
+              plan_expires_at: ['canceled', 'unpaid'].includes(sub.status)
+                ? new Date(sub.current_period_end * 1000).toISOString()
+                : null,
+            }).eq('id', userId)
+          }
         }
         break
       }
 
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
-        const userId = sub.metadata?.supabase_user_id
-        if (userId) {
+        const meta = sub.metadata ?? {}
+
+        if (meta.type === 'membership') {
+          const subscriberId = meta.subscriber_id
+          const creatorId = meta.creator_id
+          if (subscriberId && creatorId) {
+            await supabase.from('subscriptions').update({
+              status: 'canceled',
+              updated_at: new Date().toISOString(),
+            }).eq('subscriber_id', subscriberId).eq('creator_id', creatorId)
+          }
+        } else {
+          const userId = meta.supabase_user_id
+          if (userId) {
+            await supabase.from('profiles').update({
+              plan: 'free',
+              subscription_id: null,
+              subscription_status: 'canceled',
+              plan_expires_at: null,
+            }).eq('id', userId)
+          }
+        }
+        break
+      }
+
+      // Connect アカウントの onboarding 完了を検知してフラグを立てる
+      case 'account.updated': {
+        const account = event.data.object as Stripe.Account
+        const isOnboarded =
+          account.details_submitted &&
+          account.charges_enabled &&
+          account.payouts_enabled
+
+        if (isOnboarded) {
           await supabase.from('profiles').update({
-            plan: 'free',
-            subscription_id: null,
-            subscription_status: 'canceled',
-            plan_expires_at: null,
-          }).eq('id', userId)
+            stripe_connect_onboarded: true,
+          }).eq('stripe_connect_account_id', account.id)
         }
         break
       }

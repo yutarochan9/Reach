@@ -7,7 +7,7 @@ export const config = {
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://mljnbtgaikilcpjjofsh.supabase.co'
 const SUPABASE_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_Gtl_1E7WDa-H-r7HK5UZNg_I4R8Ta5B'
-const BASE = 'https://reach-pi-one.vercel.app'
+const BASE = 'https://reachapp.jp'
 
 // /api/og-image でサーバーサイド動的生成した画像を使用
 function ogImageUrl(id: string, type: string) {

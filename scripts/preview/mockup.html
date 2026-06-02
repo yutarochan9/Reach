@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Share Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; background: #f0f2f5; padding: 32px; display: flex; gap: 48px; align-items: flex-start; flex-wrap: wrap; }
+
+  h2 { font-size: 13px; color: #666; font-weight: 600; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ---- ① キャプチャされる要素（Reachのメッセージバブル） ---- */
+  .capture-area {
+    background: #F5F5F0;
+    border-radius: 12px;
+    padding: 16px;
+    width: 360px;
+  }
+  .bubble-row { display: flex; gap: 10px; align-items: flex-start; }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: #4A9068; flex-shrink: 0; margin-top: 2px;
+    overflow: hidden; display: flex; align-items: center; justify-content: center;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .blocks { flex: 1; }
+  .sender-name { font-size: 11px; color: #888; font-weight: 600; margin-bottom: 4px; }
+  .bubble {
+    background: white; border-radius: 16px; border-top-left-radius: 4px;
+    padding: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    max-width: 100%;
+  }
+  .bubble + .bubble { margin-top: 4px; }
+  .bubble-text { font-size: 14px; color: #1a1a1a; line-height: 1.5; }
+  .bubble-link { color: #1D9BF0; text-decoration: underline; font-size: 14px; line-height: 1.5; }
+  .footer-row { display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-left: 46px; }
+  .time { font-size: 10px; color: #aaa; }
+  .share-btn {
+    padding: 3px 8px; background: white; border: 1px solid #e0e0e0;
+    border-radius: 12px; font-size: 12px; color: #888; cursor: pointer;
+  }
+
+  /* ---- ② X カードのモックアップ ---- */
+  .x-card-wrap { width: 420px; }
+  .x-post {
+    background: white; border: 1px solid #e1e8ed; border-radius: 16px;
+    padding: 16px; width: 420px;
+  }
+  .x-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .x-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: #B85042; display: flex; align-items: center; justify-content: center;
+  }
+  .x-avatar-r { color: white; font-weight: 700; font-size: 18px; }
+  .x-name { font-weight: 700; font-size: 15px; color: #0f1419; }
+  .x-handle { font-size: 13px; color: #536471; }
+  .x-text { font-size: 15px; color: #0f1419; line-height: 1.5; margin-bottom: 12px; }
+  .x-link-text { color: #1D9BF0; }
+
+  /* OGP カード */
+  .ogp-card {
+    border: 1px solid #e1e8ed; border-radius: 16px; overflow: hidden;
+    cursor: pointer; position: relative;
+  }
+  .ogp-image { width: 100%; display: block; }
+
+  /* スクショ画像（キャプチャエリアを縮小したイメージ） */
+  .screenshot-in-card {
+    width: 100%; height: 220px;
+    background: #F5F5F0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .screenshot-inner { transform: scale(0.85); transform-origin: top center; width: 100%; }
+
+  .ogp-meta { padding: 10px 12px; background: white; border-top: 1px solid #e1e8ed; }
+  .ogp-site { font-size: 11px; color: #536471; margin-bottom: 2px; }
+  .ogp-title { font-size: 14px; font-weight: 600; color: #0f1419; }
+
+  .x-actions { display: flex; justify-content: space-between; margin-top: 14px; color: #536471; font-size: 13px; }
+  .x-action { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 20px; cursor: pointer; }
+  .x-action:hover { background: #f7f9f9; }
+
+  .arrow { font-size: 24px; color: #aaa; align-self: center; }
+
+  .label-box { background: white; border-radius: 8px; padding: 16px 20px; width: 360px; }
+  .label-box h2 { margin-bottom: 8px; }
+  .step { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: #B85042; color: white; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step-text { font-size: 13px; color: #333; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<!-- ステップ説明 -->
+<div>
+  <h2>仕組み</h2>
+  <div class="label-box">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">シェアボタンをタップ → html2canvas でこのバブル領域をキャプチャ</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">スクショを Supabase Storage にアップロード → 公開 URL 取得</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">その URL を og:image に使った Share URL をシェア</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-text">X の bot が og:image を読んで → スクショがリンクカードに表示 ✅</div>
+    </div>
+  </div>
+</div>
+
+<!-- キャプチャされる要素 -->
+<div>
+  <h2>① キャプチャされる領域（メッセージバブル）</h2>
+  <div class="capture-area" id="capture">
+    <div class="bubble-row">
+      <div class="avatar">
+        <svg width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="18" fill="#4A9068"/><text x="18" y="23" text-anchor="middle" fill="white" font-size="16" font-family="sans-serif" font-weight="700">た</text></svg>
+      </div>
+      <div class="blocks">
+        <div class="sender-name">たろう</div>
+        <div class="bubble">
+          <div class="bubble-text">今日の練習めっちゃきつかった😭<br>でも最後まで頑張れた！</div>
+        </div>
+        <div class="bubble">
+          <div class="bubble-link">https://youtu.be/QJO3ROT-A4E?si=ChlKXFdkm2VR8H-o</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer-row">
+      <span class="time">12:20</span>
+      <button class="share-btn">⬆ シェア</button>
+    </div>
+  </div>
+</div>
+
+<div class="arrow">→</div>
+
+<!-- X カードのイメージ -->
+<div class="x-card-wrap">
+  <h2>② X に表示されるイメージ（OGP リンクカード）</h2>
+  <div class="x-post">
+    <div class="x-header">
+      <div class="x-avatar"><span class="x-avatar-r">R</span></div>
+      <div>
+        <div class="x-name">Reach 🔒</div>
+        <div class="x-handle">@Reach_X_PR · 数秒前</div>
+      </div>
+    </div>
+    <div class="x-text">
+      <span class="x-link-text">reach-pi-one.vercel.app/talk/...</span>
+    </div>
+
+    <!-- OGP カード（クリックで Reach に飛ぶ） -->
+    <div class="ogp-card">
+      <!-- スクショがそのままカード画像になる -->
+      <div class="screenshot-in-card">
+        <div class="screenshot-inner">
+          <div class="capture-area" style="transform:scale(0.9);transform-origin:top left;">
+            <div class="bubble-row">
+              <div class="avatar">
+                <svg width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="18" fill="#4A9068"/><text x="18" y="23" text-anchor="middle" fill="white" font-size="16" font-family="sans-serif" font-weight="700">た</text></svg>
+              </div>
+              <div class="blocks">
+                <div class="sender-name">たろう</div>
+                <div class="bubble">
+                  <div class="bubble-text">今日の練習めっちゃきつかった😭<br>でも最後まで頑張れた！</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ogp-meta">
+        <div class="ogp-site">reach-pi-one.vercel.app</div>
+        <div class="ogp-title">たろう | Reach</div>
+      </div>
+    </div>
+
+    <div class="x-actions">
+      <div class="x-action">💬</div>
+      <div class="x-action">🔁</div>
+      <div class="x-action">🤍</div>
+      <div class="x-action">📊</div>
+      <div class="x-action">🔖</div>
+      <div class="x-action">⬆</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

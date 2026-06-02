@@ -54,16 +54,20 @@ export default function FollowRequestsScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const handleApprove = async (req: Request) => {
-    // フォロー承認：follows に追加 + リクエストを approved に更新
+    // フォロー承認：follows に追加（重複があっても無視）+ リクエストを approved に更新
     await Promise.all([
-      supabase.from('follows').insert({ follower_id: req.requester_id, following_id: myId }),
+      supabase.from('follows').upsert(
+        { follower_id: req.requester_id, following_id: myId },
+        { onConflict: 'follower_id,following_id', ignoreDuplicates: true }
+      ),
       supabase.from('follow_requests').update({ status: 'approved' }).eq('id', req.id),
     ])
     setRequests(prev => prev.filter(r => r.id !== req.id))
   }
 
-  const handleReject = async (req: Request) => {
-    await supabase.from('follow_requests').update({ status: 'rejected' }).eq('id', req.id)
+  // 削除：行ごと削除（相手は再度リクエスト可能）
+  const handleDelete = async (req: Request) => {
+    await supabase.from('follow_requests').delete().eq('id', req.id)
     setRequests(prev => prev.filter(r => r.id !== req.id))
   }
 
@@ -104,8 +108,8 @@ export default function FollowRequestsScreen() {
                 <TouchableOpacity style={styles.approveBtn} onPress={() => handleApprove(item)}>
                   <Text style={styles.approveTxt}>承認</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(item)}>
-                  <Text style={styles.rejectTxt}>削除</Text>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)}>
+                  <Text style={styles.deleteTxt}>削除</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -147,10 +151,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 7,
   },
   approveTxt: { fontSize: 13, fontWeight: '700', color: Colors.white },
-  rejectBtn: {
+  deleteBtn: {
     backgroundColor: Colors.white, borderRadius: 8, borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 14, paddingVertical: 7,
   },
-  rejectTxt: { fontSize: 13, fontWeight: '600', color: Colors.textLight },
+  deleteTxt: { fontSize: 13, fontWeight: '600', color: Colors.textLight },
   sep: { height: 1, backgroundColor: Colors.border, marginLeft: 72 },
 })

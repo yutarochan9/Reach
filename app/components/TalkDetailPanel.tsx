@@ -10,14 +10,31 @@ import { Colors } from '../../constants/colors'
 import { sendPushToUsers } from '../../lib/notifications'
 import { useTalkContext } from '../contexts/TalkContext'
 
+const isWeb = Platform.OS === 'web'
+
+// ─── 型定義 ────────────────────────────────────────────────────────
 type Broadcast = {
-  id: string; content: string; image_url: string | null
-  created_at: string; block_order: number; group_id: string | null; public_reactions: boolean
+  id: string
+  content: string
+  image_url: string | null
+  image_link_url: string | null  // 画像タップで開くURL
+  created_at: string
+  block_order: number
+  group_id: string | null
+  public_reactions: boolean
+  is_subscriber_only: boolean    // メンバーシップ限定フラグ
 }
+
 type BroadcastGroup = {
-  anchorId: string; group_id: string | null; blocks: Broadcast[]
-  like_count: number; liked: boolean; read_count: number
-  public_reactions: boolean; comment_count: number
+  anchorId: string
+  group_id: string | null
+  blocks: Broadcast[]
+  like_count: number
+  liked: boolean
+  read_count: number
+  public_reactions: boolean
+  comment_count: number
+  is_subscriber_only: boolean   // グループ全体のフラグ
 }
 
 const DEFAULT_TILE_POS = [
@@ -31,11 +48,14 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const { setSelectedDmId, setSelectedTalkId, triggerDmReload, isDesktop } = useTalkContext()
   const [myId, setMyId] = useState<string | null>(null)
   const [isSelf, setIsSelf] = useState(false)
+  const [isSubscriber, setIsSubscriber] = useState(false)  // メンバーシップ登録状態
   const [loading, setLoading] = useState(true)
   const [senderName, setSenderName] = useState('')
   const [senderAvatar, setSenderAvatar] = useState<string | null>(null)
   const [senderIsOfficial, setSenderIsOfficial] = useState(false)
   const [groups, setGroups] = useState<BroadcastGroup[]>([])
+  // 画像の自然サイズキャッシュ（URL → {w, h}）
+  const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [tileMenu, setTileMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
@@ -51,10 +71,26 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       const self = user.id === senderId
       setIsSelf(self)
 
+      // メンバーシップ登録確認（本人以外のみ）
+      let subscribed = false
+      if (user && !self) {
+        try {
+          const { data: subData } = await supabase
+            .from('subscriptions')
+            .select('id')
+            .eq('subscriber_id', user.id)
+            .eq('creator_id', senderId)
+            .eq('status', 'active')
+            .maybeSingle()
+          subscribed = !!subData
+        } catch {}
+      }
+      setIsSubscriber(subscribed)
+
       const [{ data: profile }, { data: broadcasts }, { data: menu }] = await Promise.all([
         supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', senderId).single(),
         supabase.from('broadcasts')
-          .select('id, content, image_url, created_at, block_order, group_id, public_reactions')
+          .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId).eq('status', 'published')
           .order('created_at', { ascending: true }),
         supabase.from('rich_menus').select('buttons, is_active, panel_bg_image').eq('creator_id', senderId).maybeSingle(),
@@ -65,7 +101,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       setSenderIsOfficial((profile as any)?.is_official ?? false)
       setTileMenu(menu && menu.is_active ? menu : null)
 
-      const bcs = (broadcasts ?? []) as Broadcast[]
+      // メンバーシップ限定配信は本人またはサブスク登録者のみ表示
+      const allBcs = (broadcasts ?? []) as Broadcast[]
+      const bcs = self || subscribed ? allBcs : allBcs.filter(b => !b.is_subscriber_only)
       const bcIds = bcs.map(b => b.id)
 
       const [{ data: reactions }, { data: reads }, { data: commentCounts }] = await Promise.all([
@@ -102,10 +140,15 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         const blocks = groupMap.get(key)!.sort((a, b) => a.block_order - b.block_order)
         const anchor = blocks[0]
         return {
-          anchorId: anchor.id, group_id: anchor.group_id, blocks,
-          like_count: likeMap[anchor.id]?.count ?? 0, liked: likeMap[anchor.id]?.liked ?? false,
-          read_count: readMap[anchor.id] ?? 0, public_reactions: anchor.public_reactions,
+          anchorId: anchor.id,
+          group_id: anchor.group_id,
+          blocks,
+          like_count: likeMap[anchor.id]?.count ?? 0,
+          liked: likeMap[anchor.id]?.liked ?? false,
+          read_count: readMap[anchor.id] ?? 0,
+          public_reactions: anchor.public_reactions,
           comment_count: countMap[anchor.id] ?? 0,
+          is_subscriber_only: anchor.is_subscriber_only ?? false,
         }
       })
       setGroups(result)
@@ -130,42 +173,82 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     load()
   }, [load])
 
+  // groups が更新されたら、含まれる画像URLのサイズを取得
+  useEffect(() => {
+    const urls = groups.flatMap(g =>
+      g.blocks.map(b => b.image_url).filter((u): u is string => !!u)
+    )
+    urls.forEach(url => {
+      setImageSizes(prev => {
+        if (prev[url]) return prev          // 既に取得済みならスキップ
+        Image.getSize(url, (w, h) => {
+          setImageSizes(p => ({ ...p, [url]: { w, h } }))
+        }, () => {})
+        return prev
+      })
+    })
+  }, [groups])
+
+  // URL とパネル内最大幅からアスペクト比を保ったサイズを返す
+  const getImgStyle = (url: string, maxW: number) => {
+    const size = imageSizes[url]
+    if (!size) return { width: maxW, height: Math.round(maxW * 9 / 16) }  // デフォルト16:9
+    const ratio = size.h / size.w
+    const w = Math.min(maxW, size.w)
+    const h = Math.min(Math.round(w * ratio), 360)   // 縦長でも最大360px
+    return { width: w, height: h }
+  }
+
+  // リアルタイム更新
   useEffect(() => {
     if (!myId || !senderId) return
     if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
     const channel = supabase
       .channel(`panel-${senderId}-${myId}-${Date.now()}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'broadcasts', filter: `sender_id=eq.${senderId}` },
-        (payload) => {
-          const bc = payload.new as any
-          if (bc.status !== 'published') return
-          const newBlock: Broadcast = {
-            id: bc.id, content: bc.content, image_url: bc.image_url ?? null,
-            created_at: bc.created_at, block_order: bc.block_order,
-            group_id: bc.group_id ?? null, public_reactions: bc.public_reactions ?? false,
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'broadcasts',
+        filter: `sender_id=eq.${senderId}`,
+      }, (payload) => {
+        const bc = payload.new as any
+        if (bc.status !== 'published') return
+        // メンバーシップ限定は非登録者に届かない
+        if (bc.is_subscriber_only && !isSelf && !isSubscriber) return
+        const newBlock: Broadcast = {
+          id: bc.id, content: bc.content, image_url: bc.image_url ?? null,
+          image_link_url: bc.image_link_url ?? null,
+          created_at: bc.created_at, block_order: bc.block_order,
+          group_id: bc.group_id ?? null, public_reactions: bc.public_reactions ?? false,
+          is_subscriber_only: bc.is_subscriber_only ?? false,
+        }
+        setGroups(prev => {
+          if (bc.group_id) {
+            const existing = prev.find(g => g.group_id === bc.group_id)
+            if (existing) return prev.map(g => g.group_id === bc.group_id
+              ? { ...g, blocks: [...g.blocks, newBlock].sort((a, b) => a.block_order - b.block_order) } : g)
           }
-          setGroups(prev => {
-            if (bc.group_id) {
-              const existing = prev.find(g => g.group_id === bc.group_id)
-              if (existing) return prev.map(g => g.group_id === bc.group_id
-                ? { ...g, blocks: [...g.blocks, newBlock].sort((a, b) => a.block_order - b.block_order) } : g)
-            }
-            return [...prev, { anchorId: bc.id, group_id: bc.group_id ?? null, blocks: [newBlock], like_count: 0, liked: false, read_count: 0, public_reactions: bc.public_reactions ?? false, comment_count: 0 }]
-          })
-          setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
+          return [...prev, {
+            anchorId: bc.id, group_id: bc.group_id ?? null, blocks: [newBlock],
+            like_count: 0, liked: false, read_count: 0,
+            public_reactions: bc.public_reactions ?? false, comment_count: 0,
+            is_subscriber_only: bc.is_subscriber_only ?? false,
+          }]
         })
+        setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
+      })
       .subscribe()
     channelRef.current = channel
-    return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current).catch(() => {}); channelRef.current = null } }
-  }, [myId, senderId])
+    return () => {
+      if (channelRef.current) { supabase.removeChannel(channelRef.current).catch(() => {}); channelRef.current = null }
+    }
+  }, [myId, senderId, isSelf, isSubscriber])
 
   const handleShare = (group: BroadcastGroup) => {
     const textBlock = group.blocks.find(b => b.content.trim() && b.content !== '　')
     const snippet = textBlock ? textBlock.content.slice(0, 60) : ''
-    const profileUrl = `https://reach-pi-one.vercel.app/creator/${senderId}`
+    const profileUrl = `https://reachapp.jp/creator/${senderId}`
     const shareText = `${snippet ? snippet + '\n\n' : ''}${senderName} さんのReachをチェック 👀`
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(profileUrl)}`
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (isWeb && typeof window !== 'undefined') {
       if (navigator.share) {
         navigator.share({ title: `${senderName} on Reach`, text: shareText, url: profileUrl }).catch(() => {})
       } else {
@@ -193,13 +276,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content })
     const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single()
     sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', content.slice(0, 80))
-
-    // 自動応答（SECURITY DEFINER RPCで送信者IDを偽装せず挿入）
     setTimeout(async () => {
       await supabase.rpc('check_and_send_auto_response', {
-        p_creator_id: senderId,
-        p_receiver_id: myId,
-        p_message: content,
+        p_creator_id: senderId, p_receiver_id: myId, p_message: content,
       })
     }, 1200)
   }
@@ -262,7 +341,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
                 } else if (btn.url) {
                   try {
                     const parsed = new URL(btn.url)
-                    if (Platform.OS === 'web' && parsed.origin === window.location.origin) {
+                    if (isWeb && parsed.origin === window.location.origin) {
                       router.push(parsed.pathname as any)
                     } else if (btn.url.startsWith('/')) {
                       router.push(btn.url as any)
@@ -317,6 +396,14 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         </TouchableOpacity>
       </View>
 
+      {/* メンバーシップ登録中バナー */}
+      {!isSelf && isSubscriber && (
+        <View style={styles.subscriberBanner}>
+          <Ionicons name="star" size={11} color={Colors.accent} />
+          <Text style={styles.subscriberBannerText}>メンバーシップ登録中</Text>
+        </View>
+      )}
+
       {/* メッセージ一覧 */}
       <FlatList
         ref={flatListRef}
@@ -347,27 +434,84 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
               )}
               <View style={styles.groupWrap}>
                 <View style={styles.broadcastRow}>
+                  {/* アバター */}
                   <View style={styles.broadcastAvatar}>
                     {senderAvatar
                       ? <Image source={{ uri: senderAvatar }} style={styles.broadcastAvatarImg} />
                       : <Text style={styles.broadcastAvatarText}>{senderName[0]}</Text>
                     }
                   </View>
-                  <View style={{ maxWidth: '80%', flexShrink: 1 }}>
-                    <Text style={styles.senderNameLabel}>{senderName}</Text>
-                    {group.blocks.map((block, idx) => (
-                      <View key={block.id} style={[styles.broadcastBubble, idx > 0 && { marginTop: 4 }]}>
-                        {block.image_url && (
-                          <Image source={{ uri: block.image_url }} style={styles.broadcastImage} resizeMode="cover" />
-                        )}
-                        {block.content.trim() && block.content !== '　' && (
-                          <Text style={styles.broadcastText}>{block.content}</Text>
-                        )}
-                      </View>
-                    ))}
+
+                  {/* バブル群 */}
+                  <View style={styles.blocksWrap}>
+                    {/* 送信者名 + メンバーシップバッジ */}
+                    <View style={styles.senderNameRow}>
+                      <Text style={styles.senderNameLabel}>{senderName}</Text>
+                      {group.is_subscriber_only && (
+                        <View style={styles.subscriberBadge}>
+                          <Ionicons name="lock-closed" size={10} color={Colors.white} />
+                          <Text style={styles.subscriberBadgeText}>メンバーシップ</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {group.blocks.map((block, idx) => {
+                      const hasText = block.content.trim() && block.content !== '　'
+                      const isImageOnly = !!block.image_url && !hasText
+
+                      // 画像リンクを開くハンドラー
+                      const openImgLink = () => {
+                        if (!block.image_link_url) return
+                        if (isWeb && typeof window !== 'undefined') {
+                          window.open(block.image_link_url, '_blank', 'noopener')
+                        } else {
+                          Linking.openURL(block.image_link_url).catch(() => {})
+                        }
+                      }
+
+                      // 画像のみ → 吹き出しなし
+                      if (isImageOnly) {
+                        const imgDims = getImgStyle(block.image_url!, 280)
+                        const imgEl = (
+                          <Image
+                            source={{ uri: block.image_url! }}
+                            style={[styles.broadcastImageOnly, imgDims, idx > 0 && { marginTop: 4 }]}
+                            resizeMode="cover"
+                          />
+                        )
+                        return block.image_link_url ? (
+                          <TouchableOpacity key={block.id} onPress={openImgLink} activeOpacity={0.85}>
+                            {imgEl}
+                          </TouchableOpacity>
+                        ) : (
+                          <View key={block.id}>{imgEl}</View>
+                        )
+                      }
+
+                      // 画像+テキスト または テキストのみ → 吹き出し
+                      const imgDims = block.image_url ? getImgStyle(block.image_url, 280) : null
+                      return (
+                        <View key={block.id} style={[styles.broadcastBubble, idx > 0 && { marginTop: 4 }]}>
+                          {block.image_url && (
+                            block.image_link_url ? (
+                              <TouchableOpacity onPress={openImgLink} activeOpacity={0.85}>
+                                <Image source={{ uri: block.image_url }} style={[styles.broadcastImage, imgDims!]} resizeMode="cover" />
+                              </TouchableOpacity>
+                            ) : (
+                              <Image source={{ uri: block.image_url }} style={[styles.broadcastImage, imgDims!]} resizeMode="cover" />
+                            )
+                          )}
+                          {hasText && (
+                            <Text style={styles.broadcastText}>{block.content}</Text>
+                          )}
+                        </View>
+                      )
+                    })}
                   </View>
                 </View>
-                <View style={[styles.bubbleFooter, { paddingLeft: 44 }]}>
+
+                {/* 時刻・シェア・···ボタン */}
+                <View style={[styles.bubbleFooter, { paddingLeft: 40 }]}>
                   <Text style={styles.bubbleTime}>{formatTime(group.blocks[group.blocks.length - 1].created_at)}</Text>
                   <TouchableOpacity style={styles.shareBtn} onPress={() => handleShare(group)} activeOpacity={0.7}>
                     <Ionicons name="share-outline" size={13} color={Colors.textLight} />
@@ -387,16 +531,20 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         <Pressable style={styles.popupOverlay} onPress={() => setLongPressGroup(null)}>
           <Pressable style={styles.popupBox} onPress={e => e.stopPropagation()}>
             <View style={styles.sheetHandle} />
-            <TouchableOpacity style={styles.popupBtn}
+            <TouchableOpacity
+              style={styles.popupBtn}
               onPress={() => { if (!isSelf && longPressGroup) handleLike(longPressGroup); if (!isSelf) setLongPressGroup(null) }}
-              activeOpacity={isSelf ? 1 : 0.7}>
+              activeOpacity={isSelf ? 1 : 0.7}
+            >
               <View style={[styles.popupIconWrap, longPressGroup?.liked && { backgroundColor: '#FFF0F0' }]}>
                 <Ionicons name={longPressGroup?.liked ? 'heart' : 'heart-outline'} size={22} color={longPressGroup?.liked ? '#E53E3E' : Colors.text} />
               </View>
               <Text style={styles.popupBtnText}>いいね（{longPressGroup?.like_count ?? 0}）</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.popupBtn}
-              onPress={() => { if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any); setLongPressGroup(null) }}>
+            <TouchableOpacity
+              style={styles.popupBtn}
+              onPress={() => { if (longPressGroup) router.push(`/broadcast-thread/${longPressGroup.anchorId}` as any); setLongPressGroup(null) }}
+            >
               <View style={styles.popupIconWrap}>
                 <Ionicons name="chatbubble-outline" size={22} color={Colors.text} />
               </View>
@@ -411,25 +559,26 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
 
       {TilePanel}
 
+      {/* DM入力エリア */}
       <View style={styles.inputArea}>
         <View style={styles.inputRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="DMを送る..."
-              placeholderTextColor={Colors.textLight}
-              value={imText}
-              onChangeText={setImText}
-              multiline
-            />
-            <TouchableOpacity
-              style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
-              onPress={handleSend}
-              disabled={!imText.trim()}
-            >
-              <Ionicons name="send" size={18} color={Colors.white} />
-            </TouchableOpacity>
-          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="DMを送る..."
+            placeholderTextColor={Colors.textLight}
+            value={imText}
+            onChangeText={setImText}
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
+            onPress={handleSend}
+            disabled={!imText.trim()}
+          >
+            <Ionicons name="send" size={18} color={Colors.white} />
+          </TouchableOpacity>
         </View>
+      </View>
     </View>
   )
 }
@@ -451,21 +600,64 @@ const styles = StyleSheet.create({
   headerAvatarImg: { width: 32, height: 32, borderRadius: 16 },
   headerAvatarText: { fontSize: 14, fontWeight: '700', color: Colors.white },
   headerName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+
+  // メンバーシップ登録中バナー
+  subscriberBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: Colors.main, borderBottomWidth: 1, borderBottomColor: Colors.border,
+    paddingHorizontal: 12, paddingVertical: 5,
+  },
+  subscriberBannerText: { fontSize: 11, color: Colors.accent, fontWeight: '700' },
+
   messageList: { padding: 12, gap: 10, paddingBottom: 24 },
   dateDivider: { alignItems: 'center', marginVertical: 6 },
-  dateText: { fontSize: 11, color: Colors.textLight, backgroundColor: 'rgba(0,0,0,0.08)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  dateText: {
+    fontSize: 11, color: Colors.textLight,
+    backgroundColor: 'rgba(0,0,0,0.08)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10,
+  },
   groupWrap: { marginBottom: 4 },
   broadcastRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  broadcastAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' },
+  broadcastAvatar: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.button,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden',
+  },
   broadcastAvatarImg: { width: 32, height: 32, borderRadius: 16 },
   broadcastAvatarText: { fontSize: 13, fontWeight: '700', color: Colors.white },
-  senderNameLabel: { fontSize: 11, color: Colors.textLight, marginBottom: 3, fontWeight: '600' },
+
+  // バブル群のラッパー
+  blocksWrap: { flex: 1, flexShrink: 1 },
+
+  // 送信者名 + メンバーシップバッジ（flexWrapで確実に表示）
+  senderNameRow: {
+    flexDirection: 'row', alignItems: 'center',
+    flexWrap: 'wrap', gap: 5, marginBottom: 3,
+  },
+  senderNameLabel: { fontSize: 11, color: Colors.textLight, fontWeight: '600' },
+  subscriberBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.accent, borderRadius: 4,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  subscriberBadgeText: { fontSize: 9, color: Colors.white, fontWeight: '700' },
+
+  // 吹き出し（テキストあり）
   broadcastBubble: {
     backgroundColor: Colors.white, borderRadius: 14, borderTopLeftRadius: 4,
-    padding: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
+    padding: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1,
+    alignSelf: 'flex-start',   // コンテンツ幅に合わせる
+    maxWidth: '100%',           // 親の幅を超えない
   },
-  broadcastImage: { width: '100%', height: 160, borderRadius: 8, marginBottom: 6 },
+  // 吹き出し内の画像（サイズはgetImgStyleで動的計算）
+  broadcastImage: { borderRadius: 8, marginBottom: 4 },
+  // 画像のみのメッセージ（吹き出しなし）
+  broadcastImageOnly: {
+    borderRadius: 12,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+  },
   broadcastText: { fontSize: 13, color: Colors.text, lineHeight: 20 },
+
   bubbleFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
   bubbleTime: { fontSize: 10, color: Colors.textLight },
   shareBtn: {
@@ -475,13 +667,15 @@ const styles = StyleSheet.create({
   },
   moreBtn: { paddingHorizontal: 6, paddingVertical: 2 },
   moreBtnText: { fontSize: 14, color: Colors.textLight, letterSpacing: 1 },
+
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10 },
   emptyText: { fontSize: 13, color: Colors.textLight },
+
   tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
   tileHandle: { alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   tileHandleBar: { width: 28, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
   tileGridArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
-  tileBtnLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center', color: '#FFF' },
+
   inputArea: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: Colors.border },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', padding: 6, gap: 6 },
   input: {
@@ -492,6 +686,7 @@ const styles = StyleSheet.create({
   },
   sendButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { backgroundColor: '#B0B0B0' },
+
   popupOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   popupBox: { backgroundColor: Colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32 },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: 'center', marginVertical: 10 },

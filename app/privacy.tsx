@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native'
+﻿import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
 
-const LAST_UPDATED = '2026年5月24日'
+const LAST_UPDATED = '2026年5月31日'
 const SERVICE_NAME = 'Reach'
 const COMPANY = 'Reach運営事務局'
 const CONTACT_X = '@Reach_X_PR'
@@ -71,7 +71,16 @@ export default function PrivacyScreen() {
           <Item n={7}>法令に基づく対応</Item>
         </Section>
 
-        <Section title="第3条　Cookieの使用について">
+        <Section title="第3条　運営によるコンテンツへのアクセス">
+          <Body>
+            当社は、本サービスの健全な運営・利用規約の執行のために、以下のとおり情報にアクセスする場合があります。
+          </Body>
+          <Item n={1}>ユーザーが投稿・配信した全てのコンテンツ（配信・プロフィール・メッセージ等）は、規約違反の調査・不正利用の検知・サービス品質の維持を目的として、当社が参照することがあります。</Item>
+          <Item n={2}>ダイレクトメッセージ（DM）は、重大な規約違反（ハラスメント・脅迫・違法コンテンツの共有等）に関する通報を受けた場合で、当社が調査を必要と判断したときに限り、当該調査の範囲内で閲覧することがあります。</Item>
+          <Item n={3}>上記の目的以外にDMの内容を利用することはありません。また、法令に基づく開示要請がある場合を除き、第三者に提供しません。</Item>
+        </Section>
+
+        <Section title="第4条　Cookieの使用について">
           <Body>
             本サービスでは、以下の目的でCookieおよびローカルストレージを使用します。
           </Body>
@@ -83,7 +92,7 @@ export default function PrivacyScreen() {
           </Body>
         </Section>
 
-        <Section title="第4条　第三者提供">
+        <Section title="第5条　第三者提供">
           <Body>
             当社は、以下のいずれかに該当する場合を除き、取得した個人情報を第三者に提供しません。
           </Body>
@@ -96,19 +105,19 @@ export default function PrivacyScreen() {
           <Item n={3}>Vercel, Inc.（ホスティング）</Item>
         </Section>
 
-        <Section title="第5条　データの保存期間">
+        <Section title="第6条　データの保存期間">
           <Body>
             アカウントが有効な期間中、取得した情報を保存します。退会後は、法令で定められた期間を除き、速やかに削除します。
           </Body>
         </Section>
 
-        <Section title="第6条　安全管理措置">
+        <Section title="第7条　安全管理措置">
           <Body>
             当社は、個人情報の漏えい・滅失・毀損を防止するため、適切な安全管理措置を講じます。パスワードは暗号化して保存し、通信にはTLS暗号化を使用します。
           </Body>
         </Section>
 
-        <Section title="第7条　ユーザーの権利">
+        <Section title="第8条　ユーザーの権利">
           <Body>ユーザーは、自身の個人情報について以下の権利を有します。</Body>
           <Item n={1}>開示・訂正・削除の請求</Item>
           <Item n={2}>利用停止の請求</Item>
@@ -116,19 +125,19 @@ export default function PrivacyScreen() {
           <Body>{'\n'}請求はお問い合わせフォームまたは下記連絡先よりお申し出ください。</Body>
         </Section>
 
-        <Section title="第8条　未成年者の利用">
+        <Section title="第9条　未成年者の利用">
           <Body>
             本サービスは13歳以上を対象としています。13歳未満の方は保護者の同意を得たうえでご利用ください。
           </Body>
         </Section>
 
-        <Section title="第9条　ポリシーの変更">
+        <Section title="第10条　ポリシーの変更">
           <Body>
             当社は、法令の変更やサービスの改善に伴い、本ポリシーを変更することがあります。重要な変更がある場合は、本サービス内でお知らせします。変更後も継続してご利用いただいた場合、変更後のポリシーに同意したものとみなします。
           </Body>
         </Section>
 
-        <Section title="第10条　お問い合わせ">
+        <Section title="第11条　お問い合わせ">
           <Body>{`本ポリシーに関するお問い合わせは、以下の窓口までご連絡ください。\n\n${COMPANY}`}</Body>
           <TouchableOpacity onPress={() => Linking.openURL(CONTACT_X_URL)}>
             <Text style={styles.contactLink}>X（DM）：{CONTACT_X}</Text>
@@ -142,12 +151,12 @@ export default function PrivacyScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 20, gap: 4, paddingBottom: 48 },
   updated: { fontSize: 12, color: Colors.textLight, marginBottom: 12 },
   section: { marginTop: 20, gap: 6 },

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+﻿import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, Animated, ScrollView
@@ -74,16 +74,17 @@ export default function AutoResponsesScreen() {
   const [editing, setEditing] = useState<EditState | null>(null)
   const [keywordInput, setKeywordInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [escalationEnabled, setEscalationEnabled] = useState(false)
+  const [savingEscalation, setSavingEscalation] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setUserId(user.id)
-    const { data } = await supabase
-      .from('auto_responses')
-      .select('*')
-      .eq('creator_id', user.id)
-      .order('priority', { ascending: true })
+    const [{ data }, { data: profile }] = await Promise.all([
+      supabase.from('auto_responses').select('*').eq('creator_id', user.id).order('priority', { ascending: true }),
+      supabase.from('profiles').select('escalation_button_enabled').eq('id', user.id).single(),
+    ])
     const normalized = (data ?? []).map((r: any) => ({
       ...r,
       keywords: (r.keywords && r.keywords.length > 0) ? r.keywords : (r.keyword ? [r.keyword] : []),
@@ -93,8 +94,16 @@ export default function AutoResponsesScreen() {
       time_to: r.time_to ? r.time_to.slice(0, 5) : null,
     }))
     setRules(normalized)
+    setEscalationEnabled(profile?.escalation_button_enabled ?? false)
     setLoading(false)
   }, [])
+
+  const handleEscalationToggle = async (val: boolean) => {
+    setSavingEscalation(true)
+    setEscalationEnabled(val)
+    await supabase.from('profiles').update({ escalation_button_enabled: val }).eq('id', userId!)
+    setSavingEscalation(false)
+  }
 
   useFocusEffect(useCallback(() => { load() }, [load]))
 
@@ -226,6 +235,23 @@ export default function AutoResponsesScreen() {
         </Text>
       </View>
 
+      {/* 担当者返信要求ボタンの表示設定 */}
+      <View style={styles.escalationSection}>
+        <View style={styles.escalationRow}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.escalationLabel}>担当者返信要求ボタンを表示</Text>
+            <Text style={styles.escalationDesc}>
+              ONにすると、DMの相手が「担当者への対応を依頼する」ボタンを使えるようになります
+            </Text>
+          </View>
+          {savingEscalation ? (
+            <ActivityIndicator size="small" color={Colors.accent} />
+          ) : (
+            <ToggleSwitch value={escalationEnabled} onChange={handleEscalationToggle} />
+          )}
+        </View>
+      </View>
+
       {rules.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="chatbubbles-outline" size={48} color={Colors.border} />
@@ -312,10 +338,12 @@ export default function AutoResponsesScreen() {
               <TouchableOpacity
                 onPress={handleSave}
                 disabled={!editing?.keywords.length || !editing?.response_text?.trim() || saving}
+                style={[styles.saveBtn, (!editing?.keywords.length || !editing?.response_text?.trim() || saving) && { opacity: 0.4 }]}
               >
-                <Text style={[styles.modalSave, (!editing?.keywords.length || !editing?.response_text?.trim() || saving) && { opacity: 0.4 }]}>
-                  {saving ? '保存中' : '保存'}
-                </Text>
+                {saving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="checkmark" size={20} color="#fff" />
+                }
               </TouchableOpacity>
             </View>
 
@@ -449,12 +477,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
   infoBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
@@ -502,13 +530,16 @@ const styles = StyleSheet.create({
   emptyBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   modalCancel: { fontSize: 16, color: Colors.textLight },
   modalTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
-  modalSave: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
+  saveBtn: {
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
+  },
   modalBody: { padding: 16, gap: 10, paddingBottom: 40 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: Colors.textLight, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8 },
   fieldHint: { fontSize: 11, color: Colors.textLight },
@@ -542,4 +573,12 @@ const styles = StyleSheet.create({
     padding: 12, fontSize: 16, color: Colors.text, backgroundColor: Colors.white, textAlign: 'center',
   },
   timeSep: { fontSize: 16, color: Colors.textLight, marginTop: 18 },
+  escalationSection: {
+    marginHorizontal: 16, marginBottom: 8,
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border, padding: 14,
+  },
+  escalationRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  escalationLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  escalationDesc: { fontSize: 12, color: Colors.textLight, lineHeight: 17, marginTop: 2 },
 })

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+﻿import { useState, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert,
@@ -37,6 +37,8 @@ export default function BroadcastThreadScreen() {
   const [myAvatar, setMyAvatar] = useState<string | null>(null)
   const [isSelf, setIsSelf] = useState(false)
   const [broadcastSenderId, setBroadcastSenderId] = useState<string | null>(null)
+  // 配信者（自分）のメンバーシップ会員のIDセット（isSelfのときのみ取得）
+  const [subscriberIds, setSubscriberIds] = useState<Set<string>>(new Set())
   const [creatorAvatar, setCreatorAvatar] = useState<string | null>(null)
   const [creatorName, setCreatorName] = useState('')
   const [blocks, setBlocks] = useState<BroadcastBlock[]>([])
@@ -135,6 +137,18 @@ export default function BroadcastThreadScreen() {
       }
     }
     setComments(topLevel)
+
+    // 配信者本人が見ているとき、コメントした会員のIDを取得
+    if (self && allMsgs?.length) {
+      const commenterIds = [...new Set(allMsgs.map((m: any) => m.sender_id))]
+      const { data: subs } = await supabase
+        .from('subscriptions').select('subscriber_id')
+        .eq('creator_id', anchor.sender_id)
+        .in('subscriber_id', commenterIds)
+        .eq('status', 'active')
+      setSubscriberIds(new Set((subs ?? []).map((s: any) => s.subscriber_id)))
+    }
+
     setLoading(false)
   }, [anchorId])
 
@@ -314,10 +328,25 @@ export default function BroadcastThreadScreen() {
           </View>
           <View style={styles.commentBody}>
             <View style={styles.commentMeta}>
-              <Text style={[styles.commentName, isCreator && styles.commentNameCreator]}>
-                {comment.sender_name}
-                {isCreator && <Text style={styles.creatorBadge}> 配信者</Text>}
-              </Text>
+              <View style={styles.commentNameRow}>
+                <Text style={[styles.commentName, isCreator && styles.commentNameCreator]}>
+                  {comment.sender_name}
+                </Text>
+                {/* 配信者バッジ */}
+                {isCreator && (
+                  <View style={styles.creatorBadgeChip}>
+                    <Ionicons name="radio-outline" size={9} color={Colors.accent} />
+                    <Text style={styles.creatorBadgeChipText}>配信者</Text>
+                  </View>
+                )}
+                {/* 配信者本人が見たときのみ、会員バッジを表示 */}
+                {isSelf && !comment.is_mine && subscriberIds.has(comment.sender_id) && (
+                  <View style={styles.memberBadge}>
+                    <Ionicons name="star" size={9} color="#fff" />
+                    <Text style={styles.memberBadgeText}>会員</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.commentTime}>{formatTime(comment.created_at)}</Text>
             </View>
             <Text style={styles.commentText}>{comment.content}</Text>
@@ -484,12 +513,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
 
   listContent: { paddingBottom: 32 },
 
@@ -530,9 +559,20 @@ const styles = StyleSheet.create({
   commentAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
   commentBody: { flex: 1, gap: 4 },
   commentMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  commentNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   commentName: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  memberBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: Colors.accent, borderRadius: 4,
+    paddingHorizontal: 5, paddingVertical: 2,
+  },
+  memberBadgeText: { fontSize: 9, fontWeight: '700', color: '#fff' },
   commentNameCreator: { color: Colors.accent },
-  creatorBadge: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
+  creatorBadge: { fontSize: 11, color: Colors.accent, fontWeight: '600' },  // 旧スタイル（未使用）
+  creatorBadgeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+  },
+  creatorBadgeChipText: { fontSize: 9, fontWeight: '800', color: Colors.accent },
   commentTime: { fontSize: 11, color: Colors.textLight },
   commentText: { fontSize: 14, color: Colors.text, lineHeight: 20 },
 

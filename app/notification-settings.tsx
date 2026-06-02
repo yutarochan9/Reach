@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
 import ToggleSwitch from './components/ToggleSwitch'
 import { router, useFocusEffect } from 'expo-router'
@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
+    paddingTop: 36,
     paddingHorizontal: 16,
     paddingBottom: 14,
     flexDirection: 'row',
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   content: { padding: 16, gap: 8 },
   sectionLabel: {
     fontSize: 11, fontWeight: '700', color: Colors.textLight,

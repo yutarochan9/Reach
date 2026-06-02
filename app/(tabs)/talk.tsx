@@ -36,11 +36,22 @@ type DmItem = {
   is_official: boolean
 }
 
+// 担当者対応依頼（クリエーター宛の未対応依頼）
+type EscalationRequest = {
+  id: string
+  requesterId: string
+  requesterName: string
+  requesterAvatar: string | null
+  created_at: string
+}
+
 type FlatRow =
   | { type: 'my'; myId: string; name: string; avatar: string | null; last_content: string; created_at: string; is_official: boolean; public_reactions: boolean; like_count: number; comment_count: number }
   | { type: 'section-header'; sectionId: 'following' | 'dm'; label: string; open: boolean }
   | { type: 'following-item'; data: FollowingItem }
   | { type: 'dm-item'; data: DmItem }
+  | { type: 'escalation-header'; count: number }
+  | { type: 'escalation-item'; data: EscalationRequest }
 
 function SwipeableDmRow({
   data, isPinned, isMuted, onPress, onPin, onMute, onDelete, formatTime, selected,
@@ -264,6 +275,7 @@ export default function TalkScreen() {
   const [dmItems, setDmItems] = useState<DmItem[]>([])
   const [followingOpen, setFollowingOpen] = useState(true)
   const [dmOpen, setDmOpen] = useState(true)
+  const [escalationRequests, setEscalationRequests] = useState<EscalationRequest[]>([])
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   const [mutedIds, setMutedIds] = useState<Set<string>>(new Set())
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
@@ -304,6 +316,7 @@ export default function TalkScreen() {
       { data: followingData },
       { data: myProfile },
       { data: myBroadcasts },
+      { data: escData },
     ] = await Promise.all([
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('profiles').select('display_name, avatar_url, is_official').eq('id', user.id).single(),
@@ -311,6 +324,11 @@ export default function TalkScreen() {
         .select('id, content, created_at, public_reactions')
         .eq('sender_id', user.id).eq('status', 'published')
         .order('created_at', { ascending: false }).limit(1),
+      supabase.from('dm_escalations')
+        .select('id, requester_id, created_at')
+        .eq('creator_id', user.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false }),
     ])
 
     const followingIds = (followingData ?? []).map((f: any) => f.following_id)
@@ -338,6 +356,24 @@ export default function TalkScreen() {
       like_count: myLikeCount,
       comment_count: myCommentCount,
     })
+
+    // 担当者対応依頼（escalation_button_enabled = true のクリエーター宛）
+    if ((escData ?? []).length > 0) {
+      const reqIds = (escData ?? []).map((e: any) => e.requester_id)
+      const { data: reqProfs } = await supabase
+        .from('profiles').select('id, display_name, avatar_url').in('id', reqIds)
+      const reqProfMap: Record<string, any> = {}
+      for (const p of (reqProfs ?? [])) reqProfMap[p.id] = p
+      setEscalationRequests((escData ?? []).map((e: any) => ({
+        id: e.id,
+        requesterId: e.requester_id,
+        requesterName: reqProfMap[e.requester_id]?.display_name ?? '?',
+        requesterAvatar: reqProfMap[e.requester_id]?.avatar_url ?? null,
+        created_at: e.created_at,
+      })))
+    } else {
+      setEscalationRequests([])
+    }
 
     // フォロー中セクション
     if (followingIds.length > 0) {
@@ -569,6 +605,11 @@ export default function TalkScreen() {
     }
   }
 
+  const handleResolveEscalation = async (id: string) => {
+    await supabase.from('dm_escalations').update({ status: 'resolved' }).eq('id', id)
+    setEscalationRequests(prev => prev.filter(e => e.id !== id))
+  }
+
   const togglePin = (id: string) => setPinnedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const toggleMute = (id: string) => setMutedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   const hideFollowing = (id: string) => setHiddenIds(prev => { const s = new Set(prev); s.add(id); return s })
@@ -596,6 +637,12 @@ export default function TalkScreen() {
 
   if (myId && myItem) {
     flatData.push({ type: 'my', myId, ...myItem })
+  }
+
+  // 担当者依頼セクション（pending があるときのみ表示）
+  if (escalationRequests.length > 0) {
+    flatData.push({ type: 'escalation-header', count: escalationRequests.length })
+    escalationRequests.forEach(e => flatData.push({ type: 'escalation-item', data: e }))
   }
 
   // ピン止めを先頭、非表示を除外してソート
@@ -641,6 +688,8 @@ export default function TalkScreen() {
           if (item.type === 'section-header') return `header-${item.sectionId}`
           if (item.type === 'following-item') return `following-${item.data.id}`
           if (item.type === 'dm-item') return `dm-${item.data.otherId}`
+          if (item.type === 'escalation-header') return 'escalation-header'
+          if (item.type === 'escalation-item') return `escalation-${item.data.id}`
           return 'unknown'
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
@@ -666,6 +715,56 @@ export default function TalkScreen() {
                     <Text style={styles.talkTime}>{formatTime(item.created_at)}</Text>
                   </View>
                   <Text style={styles.lastMessage} numberOfLines={1}>{item.last_content}</Text>
+                </View>
+              </TouchableOpacity>
+            )
+          }
+
+          if (item.type === 'escalation-header') {
+            return (
+              <View style={escStyles.header}>
+                <View style={escStyles.iconWrap}>
+                  <Ionicons name="alert-circle" size={14} color="#fff" />
+                </View>
+                <Text style={escStyles.headerText}>担当者対応の依頼</Text>
+                <View style={escStyles.countBadge}>
+                  <Text style={escStyles.countBadgeText}>{item.count}</Text>
+                </View>
+              </View>
+            )
+          }
+
+          if (item.type === 'escalation-item') {
+            const e = item.data
+            return (
+              <TouchableOpacity
+                style={escStyles.item}
+                activeOpacity={0.85}
+                onPress={() => {
+                  if (isDesktop) { setSelectedTalkId(null); setSelectedDmId(e.requesterId) }
+                  else { router.push({ pathname: '/im/[userId]' as any, params: { userId: e.requesterId } }) }
+                }}
+              >
+                <View style={[styles.avatar, escStyles.itemAvatar]}>
+                  {e.requesterAvatar
+                    ? <Image source={{ uri: e.requesterAvatar }} style={styles.avatarImage} />
+                    : <Text style={styles.avatarText}>{e.requesterName[0]}</Text>
+                  }
+                </View>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={escStyles.itemName}>{e.requesterName}</Text>
+                  <Text style={escStyles.itemSub}>担当者への対応を依頼しています</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                  <Text style={escStyles.itemTime}>{formatTime(e.created_at)}</Text>
+                  <TouchableOpacity
+                    style={escStyles.resolveBtn}
+                    onPress={() => handleResolveEscalation(e.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="checkmark" size={11} color="#F97316" />
+                    <Text style={escStyles.resolveBtnText}>対応済み</Text>
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             )
@@ -861,4 +960,41 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: Colors.white, fontSize: 11, fontWeight: '700' },
   separator: { height: 1, backgroundColor: Colors.border, marginLeft: 80 },
+})
+
+// 担当者依頼セクション用スタイル（薄くて落ち着いたアンバー系）
+const escStyles = StyleSheet.create({
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#FFF8F2',
+    borderBottomWidth: 1, borderBottomColor: '#F0C898',
+    borderTopWidth: 1, borderTopColor: '#F0C898',
+  },
+  iconWrap: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#D4875A', alignItems: 'center', justifyContent: 'center',
+  },
+  headerText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#7A3010' },
+  countBadge: {
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#D4875A', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6,
+  },
+  countBadgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  item: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: '#FFFBF7',
+    borderBottomWidth: 1, borderBottomColor: '#F0C898',
+  },
+  itemAvatar: { backgroundColor: '#D4875A' },
+  itemName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  itemSub: { fontSize: 12, color: '#9B4A15' },
+  itemTime: { fontSize: 11, color: Colors.textLight },
+  resolveBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 8, borderWidth: 1, borderColor: '#D4875A',
+  },
+  resolveBtnText: { fontSize: 11, fontWeight: '600', color: '#7A3010' },
 })

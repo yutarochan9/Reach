@@ -1,8 +1,7 @@
 ﻿import { useState, useCallback, useEffect } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import * as WebBrowser from 'expo-web-browser'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
 import { BETA_MODE } from '../constants/config'
@@ -64,6 +63,7 @@ export default function PlanScreen() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<Plan | null>(null)
+  const params = useLocalSearchParams<{ payment?: string }>()
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -79,6 +79,19 @@ export default function PlanScreen() {
   }, [])
 
   useFocusEffect(useCallback(() => { load() }, [load]))
+
+  // Stripe決済完了後のリダイレクト処理
+  useEffect(() => {
+    if (params.payment === 'success') {
+      // Webhook処理を少し待ってからリロード
+      setTimeout(() => load(), 1500)
+      if (Platform.OS === 'web') {
+        window.alert('🎉 アップグレード完了！プランが有効になりました。')
+      } else {
+        Alert.alert('🎉 アップグレード完了', 'プランが有効になりました！')
+      }
+    }
+  }, [params.payment])
 
   // iOS: IAP 接続の初期化・終了
   useEffect(() => {
@@ -109,12 +122,9 @@ export default function PlanScreen() {
         if (!session) { Alert.alert('エラー', 'ログインが必要です'); return }
         const res = await supabase.functions.invoke('stripe-checkout', { body: { plan } })
         if (res.error) throw new Error(res.error.message)
-        const result = await WebBrowser.openAuthSessionAsync(res.data.url, 'reach://')
-        if (result.type === 'success') {
-          await new Promise(r => setTimeout(r, 1500))
-          await load()
-          Alert.alert('🎉 アップグレード完了', `${plan === 'standard' ? 'スタンダード' : 'プロ'}プランが有効になりました！`)
-        }
+        // WebではStripe Checkoutページへそのままリダイレクトさせるのが確実
+        window.location.href = res.data.url
+        return // リダイレクト後は処理不要
       }
     } catch (e: any) {
       Alert.alert('エラー', e.message ?? '決済処理に失敗しました')
@@ -130,11 +140,11 @@ export default function PlanScreen() {
         // iOS: App Store のサブスクリプション管理画面を開く
         // TODO: Linking.openURL('https://apps.apple.com/account/subscriptions')
       } else {
-        // Web: Stripe カスタマーポータル
+        // Web: Stripe カスタマーポータルへリダイレクト
         const res = await supabase.functions.invoke('stripe-checkout', { body: { plan: currentPlan } })
         if (res.error) throw new Error(res.error.message)
-        await WebBrowser.openAuthSessionAsync(res.data.url, 'reach://')
-        await load()
+        window.location.href = res.data.url
+        return
       }
     } catch (e: any) {
       Alert.alert('エラー', e.message)

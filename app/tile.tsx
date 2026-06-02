@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+﻿import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView,
@@ -304,7 +304,7 @@ export default function RichMenuScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>タイル</Text>
@@ -680,12 +680,12 @@ export default function RichMenuScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 40 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   saveButton: { width: 40, alignItems: 'flex-end' },
   saveText: { fontSize: 16, color: Colors.accent, fontWeight: '700' },
   content: { paddingTop: 16, paddingBottom: 40, gap: 12 },
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
   previewTileArea: { aspectRatio: 27 / 18, overflow: 'hidden' },
   modal: { flex: 1, backgroundColor: Colors.background },
   modalHeader: {
-    backgroundColor: Colors.header, paddingTop: 56, paddingHorizontal: 16, paddingBottom: 14,
+    backgroundColor: Colors.header, paddingTop: 36, paddingHorizontal: 16, paddingBottom: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },

@@ -9,6 +9,49 @@ import { supabase } from '../../lib/supabase'
 import { authFlags } from '../../lib/authState'
 import { Colors } from '../../constants/colors'
 
+// 同意文中のリンク付きテキストコンポーネント
+function ConsentText() {
+  return (
+    <Text style={consentStyles.text}>
+      {'「認証コードを送る」を押すことで、'}
+      <Text
+        style={consentStyles.link}
+        onPress={() => router.push('/terms' as any)}
+      >
+        {'利用規約'}
+      </Text>
+      {'・'}
+      <Text
+        style={consentStyles.link}
+        onPress={() => router.push('/privacy' as any)}
+      >
+        {'プライバシーポリシー'}
+      </Text>
+      {'・'}
+      <Text
+        style={consentStyles.link}
+        onPress={() => router.push('/tokutei' as any)}
+      >
+        {'特定商取引法に基づく表記'}
+      </Text>
+      {'に同意したものとみなされます。'}
+    </Text>
+  )
+}
+
+const consentStyles = StyleSheet.create({
+  text: {
+    fontSize: 11,
+    color: Colors.textLight,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  link: {
+    color: Colors.accent,
+    textDecorationLine: 'underline',
+  },
+})
+
 export default function SignupScreen() {
   const [step, setStep] = useState<'form' | 'otp' | 'profile'>('form')
   const [displayName, setDisplayName] = useState('')
@@ -201,6 +244,8 @@ export default function SignupScreen() {
               >
                 <Text style={styles.buttonText}>{loading ? '処理中...' : '認証コードを送る'}</Text>
               </TouchableOpacity>
+
+              <ConsentText />
 
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />

@@ -1,11 +1,10 @@
-import { useState, useCallback, useRef } from 'react'
+﻿import { useState, useCallback, useRef } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image, TextInput } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
-type Announcement = { id: string; title: string; body: string }
 
 type FollowedCreator = {
   id: string
@@ -40,8 +39,6 @@ export default function HomeScreen() {
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [followingOpen, setFollowingOpen] = useState(true)
   const [followersOpen, setFollowersOpen] = useState(true)
-  const [announcements, setAnnouncements] = useState<Announcement[]>([])
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<TextInput>(null)
@@ -77,10 +74,6 @@ export default function HomeScreen() {
     setCreators((followingProfiles.data ?? []) as FollowedCreator[])
     setFollowers((followerProfiles.data ?? []) as FollowerProfile[])
 
-    const { data: annData } = await supabase
-      .from('announcements').select('id, title, body')
-      .order('created_at', { ascending: false }).limit(3)
-    setAnnouncements((annData ?? []) as Announcement[])
 
     setLoading(false)
   }, [])
@@ -131,7 +124,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => router.push('/notifications' as any)}>
-              <Ionicons name="notifications-outline" size={22} color={Colors.accent} />
+              <Ionicons name="notifications-outline" size={20} color={Colors.accent} />
               {unreadNotifs > 0 && (
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
@@ -144,7 +137,7 @@ export default function HomeScreen() {
               if (!next) setSearchQuery('')
               else setTimeout(() => searchInputRef.current?.focus(), 50)
             }}>
-              <Ionicons name={showSearch ? 'close' : 'search-outline'} size={22} color={Colors.accent} />
+              <Ionicons name={showSearch ? 'close' : 'search-outline'} size={20} color={Colors.accent} />
             </TouchableOpacity>
           </View>
         </View>
@@ -166,18 +159,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {announcements.filter(a => !dismissedIds.has(a.id)).map(a => (
-        <View key={a.id} style={styles.annBanner}>
-          <Ionicons name="megaphone-outline" size={16} color="#92400E" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.annBannerTitle}>{a.title}</Text>
-            <Text style={styles.annBannerBody} numberOfLines={2}>{a.body}</Text>
-          </View>
-          <TouchableOpacity onPress={() => setDismissedIds(prev => new Set([...prev, a.id]))}>
-            <Ionicons name="close" size={18} color="#92400E" />
-          </TouchableOpacity>
-        </View>
-      ))}
 
       <FlatList
         data={flatData}
@@ -275,15 +256,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: Colors.header,
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingTop: 18,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: Colors.accent, letterSpacing: 1 },
-  headerActions: { flexDirection: 'row', gap: 4 },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent, letterSpacing: 1 },
+  headerActions: { flexDirection: 'row', gap: 4, marginRight: 14 },
   headerIconBtn: { padding: 6, position: 'relative' },
   notifBadge: {
     position: 'absolute', top: 2, right: 2,
@@ -301,11 +282,11 @@ const styles = StyleSheet.create({
   annBannerBody: { fontSize: 12, color: '#92400E', lineHeight: 17, marginTop: 2 },
   headerProfile: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerAvatar: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
-  headerAvatarText: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  headerAvatarImg: { width: 48, height: 48, borderRadius: 24 },
+  headerAvatarText: { fontSize: 20, fontWeight: '700', color: Colors.white },
   list: { paddingBottom: 32 },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

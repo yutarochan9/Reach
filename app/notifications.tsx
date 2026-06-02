@@ -8,14 +8,15 @@ import { Colors } from '../constants/colors'
 
 type NotifItem = {
   id: string
-  type: 'like' | 'follow'
+  type: 'like' | 'follow' | 'membership_joined' | 'membership_canceled' | 'payout_completed' | 'announcement'
   read: boolean
   created_at: string
-  actor_id: string
+  actor_id: string | null
   actor_name: string
   actor_avatar: string | null
   broadcast_id: string | null
   broadcast_preview: string | null
+  metadata: { amount?: number; payout_month?: string; title?: string; body?: string } | null
 }
 
 export default function NotificationsScreen() {
@@ -29,7 +30,7 @@ export default function NotificationsScreen() {
 
     const { data: notifs } = await supabase
       .from('notifications')
-      .select('id, type, read, created_at, actor_id, broadcast_id')
+      .select('id, type, read, created_at, actor_id, broadcast_id, metadata')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(100)
@@ -63,11 +64,12 @@ export default function NotificationsScreen() {
       type: n.type,
       read: n.read,
       created_at: n.created_at,
-      actor_id: n.actor_id,
-      actor_name: actorMap[n.actor_id]?.display_name ?? '?',
-      actor_avatar: actorMap[n.actor_id]?.avatar_url ?? null,
+      actor_id: n.actor_id ?? null,
+      actor_name: n.actor_id ? (actorMap[n.actor_id]?.display_name ?? '不明なユーザー') : 'Reach',
+      actor_avatar: n.actor_id ? (actorMap[n.actor_id]?.avatar_url ?? null) : null,
       broadcast_id: n.broadcast_id ?? null,
       broadcast_preview: n.broadcast_id ? (broadcastMap[n.broadcast_id] ?? null) : null,
+      metadata: n.metadata ?? null,
     }))
 
     setItems(list)
@@ -130,42 +132,88 @@ export default function NotificationsScreen() {
             <Text style={styles.emptyText}>通知はありません</Text>
           </View>
         )}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.notifItem, !item.read && styles.notifUnread]}
-            onPress={() => {
-              if (item.type === 'follow') router.push(`/creator/${item.actor_id}` as any)
-              else if (item.broadcast_id) router.push(`/talk/${item.actor_id}` as any)
-            }}
-            activeOpacity={0.85}
-          >
-            <TouchableOpacity onPress={() => router.push(`/creator/${item.actor_id}` as any)}>
-              {item.actor_avatar ? (
-                <Image source={{ uri: item.actor_avatar }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarFallback}>
-                  <Text style={styles.avatarText}>{item.actor_name[0]}</Text>
+        renderItem={({ item }) => {
+          // 通知テキストとアイコンを type ごとに決定
+          const isSystem = item.type === 'payout_completed' || item.type === 'announcement'
+          const notifText = (() => {
+            switch (item.type) {
+              case 'like':               return ` さんがいいねしました`
+              case 'follow':             return ` さんがフォローしました`
+              case 'membership_joined':  return ` さんがメンバーシップに加入しました`
+              case 'membership_canceled':return ` さんがメンバーシップを解約しました`
+              case 'payout_completed':
+                return item.metadata?.amount
+                  ? `¥${item.metadata.amount.toLocaleString()} が口座へ振り込まれます（${item.metadata.payout_month ?? ''}）`
+                  : '収益の振込処理が完了しました'
+              case 'announcement':
+                return item.metadata?.body ?? ''
+              default: return ''
+            }
+          })()
+          const icon = (() => {
+            switch (item.type) {
+              case 'like':               return <Ionicons name="heart" size={18} color="#E53E3E" />
+              case 'follow':             return <Ionicons name="person-add" size={18} color={Colors.accent} />
+              case 'membership_joined':  return <Ionicons name="star" size={18} color="#F59E0B" />
+              case 'membership_canceled':return <Ionicons name="star-outline" size={18} color={Colors.textLight} />
+              case 'payout_completed':   return <Ionicons name="cash-outline" size={18} color="#16a34a" />
+              case 'announcement':       return <Ionicons name="megaphone" size={18} color={Colors.accent} />
+              default: return null
+            }
+          })()
+
+          return (
+            <TouchableOpacity
+              style={[styles.notifItem, !item.read && styles.notifUnread]}
+              onPress={() => {
+                if (item.type === 'follow' && item.actor_id) router.push(`/creator/${item.actor_id}` as any)
+                else if (item.broadcast_id) router.push(`/talk/${item.actor_id}` as any)
+                else if ((item.type === 'membership_joined' || item.type === 'membership_canceled') && item.actor_id)
+                  router.push(`/creator/${item.actor_id}` as any)
+                else if (item.type === 'payout_completed') router.push('/earnings' as any)
+                else if (item.type === 'announcement') router.push('/news' as any)
+              }}
+              activeOpacity={0.85}
+            >
+              {/* アバター（システム通知は種別アイコン） */}
+              {isSystem ? (
+                <View style={[styles.avatarFallback, {
+                  backgroundColor: item.type === 'announcement' ? `${Colors.accent}15` : '#F0FDF4',
+                }]}>
+                  {item.type === 'announcement'
+                    ? <Ionicons name="megaphone" size={22} color={Colors.accent} />
+                    : <Ionicons name="cash-outline" size={22} color="#16a34a" />
+                  }
                 </View>
+              ) : (
+                <TouchableOpacity onPress={() => item.actor_id && router.push(`/creator/${item.actor_id}` as any)}>
+                  {item.actor_avatar ? (
+                    <Image source={{ uri: item.actor_avatar }} style={styles.avatar} />
+                  ) : (
+                    <View style={styles.avatarFallback}>
+                      <Text style={styles.avatarText}>{item.actor_name[0]}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               )}
+
+              <View style={styles.notifContent}>
+                {item.type === 'announcement' && item.metadata?.title && (
+                  <Text style={styles.actorName}>{item.metadata.title}</Text>
+                )}
+                <Text style={styles.notifText}>
+                  {!isSystem && <Text style={styles.actorName}>{item.actor_name}</Text>}
+                  {notifText}
+                </Text>
+                {item.broadcast_preview && item.type === 'like' && (
+                  <Text style={styles.preview} numberOfLines={1}>{item.broadcast_preview}</Text>
+                )}
+                <Text style={styles.time}>{formatTime(item.created_at)}</Text>
+              </View>
+              {icon}
             </TouchableOpacity>
-            <View style={styles.notifContent}>
-              <Text style={styles.notifText}>
-                <Text style={styles.actorName}>{item.actor_name}</Text>
-                {item.type === 'like' ? ' さんがいいねしました' : ' さんがフォローしました'}
-              </Text>
-              {item.broadcast_preview && item.type === 'like' && (
-                <Text style={styles.preview} numberOfLines={1}>{item.broadcast_preview}</Text>
-              )}
-              <Text style={styles.time}>{formatTime(item.created_at)}</Text>
-            </View>
-            {item.type === 'like' && (
-              <Ionicons name="heart" size={18} color="#E53E3E" />
-            )}
-            {item.type === 'follow' && (
-              <Ionicons name="person-add" size={18} color={Colors.accent} />
-            )}
-          </TouchableOpacity>
-        )}
+          )
+        }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
     </View>
@@ -186,7 +234,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   backButton: { padding: 4, width: 32 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: Colors.text },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
   notifItem: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -46,6 +46,8 @@ export default function CreatorScreen() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [isSubscriber, setIsSubscriber] = useState(false)
+  const [pinnedBroadcast, setPinnedBroadcast] = useState<{ id: string; content: string; image_url: string | null; created_at: string } | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [reportModalVisible, setReportModalVisible] = useState(false)
   const [reportReason, setReportReason] = useState<string | null>(null)
   const [reportDetails, setReportDetails] = useState('')
@@ -55,8 +57,8 @@ export default function CreatorScreen() {
     const { data: { user } } = await supabase.auth.getUser()
     setMyId(user?.id ?? null)
 
-    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }, mySubResult, myRequestResult] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, membership_active, is_private').eq('id', id).single(),
+    const [{ data: prof }, { data: follows }, myFollowResult, { data: menu }, mySubResult, myRequestResult, viewerProfileResult] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, membership_active, is_private, pinned_broadcast_id').eq('id', id).single(),
       supabase.from('follows').select('follower_id').eq('following_id', id),
       user
         ? supabase.from('follows').select('follower_id').eq('follower_id', user.id).eq('following_id', id).maybeSingle()
@@ -68,7 +70,13 @@ export default function CreatorScreen() {
       user
         ? supabase.from('follow_requests').select('status').eq('requester_id', user.id).eq('target_id', id).maybeSingle()
         : Promise.resolve({ data: null }),
+      user
+        ? supabase.from('profiles').select('is_admin').eq('id', user.id).single()
+        : Promise.resolve({ data: null }),
     ])
+
+    const viewerIsAdmin = !!(viewerProfileResult as any)?.data?.is_admin
+    setIsAdmin(viewerIsAdmin)
 
     setProfile(prof)
     setCreatorPlan(prof?.plan ?? 'free')
@@ -78,11 +86,34 @@ export default function CreatorScreen() {
     setFollowRequestStatus((myRequestResult as any)?.data?.status ?? 'none')
     setRichMenu(menu && menu.is_active ? menu : null)
     setIsSubscriber(!!(mySubResult as any)?.data)
+
+    // ピックアップ配信を取得
+    const pinnedId = (prof as any)?.pinned_broadcast_id
+    if (pinnedId) {
+      const { data: pinned } = await supabase
+        .from('broadcasts')
+        .select('id, content, image_url, created_at')
+        .eq('id', pinnedId)
+        .single()
+      setPinnedBroadcast(pinned ?? null)
+    } else {
+      setPinnedBroadcast(null)
+    }
+
     setLoading(false)
   }, [id])
 
   const handleMembershipToggle = async () => {
     if (!myId) { router.push('/(auth)/login' as any); return }
+    // 鍵垢 & 非フォロワーはメンバーシップ加入不可
+    if (isPrivate && !isFollowing && !isSubscriber) {
+      if (Platform.OS === 'web') {
+        window.alert('フォローが承認されるとメンバーシップに加入できるようになります')
+      } else {
+        Alert.alert('フォロワー限定', 'フォローが承認されるとメンバーシップに加入できるようになります')
+      }
+      return
+    }
     if (isSubscriber) {
       // 退会確認
       Alert.alert(
@@ -146,10 +177,14 @@ export default function CreatorScreen() {
         await supabase.from('follow_requests').delete().eq('requester_id', myId).eq('target_id', id)
         setFollowRequestStatus('none')
       } else {
-        await supabase.from('follow_requests').upsert(
-          { requester_id: myId, target_id: id, status: 'pending' },
-          { onConflict: 'requester_id,target_id' }
-        )
+        // 既存の行（rejected / approved / 重複）を消してから新規 insert
+        // upsert は unique constraint がないと INSERT になり重複行が生まれるため delete+insert で確実に1行
+        await supabase.from('follow_requests')
+          .delete()
+          .eq('requester_id', myId)
+          .eq('target_id', id)
+        await supabase.from('follow_requests')
+          .insert({ requester_id: myId, target_id: id, status: 'pending' })
         setFollowRequestStatus('pending')
       }
     } else {
@@ -219,7 +254,7 @@ export default function CreatorScreen() {
 
   const isSelf = myId === id
 
-  const ogImage = profile?.avatar_url ?? 'https://reach-pi-one.vercel.app/icon.png'
+  const ogImage = profile?.avatar_url ?? 'https://reachapp.jp/icon.png'
   const ogTitle = `${profile?.display_name ?? 'クリエーター'} | Reach`
   const ogDesc = profile?.bio ?? 'Reach でクリエーターをフォローして配信を楽しもう'
 
@@ -248,7 +283,7 @@ export default function CreatorScreen() {
             style={styles.backButton}
             activeOpacity={0.7}
             onPress={() => {
-              const url = `https://reach-pi-one.vercel.app/creator/${id}`
+              const url = `https://reachapp.jp/creator/${id}`
               if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
                 if (navigator.share) {
                   navigator.share({ title: profile?.display_name ?? '', url })
@@ -363,6 +398,32 @@ export default function CreatorScreen() {
             </View>
           )}
         </View>
+
+        {/* ピックアップ配信（鍵垢は承認済みフォロワーと本人のみ表示。管理者はバイパス） */}
+        {pinnedBroadcast && (!isPrivate || isSelf || isFollowing || isAdmin) && (
+          <View style={styles.pickupSection}>
+            <View style={styles.pickupHeader}>
+              <Ionicons name="bookmark" size={14} color={Colors.accent} />
+              <Text style={styles.pickupTitle}>ピックアップ</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.pickupCard}
+              onPress={() => router.push(`/talk/${id}` as any)}
+              activeOpacity={0.85}
+            >
+              {pinnedBroadcast.image_url
+                ? <Image source={{ uri: pinnedBroadcast.image_url }} style={styles.pickupImage} />
+                : null
+              }
+              {pinnedBroadcast.content.trim() ? (
+                <Text style={styles.pickupContent} numberOfLines={5}>{pinnedBroadcast.content.trim()}</Text>
+              ) : null}
+              <Text style={styles.pickupDate}>
+                {new Date(pinnedBroadcast.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       <Modal visible={reportModalVisible} transparent animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
@@ -535,4 +596,21 @@ const styles = StyleSheet.create({
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   metaText: { fontSize: 12, color: Colors.textLight },
   empty: { textAlign: 'center', color: Colors.textLight, fontSize: 14, marginTop: 32 },
+  // ピックアップ配信
+  pickupSection: { marginHorizontal: 16, marginTop: 8, marginBottom: 8 },
+  pickupHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  pickupTitle: { fontSize: 13, fontWeight: '700', color: Colors.text, flex: 1, letterSpacing: 0.4 },
+  pickupEditBtn: {
+    paddingHorizontal: 10, paddingVertical: 4,
+    backgroundColor: Colors.background, borderRadius: 8,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  pickupEditText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  pickupCard: {
+    backgroundColor: Colors.white, borderRadius: 14,
+    borderWidth: 1, borderColor: Colors.border, overflow: 'hidden',
+  },
+  pickupImage: { width: '100%', height: 200, resizeMode: 'cover' },
+  pickupContent: { fontSize: 14, color: Colors.text, lineHeight: 22, padding: 14, paddingBottom: 4 },
+  pickupDate: { fontSize: 11, color: Colors.textLight, paddingHorizontal: 14, paddingBottom: 12, paddingTop: 4 },
 })

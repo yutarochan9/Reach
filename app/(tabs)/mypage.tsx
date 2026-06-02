@@ -6,6 +6,11 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
+// ── モジュールレベルキャッシュ ────────────────────────────────
+// コンポーネントが再マウントされても直前のデータを即時表示し、かくつきをなくす
+let _cachedUser: any = null
+let _cachedProfile: any = null
+
 const CROP_CONTAINER = 300
 const CROP_CIRCLE = 220
 const CROP_OUTPUT = 400
@@ -118,8 +123,9 @@ const SNS_FIELDS = [
 ]
 
 export default function MyPageScreen() {
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
+  // キャッシュがあれば初期値として使う（フォーカス時のかくつき防止）
+  const [user, setUser] = useState<any>(_cachedUser)
+  const [profile, setProfile] = useState<any>(_cachedProfile)
   const [editVisible, setEditVisible] = useState(false)
   const [editName, setEditName] = useState('')
   const [editBio, setEditBio] = useState('')
@@ -135,30 +141,43 @@ export default function MyPageScreen() {
   // 鍵アカウント & フォローリクエスト待ち件数
   const [isPrivate, setIsPrivate] = useState(false)
   const [pendingFollowCount, setPendingFollowCount] = useState(0)
+  // ピックアップ配信（編集モーダル内）
+  const [editPinnedId, setEditPinnedId] = useState<string | null>(null)
+  const [showingPicker, setShowingPicker] = useState(false)
+  const [pickerBroadcasts, setPickerBroadcasts] = useState<{ id: string; content: string; image_url: string | null; created_at: string }[]>([])
+  const [loadingPicker, setLoadingPicker] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
 
   const load = useCallback(async () => {
     const { data } = await supabase.auth.getUser()
     if (!data.user) return
+    // キャッシュと state を同時更新（非同期完了後にのみ反映）
+    _cachedUser = data.user
     setUser(data.user)
-    const { data: prof } = await supabase.from('profiles').select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, is_private').eq('id', data.user.id).single()
+
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('id, display_name, bio, avatar_url, is_official, username, sns_links, plan, is_private, pinned_broadcast_id')
+      .eq('id', data.user.id)
+      .single()
+    _cachedProfile = prof
     setProfile(prof)
     setIsPrivate(prof?.is_private ?? false)
+
+    // フォローリクエスト件数も同時に取得（別途 useFocusEffect を使わない）
+    const { count } = await supabase
+      .from('follow_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('target_id', data.user.id)
+      .eq('status', 'pending')
+    setPendingFollowCount(count ?? 0)
   }, [])
 
-  // フォーカス時にフォローリクエスト待ち件数を更新
+  // フォーカスのたびにバックグラウンドで最新データを取得
+  // キャッシュがあれば画面は即座に表示済みなのでかくつかない
   useFocusEffect(useCallback(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) return
-      supabase
-        .from('follow_requests')
-        .select('id', { count: 'exact', head: true })
-        .eq('target_id', data.user.id)
-        .eq('status', 'pending')
-        .then(({ count }) => setPendingFollowCount(count ?? 0))
-    })
-  }, []))
-
-  useEffect(() => { load() }, [load])
+    load()
+  }, [load]))
 
 const openEdit = () => {
     setEditName(profile?.display_name ?? '')
@@ -168,8 +187,76 @@ const openEdit = () => {
     setEditTags(profile?.tags ?? [])
     setTagInput('')
     setUsernameError('')
+    setEditPinnedId(profile?.pinned_broadcast_id ?? null)
+    setShowingPicker(false)
+    setPickerBroadcasts([])
+    setPickerSearch('')
     setEditVisible(true)
   }
+
+  const openPickupPicker = () => {
+    if (showingPicker) { setShowingPicker(false); return }
+    setPickerSearch('')
+    setPickerBroadcasts([])
+    setShowingPicker(true)
+    // showingPicker が true になると useEffect が初回ロードを実行する
+  }
+
+  // pickerSearch が変わるたびにサーバー検索（300ms デバウンス）
+  // showingPicker が true になった瞬間も実行（初回ロード）
+  useEffect(() => {
+    if (!showingPicker || !user) return
+    setLoadingPicker(true)
+    const timer = setTimeout(async () => {
+      const trimmed = pickerSearch.trim()
+      let q = supabase
+        .from('broadcasts')
+        .select('id, content, image_url, created_at')
+        .eq('sender_id', user.id)
+        .eq('status', 'published')
+        .eq('is_subscriber_only', false)  // MB限定は除外
+        .eq('target', 'all')              // 直近フォロワー限定（week/month）も除外
+        .order('created_at', { ascending: false })
+
+      if (trimmed) {
+        // 日付パターン判定: YYYY-MM-DD / YYYY/MM/DD
+        const dayMatch = trimmed.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/)
+        // 月パターン: YYYY-MM / YYYY/MM
+        const monthMatch = trimmed.match(/^(\d{4})[\/\-](\d{1,2})$/)
+        // 年パターン: YYYY
+        const yearMatch = trimmed.match(/^(\d{4})$/)
+
+        if (dayMatch) {
+          const [, y, m, d] = dayMatch
+          const start = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+          const next = new Date(+y, +m - 1, +d + 1).toISOString().slice(0, 10)
+          q = (q as any).gte('created_at', `${start}T00:00:00`).lt('created_at', `${next}T00:00:00`)
+        } else if (monthMatch) {
+          const year = +monthMatch[1], month = +monthMatch[2]
+          const start = `${year}-${String(month).padStart(2, '0')}-01`
+          const end = month === 12
+            ? `${year + 1}-01-01`
+            : `${year}-${String(month + 1).padStart(2, '0')}-01`
+          q = (q as any).gte('created_at', start).lt('created_at', end)
+        } else if (yearMatch) {
+          q = (q as any).gte('created_at', `${trimmed}-01-01`).lt('created_at', `${+trimmed + 1}-01-01`)
+        } else {
+          // キーワード検索（全件対象）
+          q = (q as any).ilike('content', `%${trimmed}%`)
+        }
+        q = (q as any).limit(50)
+      } else {
+        // 空のときは最新30件
+        q = (q as any).limit(30)
+      }
+
+      const { data } = await q
+      setPickerBroadcasts(data ?? [])
+      setLoadingPicker(false)
+    }, pickerSearch ? 300 : 0)  // 入力中は300msデバウンス、初回は即時
+
+    return () => clearTimeout(timer)
+  }, [pickerSearch, showingPicker, user])
 
   const handleSave = async () => {
     if (!editName.trim()) return
@@ -199,6 +286,7 @@ const openEdit = () => {
         username: trimmedUsername,
         sns_links: editSns,
         tags: editTags,
+        pinned_broadcast_id: editPinnedId ?? null,
       })
       .eq('id', user.id)
       .select().single()
@@ -340,7 +428,7 @@ const openEdit = () => {
             style={styles.shareIdBtn}
             onPress={async () => {
               if (!user) return
-              const profileUrl = `https://reach-pi-one.vercel.app/creator/${user.id}`
+              const profileUrl = `https://reachapp.jp/creator/${user.id}`
               const shareText = `${profile?.display_name ?? ''} のReachをチェック 👀`
               if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.share) {
                 navigator.share({ title: `${profile?.display_name ?? 'Reach'} | Reach`, text: shareText, url: profileUrl }).catch(() => {})
@@ -357,26 +445,10 @@ const openEdit = () => {
           </TouchableOpacity>
         </View>
 
-        {isPrivate && pendingFollowCount > 0 && (
-          <TouchableOpacity
-            style={styles.followRequestBanner}
-            onPress={() => router.push('/follow-requests' as any)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.followRequestLeft}>
-              <Ionicons name="people-outline" size={20} color={Colors.white} />
-              <Text style={styles.followRequestText}>フォローリクエスト</Text>
-            </View>
-            <View style={styles.followRequestBadge}>
-              <Text style={styles.followRequestBadgeText}>{pendingFollowCount}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Colors.white} />
-          </TouchableOpacity>
-        )}
-
-        <View style={styles.menuSection}>
+<View style={styles.menuSection}>
           <MenuItem icon="create-outline" label="プロフィール編集" onPress={openEdit} />
           <MenuItem icon="bar-chart-outline" label="分析" onPress={() => router.push('/analytics' as any)} />
+          <MenuItem icon="people-outline" label="フォローリクエスト" onPress={() => router.push('/follow-requests' as any)} badge={pendingFollowCount} />
           <MenuItem icon="settings-outline" label="設定" onPress={() => router.push('/settings' as any)} last />
         </View>
 
@@ -424,7 +496,84 @@ const openEdit = () => {
               placeholderTextColor={Colors.textLight}
               multiline
             />
-            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>SNS・リンク</Text>
+            {/* ピックアップ配信 */}
+            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>ピックアップ配信</Text>
+            <Text style={[styles.fieldLabel, { fontSize: 11, fontWeight: '400', marginTop: 0, marginBottom: 8 }]}>
+              プロフィールに固定表示する配信を1つ選べます。
+            </Text>
+            {/* 選択済みのプレビュー行 */}
+            {editPinnedId && (
+              <View style={styles.pickupPreviewRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pickupPreviewText} numberOfLines={2}>
+                    {pickerBroadcasts.find(b => b.id === editPinnedId)?.content?.trim() || '（設定済み）'}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setEditPinnedId(null)} style={styles.pickupRemoveBtn} activeOpacity={0.7}>
+                  <Ionicons name="close" size={16} color={Colors.textLight} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {/* 配信選択ボタン（トグル） */}
+            <TouchableOpacity
+              style={[styles.pickupSelectBtn, showingPicker && { backgroundColor: Colors.button }]}
+              onPress={openPickupPicker}
+              activeOpacity={0.7}
+            >
+              <Ionicons name={showingPicker ? 'chevron-up' : 'bookmark-outline'} size={16} color={Colors.accent} />
+              <Text style={styles.pickupSelectText}>{showingPicker ? '閉じる' : editPinnedId ? '変更する' : '配信を選択する'}</Text>
+            </TouchableOpacity>
+            {/* インラインピッカー */}
+            {showingPicker && (
+              <View style={styles.inlinePicker}>
+                {/* 検索バー */}
+                <View style={styles.pickerSearchWrap}>
+                  <Ionicons name="search" size={15} color={Colors.textLight} />
+                  <TextInput
+                    style={styles.pickerSearchInput}
+                    placeholder="キーワード・日付で検索（例: 2025-05）"
+                    placeholderTextColor={Colors.textLight}
+                    value={pickerSearch}
+                    onChangeText={setPickerSearch}
+                    autoFocus={false}
+                    fontSize={16}
+                  />
+                  {pickerSearch ? (
+                    <TouchableOpacity onPress={() => setPickerSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close-circle" size={16} color={Colors.textLight} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {loadingPicker ? (
+                  <ActivityIndicator color={Colors.accent} style={{ marginVertical: 16 }} />
+                ) : pickerBroadcasts.length === 0 ? (
+                  <Text style={styles.pinEmpty}>
+                    {pickerSearch.trim() ? '該当する配信がありません' : '配信がまだありません'}
+                  </Text>
+                ) : (
+                  pickerBroadcasts.map(bc => (
+                    <TouchableOpacity
+                      key={bc.id}
+                      style={[styles.pinItem, editPinnedId === bc.id && { backgroundColor: `${Colors.accent}10` }]}
+                      onPress={() => { setEditPinnedId(bc.id); setShowingPicker(false) }}
+                      activeOpacity={0.7}
+                    >
+                      {bc.image_url
+                        ? <Image source={{ uri: bc.image_url }} style={styles.pinThumb} />
+                        : <View style={styles.pinThumbPlaceholder}><Ionicons name="image-outline" size={18} color={Colors.textLight} /></View>
+                      }
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pinContent} numberOfLines={2}>{bc.content.trim() || '📷 画像のみ'}</Text>
+                        <Text style={styles.pinDate}>{new Date(bc.created_at).toLocaleDateString('ja-JP')}</Text>
+                      </View>
+                      {editPinnedId === bc.id && <Ionicons name="bookmark" size={16} color={Colors.accent} />}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            )}
+
+            <Text style={[styles.fieldLabel, { marginTop: 24 }]}>SNS・リンク</Text>
             {SNS_FIELDS.map(f => (
               <View key={f.key}>
                 <View style={styles.snsFieldRow}>
@@ -661,6 +810,52 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: `${Colors.accent}30`,
   },
   tagChipText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
+  // ピックアップ配信（編集モーダル内）
+  pickupPreviewRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, padding: 12,
+  },
+  pickupPreviewText: { fontSize: 13, color: Colors.text, lineHeight: 18 },
+  pickupChangeSmallBtn: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
+    backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+  },
+  pickupChangeSmallText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  pickupRemoveBtn: { padding: 4 },
+  pickupSelectBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: 14, backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1.5, borderColor: Colors.border, borderStyle: 'dashed',
+  },
+  pickupSelectText: { fontSize: 14, color: Colors.accent, fontWeight: '600' },
+  pinEmpty: { textAlign: 'center', color: Colors.textLight, fontSize: 14, marginVertical: 24 },
+  inlinePicker: {
+    backgroundColor: Colors.background, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    marginTop: 4, overflow: 'hidden',
+  },
+  pickerSearchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  pickerSearchInput: {
+    flex: 1, fontSize: 14, color: Colors.text,
+  },
+  pinItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  pinThumb: { width: 52, height: 52, borderRadius: 8, resizeMode: 'cover' },
+  pinThumbPlaceholder: {
+    width: 52, height: 52, borderRadius: 8, backgroundColor: Colors.background,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  pinContent: { fontSize: 13, color: Colors.text, lineHeight: 18 },
+  pinDate: { fontSize: 11, color: Colors.textLight, marginTop: 3 },
 })
 
 const cropStyles = StyleSheet.create({

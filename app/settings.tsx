@@ -8,6 +8,16 @@ import { Colors } from '../constants/colors'
 import { BETA_MODE } from '../constants/config'
 
 type Plan = 'free' | 'standard' | 'pro'
+
+type DeviceSession = {
+  id: string
+  device_name: string
+  platform: string
+  device_key: string
+  last_seen: string
+  is_host: boolean
+  status: 'approved' | 'pending' | 'denied'
+}
 const PLAN_LABELS: Record<Plan, string> = { free: '無料', standard: 'スタンダード', pro: 'プロ' }
 const PLAN_COLORS: Record<Plan, string> = { free: Colors.textLight, standard: Colors.accent, pro: '#8B4513' }
 
@@ -21,6 +31,7 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true)
   const [savingPush, setSavingPush] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [deviceSessions, setDeviceSessions] = useState<DeviceSession[]>([])
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -38,6 +49,12 @@ export default function SettingsScreen() {
     setPlan(BETA_MODE ? 'pro' : (profile?.plan ?? 'free') as Plan)
     setSubscriptionStatus(profile?.subscription_status ?? null)
     setIsAdmin(profile?.is_admin ?? false)
+
+    // 承認待ちバッジ表示用にデバイス一覧を取得
+    const { data: sessions } = await supabase.from('device_sessions')
+      .select('id, device_name, platform, device_key, last_seen, is_host, status')
+      .eq('user_id', user.id).order('created_at', { ascending: true })
+    setDeviceSessions((sessions as DeviceSession[]) ?? [])
     setLoading(false)
   }, [])
 
@@ -208,14 +225,38 @@ export default function SettingsScreen() {
               disabled={savingPrivate}
             />
           </View>
-          {isPrivate && (
-            <><View style={styles.divider} />
-            <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/follow-requests' as any)}>
-              <Ionicons name="people-outline" size={18} color={Colors.accent} />
-              <Text style={styles.actionLabel}>フォローリクエストを管理</Text>
-              <Ionicons name="chevron-forward" size={16} color={Colors.border} />
-            </TouchableOpacity></>
-          )}
+        </View>
+
+        {/* ── 収益・振込 ─────────── */}
+        <Text style={styles.sectionLabel}>収益・振込</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/earnings' as any)}>
+            <Ionicons name="bar-chart-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>収益を確認する</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/bank-account' as any)}>
+            <Ionicons name="business-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>振込先口座の設定</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/payout-profile' as any)}>
+            <Ionicons name="shield-checkmark-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>本人確認情報</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+        </View>
+
+        {/* ── メンバーシップ（ファン） ─────────── */}
+        <Text style={styles.sectionLabel}>メンバーシップ</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/my-memberships' as any)}>
+            <Ionicons name="star-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>加入中のメンバーシップ</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionLabel}>セキュリティ</Text>
@@ -223,6 +264,21 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/security' as any)}>
             <Ionicons name="shield-checkmark-outline" size={18} color={Colors.accent} />
             <Text style={styles.actionLabel}>二段階認証・端末移行</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+        </View>
+
+        {/* ── デバイス管理（別画面へ遷移） ─────────── */}
+        <Text style={styles.sectionLabel}>デバイス</Text>
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/device-sessions' as any)}>
+            <Ionicons name="phone-portrait-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>ログイン中のデバイス</Text>
+            {deviceSessions.some(s => s.status === 'pending') && (
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>{deviceSessions.filter(s => s.status === 'pending').length}</Text>
+              </View>
+            )}
             <Ionicons name="chevron-forward" size={16} color={Colors.border} />
           </TouchableOpacity>
         </View>
@@ -266,6 +322,12 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/privacy' as any)}>
             <Ionicons name="shield-outline" size={18} color={Colors.accent} />
             <Text style={styles.actionLabel}>プライバシーポリシー</Text>
+            <Ionicons name="chevron-forward" size={16} color={Colors.border} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/tokutei' as any)}>
+            <Ionicons name="receipt-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>特定商取引法に基づく表記</Text>
             <Ionicons name="chevron-forward" size={16} color={Colors.border} />
           </TouchableOpacity>
         </View>
@@ -344,4 +406,24 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   actionLabel: { flex: 1, fontSize: 15, color: Colors.text, fontWeight: '500' },
+  // デバイスセッション
+  deviceRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  deviceIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.background, alignItems: 'center', justifyContent: 'center' },
+  deviceName: { fontSize: 14, fontWeight: '600', color: Colors.text },
+  deviceLastSeen: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
+  pendingBadge: {
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  pendingBadgeText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+  currentBadge: { backgroundColor: `${Colors.accent}20`, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  currentBadgeText: { fontSize: 10, color: Colors.accent, fontWeight: '700' },
+  hostBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.accent, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  hostBadgeText: { fontSize: 10, color: Colors.white, fontWeight: '700' },
+  approveBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: Colors.accent },
+  approveBtnText: { fontSize: 12, color: Colors.white, fontWeight: '700' },
+  denyBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: Colors.border },
+  denyBtnText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
 })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, TextInput, Image } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -310,11 +310,11 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   header: {
-    backgroundColor: Colors.header, paddingTop: 56,
+    backgroundColor: Colors.header, paddingTop: 36,
     paddingHorizontal: 20, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: Colors.accent },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', margin: 12,
     backgroundColor: Colors.white, borderRadius: 12,
