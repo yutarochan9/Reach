@@ -9,6 +9,7 @@ import Svg, { Path } from 'react-native-svg'
 import { supabase } from '../../lib/supabase'
 import { authFlags } from '../../lib/authState'
 import { Colors } from '../../constants/colors'
+import { TEST_ACCOUNT_IDS } from '../../constants/testAccounts'
 
 function GoogleIcon({ size = 18 }: { size?: number }) {
   return (
@@ -49,6 +50,19 @@ export default function LoginScreen() {
       authFlags.skipNextSignedIn = false
       setLoading(false)
       setLoginError('メールアドレスまたはパスワードが正しくありません。')
+      return
+    }
+
+    // テストアカウントはOTPをスキップしてそのまま入る
+    const { data: { user: authedUser } } = await supabase.auth.getUser()
+    if (authedUser && TEST_ACCOUNT_IDS.includes(authedUser.id as any)) {
+      const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', authedUser.id).single()
+      setLoading(false)
+      if (!prof?.display_name || prof.display_name.includes('@')) {
+        router.replace('/onboarding' as any)
+      } else {
+        router.replace('/(tabs)/' as any)
+      }
       return
     }
 
