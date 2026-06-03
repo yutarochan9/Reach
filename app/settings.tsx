@@ -307,8 +307,8 @@ export default function SettingsScreen() {
         <Text style={styles.sectionLabel}>収益・振込</Text>
         <View style={styles.section}>
           <TouchableOpacity style={styles.actionRow} onPress={() => router.push('/earnings' as any)}>
-            <Ionicons name="bar-chart-outline" size={18} color={Colors.accent} />
-            <Text style={styles.actionLabel}>収益を確認する</Text>
+            <Ionicons name="cash-outline" size={18} color={Colors.accent} />
+            <Text style={styles.actionLabel}>振込確認</Text>
             <Ionicons name="chevron-forward" size={16} color={Colors.border} />
           </TouchableOpacity>
           <View style={styles.divider} />

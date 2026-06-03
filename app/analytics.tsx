@@ -204,10 +204,43 @@ function BarChart({ data, color, width, height = 110 }:
   )
 }
 
+// ── 継続期間 円グラフ ──────────────────────────────────────────
+function DurationPieChart({ buckets, size = 110 }: { buckets: { label: string; count: number; color: string }[]; size?: number }) {
+  const total = buckets.reduce((s, b) => s + b.count, 0)
+  if (total === 0) return null
+  const r = size / 2 - 8
+  const cx = size / 2, cy = size / 2
+  const circ = 2 * Math.PI * r
+  let offset = 0
+  return (
+    <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+      {buckets.map((b, i) => {
+        const dash = (b.count / total) * circ
+        const gap = circ - dash
+        const el = (
+          <Circle key={i} cx={cx} cy={cy} r={r}
+            fill="none" stroke={b.color} strokeWidth={14}
+            strokeDasharray={`${dash} ${gap}`}
+            strokeDashoffset={-offset}
+          />
+        )
+        offset += dash
+        return el
+      })}
+    </Svg>
+  )
+}
+
 export default function AnalyticsScreen() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [memberStats, setMemberStats] = useState({ memberCount: 0, totalPosts: 0, monthlyPosts: 0, retentionRate: 0 })
+  const [durationBuckets, setDurationBuckets] = useState([
+    { label: '1ヶ月未満', count: 0, color: '#C4956A' },
+    { label: '1〜3ヶ月', count: 0, color: '#8B5E3C' },
+    { label: '3〜6ヶ月', count: 0, color: '#5A8A5A' },
+    { label: '6ヶ月以上', count: 0, color: '#3D6B8A' },
+  ])
   const [loading, setLoading] = useState(true)
   const { width } = useWindowDimensions()
   const isMobile = width < 900
@@ -231,6 +264,7 @@ export default function AnalyticsScreen() {
       { data: bcs }, { count: monthlyCount },
       { count: memberCount }, { count: totalMbPosts }, { count: monthlyMbPosts },
       { data: longTermSubs },
+      { data: allActiveSubs },
     ] = await Promise.all([
       supabase.from('profiles').select('plan').eq('id', user.id).single(),
       supabase.from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', user.id).not('follower_id', 'in', TEST_IDS_CSV),
@@ -253,10 +287,31 @@ export default function AnalyticsScreen() {
       // 継続率計算用: 30日以上前から加入しているメンバー
       supabase.from('subscriptions').select('created_at')
         .eq('creator_id', user.id).eq('status', 'active').lte('created_at', thirtyDaysAgo).not('subscriber_id', 'in', TEST_IDS_CSV),
+      // 継続期間分布用: 全アクティブ会員のcreated_at
+      supabase.from('subscriptions').select('created_at')
+        .eq('creator_id', user.id).eq('status', 'active').not('subscriber_id', 'in', TEST_IDS_CSV),
     ])
 
     const mc = memberCount ?? 0
     const retentionRate = mc > 0 ? Math.round(((longTermSubs ?? []).length / mc) * 100) : 0
+
+    // 継続期間バケツ計算
+    const now = Date.now()
+    const buckets = [0, 0, 0, 0]
+    for (const sub of (allActiveSubs ?? [])) {
+      const months = (now - new Date(sub.created_at).getTime()) / (1000 * 60 * 60 * 24 * 30)
+      if (months < 1) buckets[0]++
+      else if (months < 3) buckets[1]++
+      else if (months < 6) buckets[2]++
+      else buckets[3]++
+    }
+    setDurationBuckets([
+      { label: '1ヶ月未満', count: buckets[0], color: '#C4956A' },
+      { label: '1〜3ヶ月', count: buckets[1], color: '#8B5E3C' },
+      { label: '3〜6ヶ月', count: buckets[2], color: '#5A8A5A' },
+      { label: '6ヶ月以上', count: buckets[3], color: '#3D6B8A' },
+    ])
+
     setMemberStats({
       memberCount: mc,
       totalPosts: totalMbPosts ?? 0,
@@ -518,9 +573,9 @@ export default function AnalyticsScreen() {
           </View>
           <View style={s.mbGrid}>
             {/* 会員数は常に表示 */}
-            <View style={[s.mbCard, { borderWidth: 1.5, borderColor: C.button + '40' }]}>
+            <View style={[s.mbCard, { borderWidth: 1.5, borderColor: C.button + '40', paddingVertical: 16 }]}>
               <Ionicons name="star" size={16} color={C.button} />
-              <Text style={[s.mbNum, { color: C.button }]}>{memberStats.memberCount}</Text>
+              <Text style={s.mbNumLarge}>{memberStats.memberCount}</Text>
               <Text style={s.mbLabel}>会員数</Text>
             </View>
             <View style={s.mbCard}>
@@ -543,6 +598,23 @@ export default function AnalyticsScreen() {
             <Text style={{ fontSize: 12, color: C.muted, textAlign: 'center', paddingTop: 4, paddingBottom: 8 }}>
               まだメンバーシップ会員はいません
             </Text>
+          )}
+
+          {/* 継続期間の円グラフ */}
+          {memberStats.memberCount > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingTop: 12, paddingBottom: 4 }}>
+              <DurationPieChart buckets={durationBuckets} size={110} />
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: C.muted, marginBottom: 2 }}>継続期間の内訳</Text>
+                {durationBuckets.map(b => (
+                  <View key={b.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: b.color }} />
+                    <Text style={{ fontSize: 11, color: C.text, flex: 1 }}>{b.label}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: C.text }}>{b.count}人</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           )}
         </View>
 
@@ -774,6 +846,7 @@ const s = StyleSheet.create({
     alignItems: 'center', gap: 4,
   },
   mbNum: { fontSize: 18, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
+  mbNumLarge: { fontSize: 56, fontWeight: '800', color: C.button, letterSpacing: -2, lineHeight: 60 },
   mbLabel: { fontSize: 9, fontWeight: '600', color: C.muted, textAlign: 'center' },
 
   // 日時フィルター行
