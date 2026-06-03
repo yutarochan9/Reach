@@ -235,6 +235,7 @@ export default function AnalyticsScreen() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [memberStats, setMemberStats] = useState({ memberCount: 0, totalPosts: 0, monthlyPosts: 0, retentionRate: 0 })
+  const [activeTab, setActiveTab] = useState<'broadcast' | 'revenue'>('broadcast')
   const [durationBuckets, setDurationBuckets] = useState([
     { label: '1ヶ月未満', count: 0, color: '#C4956A' },
     { label: '1〜3ヶ月', count: 0, color: '#8B5E3C' },
@@ -466,8 +467,19 @@ export default function AnalyticsScreen() {
         <View style={{ width: 32 }} />
       </View>
 
+      {/* タブバー */}
+      <View style={s.tabBar}>
+        <TouchableOpacity style={[s.tabItem, activeTab === 'broadcast' && s.tabItemActive]} onPress={() => setActiveTab('broadcast')}>
+          <Text style={[s.tabText, activeTab === 'broadcast' && s.tabTextActive]}>配信分析</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.tabItem, activeTab === 'revenue' && s.tabItemActive]} onPress={() => setActiveTab('revenue')}>
+          <Text style={[s.tabText, activeTab === 'revenue' && s.tabTextActive]}>メンバーシップ</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={s.content}>
 
+        {activeTab === 'broadcast' && <>
         {/* ── 左：フォロワー / 右：5つの正方形カード横一列 ── */}
         <View style={s.topRow}>
           <View style={s.followerCard}>
@@ -560,6 +572,9 @@ export default function AnalyticsScreen() {
           </View>
         )}
 
+        </>}
+
+        {activeTab === 'revenue' && <>
         {/* ── メンバーシップ（会員数は常に表示） ── */}
         <View style={s.card}>
           <View style={s.chartHead}>
@@ -618,6 +633,9 @@ export default function AnalyticsScreen() {
           )}
         </View>
 
+        </>}
+
+        {activeTab === 'broadcast' && <>
         {/* ── 配信テーブル ── */}
         <View style={[s.card, { padding: 0, overflow: 'hidden' }]}>
           {/* タイトル行 */}
@@ -728,6 +746,7 @@ export default function AnalyticsScreen() {
             ))}
           </ScrollView>
         </View>
+        </>}
 
       </ScrollView>
 
@@ -850,6 +869,22 @@ const s = StyleSheet.create({
   mbLabel: { fontSize: 9, fontWeight: '600', color: C.muted, textAlign: 'center' },
 
   // 日時フィルター行
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: C.card,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  tabItem: {
+    flex: 1, paddingVertical: 12, alignItems: 'center',
+    borderBottomWidth: 2, borderBottomColor: 'transparent',
+  },
+  tabItemActive: {
+    borderBottomColor: C.accent,
+  },
+  tabText: { fontSize: 13, fontWeight: '600', color: C.muted },
+  tabTextActive: { color: C.accent },
+
   dateFilterRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 14, paddingBottom: 10,
