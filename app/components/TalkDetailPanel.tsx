@@ -69,6 +69,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const tileGridAnim = useRef(new Animated.Value(1)).current  // 1=open, 0=closed
   const tileClosedByScrollRef = useRef(false)  // スクロールで閉じたかどうか
   const tileOpenRef = useRef(true)             // stale closure回避用
+  const scrolledFarEnoughRef = useRef(false)   // 十分上にスクロールしたかどうか（再開条件）
 
   const load = useCallback(async () => {
     try {
@@ -454,12 +455,20 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         onScroll={(e) => {
           const currentY = e.nativeEvent.contentOffset.y
           // inverted時: y=0が最下部(新着)、yが増えると上スクロール(古い方向)
-          if (tileOpenRef.current && currentY > prevScrollYRef.current + 10) {
-            // 上にスクロール → タイルを閉じる
-            closeTileAnimated(true)
-          } else if (!tileOpenRef.current && tileClosedByScrollRef.current && currentY < 60 && tileMenu) {
-            // 最下部に戻った → タイルを再表示
-            openTileAnimated()
+          if (tileOpenRef.current) {
+            // タイル表示中: 上に30px以上スクロールしたら閉じる
+            if (currentY > prevScrollYRef.current + 30) {
+              scrolledFarEnoughRef.current = false
+              closeTileAnimated(true)
+            }
+          } else if (tileClosedByScrollRef.current && tileMenu) {
+            // タイルが閉じた後: 100px以上スクロールしたら「十分上に行った」とみなす
+            if (currentY > 100) scrolledFarEnoughRef.current = true
+            // 十分上まで行った後、最下部(y<20)に戻ったら再表示
+            if (scrolledFarEnoughRef.current && currentY < 20) {
+              scrolledFarEnoughRef.current = false
+              openTileAnimated()
+            }
           }
           prevScrollYRef.current = currentY
         }}

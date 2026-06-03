@@ -14,8 +14,23 @@ import CookieBanner from './components/CookieBanner'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
-import { BETA_GATE } from '../constants/config'
+import { BETA_GATE, MAINTENANCE_MODE, ADMIN_USER_ID } from '../constants/config'
 import BetaGate, { isBetaUnlocked } from './beta-gate'
+
+// ── メンテナンス画面 ────────────────────────────────────────────────
+function MaintenanceScreen() {
+  return (
+    <View style={{ flex: 1, backgroundColor: '#F7F7F9', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+      <Ionicons name="construct-outline" size={56} color="#B0B0B0" />
+      <Text style={{ fontSize: 20, fontWeight: '700', color: '#333', marginTop: 20, marginBottom: 10 }}>
+        メンテナンス中
+      </Text>
+      <Text style={{ fontSize: 14, color: '#888', textAlign: 'center', lineHeight: 22 }}>
+        現在システムのメンテナンスを行っています。{'\n'}しばらくしてから再度お試しください。
+      </Text>
+    </View>
+  )
+}
 
 const SIDEBAR_W = 68
 
@@ -112,12 +127,32 @@ export default function RootLayout() {
   // BETA_GATE = true のとき、パスワード未入力ならゲート画面を表示
   const [gateChecked, setGateChecked] = useState(false)
   const [gateUnlocked, setGateUnlocked] = useState(false)
+  // ── メンテナンスモード ────────────────────────────────────────
+  // MAINTENANCE_MODE = true かつ管理者以外はメンテ画面のみ表示
+  const [isMaintenanceBlocked, setIsMaintenanceBlocked] = useState(false)
+  const [maintenanceChecked, setMaintenanceChecked] = useState(false)
 
   useEffect(() => {
     if (!BETA_GATE) { setGateUnlocked(true); setGateChecked(true); return }
     isBetaUnlocked().then(unlocked => {
       setGateUnlocked(unlocked)
       setGateChecked(true)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!MAINTENANCE_MODE) {
+      setIsMaintenanceBlocked(false)
+      setMaintenanceChecked(true)
+      return
+    }
+    // メンテ中: ログインユーザーが管理者かチェック
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsMaintenanceBlocked(!user || user.id !== ADMIN_USER_ID)
+      setMaintenanceChecked(true)
+    }).catch(() => {
+      setIsMaintenanceBlocked(true)
+      setMaintenanceChecked(true)
     })
   }, [])
 
@@ -274,7 +309,11 @@ export default function RootLayout() {
 
   // ── ゲート判定（全Hook定義の後に配置：Rules of Hooks を守るため）─────────────
   // ゲート確認中は何も表示しない（チラつき防止）
-  if (!gateChecked) return null
+  if (!gateChecked || !maintenanceChecked) return null
+  // メンテナンス中は管理者以外にメンテ画面のみ表示
+  if (MAINTENANCE_MODE && isMaintenanceBlocked) {
+    return <MaintenanceScreen />
+  }
   // パスワード未入力ならゲート画面だけ表示
   if (BETA_GATE && !gateUnlocked) {
     return <BetaGate onUnlock={() => setGateUnlocked(true)} />
