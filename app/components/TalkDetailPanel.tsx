@@ -183,13 +183,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     initialScrolledRef.current = false
   }, [senderId])
 
-  // 配信が初めて表示されたとき一回だけ最下部へ
-  useEffect(() => {
-    if (groups.length === 0 || initialScrolledRef.current) return
-    initialScrolledRef.current = true
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
-  }, [groups.length])
-
   // groups が更新されたら、含まれる画像URLのサイズを取得
   useEffect(() => {
     const urls = groups.flatMap(g =>
@@ -454,6 +447,11 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         keyExtractor={item => item.anchorId}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
+        onContentSizeChange={() => {
+          if (initialScrolledRef.current) return
+          initialScrolledRef.current = true
+          flatListRef.current?.scrollToEnd({ animated: false })
+        }}
         onScroll={(e) => {
           const currentY = e.nativeEvent.contentOffset.y
           // 上スクロールでタイルを閉じる

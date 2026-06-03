@@ -190,13 +190,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     initialScrolledRef.current = false
   }, [partnerId])
 
-  // メッセージが初めて表示されたとき一回だけ最下部へ
-  useEffect(() => {
-    if (messages.length === 0 || initialScrolledRef.current) return
-    initialScrolledRef.current = true
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
-  }, [messages.length])
-
   // ポーリング：2秒おきに新着メッセージ取得 + クールダウン解除チェック
   useEffect(() => {
     const timer = setInterval(async () => {
@@ -390,6 +383,11 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         keyExtractor={item => item.id}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
+        onContentSizeChange={() => {
+          if (initialScrolledRef.current) return
+          initialScrolledRef.current = true
+          flatListRef.current?.scrollToEnd({ animated: false })
+        }}
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={40} color={Colors.border} />
