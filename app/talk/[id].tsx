@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Linking,
-  useWindowDimensions, ScrollView, Share,
+  useWindowDimensions, ScrollView, Share, Animated,
 } from 'react-native'
 const isWeb = Platform.OS === 'web'
 
@@ -82,6 +82,11 @@ export default function TalkDetailScreen() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const firstUnreadIndexRef = useRef<number>(-1)   // 最初の未読グループのインデックス（-1=全既読）
   const initialScrollDoneRef = useRef(false)        // 初回スクロール済みフラグ
+  const userScrolledUpRef = useRef(false)           // ユーザーが手動で上にスクロールしたフラグ
+  const prevScrollYRef = useRef(0)                  // スクロール方向検出用
+  const tileGridAnim = useRef(new Animated.Value(1)).current  // タイルアニメーション 1=open,0=closed
+  const tileClosedByScrollRef = useRef(false)       // スクロールで閉じたか
+  const tileOpenRef = useRef(true)                  // stale closure回避用
   // メッセージグループのDOM要素をシェア用にキャッシュ（id → DOM node）
   const groupRefs = useRef<Map<string, any>>(new Map())
   // フッター（タイムスタンプ+シェアボタン）のDOM要素キャッシュ（キャプチャ前に非表示にする）
@@ -144,7 +149,7 @@ export default function TalkDetailScreen() {
     }
 
     // 3. ネットワーク（常にバックグラウンドで最新化）
-    supabase.from('rich_menus')
+    supabase.from('tiles')
       .select('buttons, is_active, panel_bg_image')
       .eq('creator_id', senderId)
       .maybeSingle()
@@ -336,27 +341,32 @@ export default function TalkDetailScreen() {
     }
   }, [imageSizes])
 
-  // ロード完了後に複数回スクロール
-  // OGPリンクプレビュー・画像など子コンポーネント内の非同期ロードを拾うため
-  // 300ms・1000ms・2500ms の3段階でスクロールし直す
+  // ロード完了時スクロール（LINE方式）:
+  // 未読あり → 最初の未読へ / 全既読 → 最下部へ
   useEffect(() => {
-    if (!loading && firstUnreadIndexRef.current <= 0 && groups.length > 0) {
-      const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300)
-      const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 1000)
-      const t3 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 2500)
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+    if (loading || groups.length === 0 || initialScrollDoneRef.current) return
+    initialScrollDoneRef.current = true
+    userScrolledUpRef.current = false
+
+    const idx = firstUnreadIndexRef.current
+    if (idx > 0) {
+      // 未読あり: LINEと同様、最初の未読メッセージの位置へ
+      const tryScroll = () => {
+        try {
+          flatListRef.current?.scrollToIndex({ index: idx, animated: false, viewPosition: 0 })
+        } catch {
+          flatListRef.current?.scrollToEnd({ animated: false })
+        }
+      }
+      setTimeout(tryScroll, 100)
+      setTimeout(tryScroll, 400)
+    } else {
+      // 全既読: 最下部へ
+      const scrollBottom = () => flatListRef.current?.scrollToEnd({ animated: false })
+      scrollBottom()
+      setTimeout(scrollBottom, 200)
     }
   }, [loading, groups.length])
-
-  // タイルの開閉・表示切替時にスクロール位置を再調整
-  // タイルが開く → FlatList 縮小 → 最新メッセージがタイル直上に来るようスクロール
-  // タイルが閉じる → FlatList 拡大 → 最新メッセージが下に移動（スムーズアニメ）
-  useEffect(() => {
-    if (firstUnreadIndexRef.current <= 0 && groups.length > 0) {
-      const t = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80)
-      return () => clearTimeout(t)
-    }
-  }, [tileOpen, tileVisible])
 
   // URL と最大幅からアスペクト比を保ったサイズを返す
   const getImgStyle = (url: string, maxW: number) => {
@@ -665,37 +675,42 @@ export default function TalkDetailScreen() {
     if (!myId) { router.push('/(auth)/login' as any); return }
     if (isSelf) return
     if (isSubscriber) {
-      // 退会：コンテンツが消える旨を警告してから削除
-      Alert.alert(
-        'メンバーシップを退会',
-        '退会すると、メンバーシップ限定コンテンツはこの画面から即座に消えます。\n\nよろしいですか？',
-        [
-          { text: 'キャンセル', style: 'cancel' },
-          {
-            text: '退会する', style: 'destructive', onPress: async () => {
-              await supabase.from('subscriptions')
-                .delete()
-                .eq('subscriber_id', myId)
-                .eq('creator_id', senderId)
-              setIsSubscriber(false)
-              // 限定コンテンツを即時非表示
-              setGroups(prev => prev.filter(g => !g.is_subscriber_only))
-            }
-          },
-        ]
-      )
+      // 退会確認
+      const doLeave = async () => {
+        await supabase.from('subscriptions')
+          .delete()
+          .eq('subscriber_id', myId)
+          .eq('creator_id', senderId)
+        setIsSubscriber(false)
+        setGroups(prev => prev.filter(g => !g.is_subscriber_only))
+      }
+      if (isWeb) {
+        if (window.confirm('退会すると、メンバーシップ限定コンテンツはこの画面から即座に消えます。\n退会しますか？')) {
+          doLeave()
+        }
+      } else {
+        Alert.alert(
+          'メンバーシップを退会',
+          '退会すると、メンバーシップ限定コンテンツはこの画面から即座に消えます。\n\nよろしいですか？',
+          [
+            { text: 'キャンセル', style: 'cancel' },
+            { text: '退会する', style: 'destructive', onPress: doLeave },
+          ]
+        )
+      }
     } else {
-      // 加入：subscriptions にレコード挿入
+      // 加入
       const { error } = await supabase.from('subscriptions').insert({
         subscriber_id: myId,
         creator_id: senderId,
         status: 'active',
       })
       if (error) {
-        Alert.alert('エラー', error.message)
+        if (isWeb) window.alert('エラー: ' + error.message)
+        else Alert.alert('エラー', error.message)
       } else {
         setIsSubscriber(true)
-        load() // メンバーシップ限定メッセージを含め再読込
+        load()
       }
     }
   }
@@ -787,21 +802,36 @@ export default function TalkDetailScreen() {
       style={{ flex: 1 }}
       contentContainerStyle={[styles.messageList, tileVisible && { paddingBottom: 20 }]}
       onContentSizeChange={() => {
-        const idx = firstUnreadIndexRef.current
-        if (idx > 0 && !initialScrollDoneRef.current) {
-          // 未読あり → 最初の未読位置へ1回だけスクロール
-          initialScrollDoneRef.current = true
-          setTimeout(() => {
-            flatListRef.current?.scrollToIndex({ index: idx, animated: false, viewPosition: 0 })
-          }, 50)
-        } else if (idx <= 0) {
-          // 全既読・自分の配信 → 常に最下部へ（画像・プレビュー読み込み後も追従）
+        // 初回スクロールはuseEffectで処理するのでスキップ
+        if (!initialScrollDoneRef.current) return
+        // ユーザーが上にスクロール中でなければ最下部へ追従
+        if (!userScrolledUpRef.current) {
           flatListRef.current?.scrollToEnd({ animated: false })
         }
       }}
+      onScroll={(e) => {
+        const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+        const currentY = contentOffset.y
+        const distFromBottom = contentSize.height - currentY - layoutMeasurement.height
+        if (distFromBottom < 60) {
+          userScrolledUpRef.current = false
+          // 最下部に戻ったとき、スクロールで閉じたタイルを再表示（アニメーション付き）
+          if (!tileOpenRef.current && tileClosedByScrollRef.current && tileVisible) {
+            openTileAnimated()
+          }
+        } else {
+          // 上方向スクロールを検出してタイルを閉じる（方向ベース・自然なアニメーション）
+          if (tileOpenRef.current && currentY < prevScrollYRef.current) {
+            closeTileAnimated(true)
+          }
+          userScrolledUpRef.current = true
+        }
+        prevScrollYRef.current = currentY
+      }}
+      scrollEventThrottle={50}
       onScrollBeginDrag={() => {
-        // メッセージ一覧をスクロール操作したらタイルを閉じる
-        if (tileOpen) setTileOpen(false)
+        userScrolledUpRef.current = true
+        if (tileOpenRef.current) closeTileAnimated(true)
       }}
       onScrollToIndexFailed={(info) => {
         // アイテムが未描画の場合は推定位置へスクロール
@@ -1049,6 +1079,20 @@ export default function TalkDetailScreen() {
   ]
   const GRID_C = 27
   const GRID_R = 18
+  // タイルをアニメーション付きで閉じる
+  const closeTileAnimated = (byScroll = false) => {
+    tileClosedByScrollRef.current = byScroll
+    tileOpenRef.current = false
+    setTileOpen(false)
+    Animated.timing(tileGridAnim, { toValue: 0, duration: 220, useNativeDriver: false }).start()
+  }
+  // タイルをアニメーション付きで開く
+  const openTileAnimated = () => {
+    tileOpenRef.current = true
+    setTileOpen(true)
+    Animated.timing(tileGridAnim, { toValue: 1, duration: 250, useNativeDriver: false }).start()
+  }
+
   const normalizedButtons = richMenu?.buttons.map((b: any, i: number) =>
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
@@ -1065,10 +1109,14 @@ export default function TalkDetailScreen() {
             <Image source={{ uri: richMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
           )}
           {richMenu.panel_bg_image && <View style={styles.panelDimOverlay} pointerEvents="none" />}
-          <TouchableOpacity style={[styles.tileHandle, !richMenu.panel_bg_image && { borderBottomColor: 'rgba(0,0,0,0.06)' }]} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={[styles.tileHandle, !richMenu.panel_bg_image && { borderBottomColor: 'rgba(0,0,0,0.06)' }]}
+            onPress={() => tileOpenRef.current ? closeTileAnimated(false) : openTileAnimated()}
+            activeOpacity={0.7}
+          >
             <View style={[styles.tileHandleBar, !richMenu.panel_bg_image && { backgroundColor: 'rgba(0,0,0,0.15)' }]} />
           </TouchableOpacity>
-          {tileOpen && (
+          <Animated.View style={{ overflow: 'hidden', maxHeight: tileGridAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 500] }) }}>
             <View style={styles.tileGridArea}>
               {normalizedButtons.map((btn: any) => (
                 <TouchableOpacity
@@ -1114,7 +1162,7 @@ export default function TalkDetailScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          )}
+          </Animated.View>
         </View>
   ) : null
 
@@ -1126,7 +1174,7 @@ export default function TalkDetailScreen() {
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>あなたの配信</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => { setSearchActive(v => !v); setSearchQuery(''); setSearchDateFrom(''); setSearchDateTo('') }} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.backButton} onPress={() => { setSearchActive(v => !v); setSearchQuery('') }} activeOpacity={0.7}>
             <Ionicons name={searchActive ? 'close' : 'search'} size={20} color={Colors.accent} />
           </TouchableOpacity>
         </View>
@@ -1295,7 +1343,7 @@ export default function TalkDetailScreen() {
               {senderIsOfficial && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
             </View>
           </View>
-          <TouchableOpacity style={{ width: 32, padding: 4, alignItems: 'center' }} onPress={() => { setSearchActive(v => !v); setSearchQuery(''); setSearchDateFrom(''); setSearchDateTo('') }} activeOpacity={0.7}>
+          <TouchableOpacity style={{ width: 32, padding: 4, alignItems: 'center' }} onPress={() => { setSearchActive(v => !v); setSearchQuery('') }} activeOpacity={0.7}>
             <Ionicons name={searchActive ? 'close' : 'search'} size={20} color={Colors.accent} />
           </TouchableOpacity>
         </View>
@@ -1616,7 +1664,7 @@ const styles = StyleSheet.create({
   // fontSize: 16 以上にすることでiOS Safariの自動ズームを防止
   searchInput: { flex: 1, fontSize: 16, color: Colors.text, paddingVertical: 0 },
   searchResultCount: { fontSize: 11, color: Colors.textLight, textAlign: 'right' },
-  tileContainer: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
+  tileContainer: { backgroundColor: '#FFFFFF' },
   panelDimOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   tileHandle: {
     alignItems: 'center', paddingVertical: 7,

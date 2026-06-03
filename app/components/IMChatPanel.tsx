@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Alert,
 } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { router } from 'expo-router'
 import { useTalkContext } from '../contexts/TalkContext'
 import { Ionicons } from '@expo/vector-icons'
@@ -11,6 +12,9 @@ import { Colors } from '../../constants/colors'
 import { sendPushToUsers } from '../../lib/notifications'
 
 const isWeb = Platform.OS === 'web'
+
+// モジュールレベルキャッシュ（セッション内タブ切り替えで即時表示）
+const _dmCache = new Map<string, IMMessage[]>()
 
 type IMMessage = {
   id: string
@@ -42,16 +46,17 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const [escalationButtonEnabled, setEscalationButtonEnabled] = useState(false) // クリエーターがボタン表示をONにしているか
   const [escalationCooldown, setEscalationCooldown] = useState(false) // 24h クールダウン中
   const [sendingEscalation, setSendingEscalation] = useState(false)
-  const [messages, setMessages] = useState<IMMessage[]>([])
+  const [messages, setMessages] = useState<IMMessage[]>(() => _dmCache.get(partnerId) ?? [])
   const [text, setText] = useState('')
   const [replyTo, setReplyTo] = useState<IMMessage | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!_dmCache.has(partnerId))
   const [longPressMsg, setLongPressMsg] = useState<IMMessage | null>(null)
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const myIdRef = useRef<string | null>(null)
-  const escalationCooldownRef = useRef(false) // ポーリング内で参照するためのref
+  const escalationCooldownRef = useRef(false)
+  const isAtBottomRef = useRef(true)  // ユーザーが最下部付近にいるかどうか
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -113,10 +118,22 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       for (const r of (replyMsgs ?? [])) replyMap[r.id] = r.content
     }
 
-    setMessages(msgs.map((m: any) => ({
+    const parsed = msgs.map((m: any) => ({
       ...m,
       reply_preview: m.reply_to_id ? (replyMap[m.reply_to_id] ?? null) : null,
-    })))
+    }))
+    _dmCache.set(partnerId, parsed)
+    // AsyncStorageに永続化（アプリ再起動後も即時表示できるように）
+    AsyncStorage.setItem(`dm_cache_${partnerId}`, JSON.stringify(parsed)).catch(() => {})
+    // 既存データと同じなら setMessages しない（FlatListのスクロールリセット防止）
+    setMessages(prev => {
+      if (prev.length > 0 && prev.length === parsed.length) {
+        const checkLen = Math.min(5, prev.length)
+        const isSame = prev.slice(-checkLen).every((m, i) => m.id === parsed.slice(-checkLen)[i]?.id)
+        if (isSame) return prev
+      }
+      return parsed
+    })
 
     // pending な依頼が存在する間はクールダウン
     // ただし 24h 放置 or resolved になったら再依頼可能
@@ -140,16 +157,44 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   }, [partnerId])
 
   useEffect(() => {
-    setLoading(true)
-    setMessages([])
-    load()
-  }, [load])
-
-  // メッセージ件数が変わるたびに最下部にスクロール（遅延を長めにして描画後に実行）
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 400)
+    // 会話が切り替わったら最下部フラグをリセット
+    isAtBottomRef.current = true
+    const cached = _dmCache.get(partnerId)
+    if (cached && cached.length > 0) {
+      // モジュールキャッシュあり: データは即時、scroll確定後に表示
+      setMessages(cached)
+      setLoading(false)
+      // バックグラウンドで最新化（スピナーは出さない）
+      load()
+    } else {
+      // モジュールキャッシュなし: AsyncStorageを確認
+      setLoading(true)
+      setMessages([])
+      AsyncStorage.getItem(`dm_cache_${partnerId}`).then(raw => {
+        if (raw) {
+          try {
+            const parsed: IMMessage[] = JSON.parse(raw)
+            if (parsed.length > 0) {
+              _dmCache.set(partnerId, parsed)
+              setMessages(parsed)
+              setLoading(false)
+            }
+          } catch {}
+        }
+        // ネットワークから最新取得（キャッシュあり時はバックグラウンド）
+        load()
+      }).catch(() => load())
     }
+  }, [load, partnerId])
+
+  // メッセージ件数が変わったら最下部へスクロール（最下部にいる場合のみ）
+  useEffect(() => {
+    if (messages.length === 0) return
+    if (!isAtBottomRef.current) return
+    const scroll = () => flatListRef.current?.scrollToEnd({ animated: false })
+    scroll()
+    const t = setTimeout(scroll, 250)
+    return () => clearTimeout(t)
   }, [messages.length])
 
   // ポーリング：2秒おきに新着メッセージ取得 + クールダウン解除チェック
@@ -172,7 +217,10 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
           const newMsgs = msgs.filter((m: any) => !prevIds.has(m.id))
           if (newMsgs.length === 0) return prev
           triggerDmReload()
-          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200)
+          // 最下部にいる場合のみ新着で追従スクロール
+          if (isAtBottomRef.current) {
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200)
+          }
           return [...prev, ...newMsgs.map((m: any) => ({ ...m, reply_preview: null }))]
         })
       }
@@ -218,7 +266,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       }).select().single()
       if (data) {
         setMessages(prev => [...prev, { ...data, reply_preview: null }])
-        // カードが描画されてから確実にスクロールするため長めに待つ
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300)
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 600)
       }
@@ -253,7 +300,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     const { data } = await supabase.from('messages').insert(insertData).select().single()
     if (data) {
       setMessages(prev => [...prev, { ...data, reply_preview: replyTo ? replyTo.content : null }])
-      setTimeout(() => flatListRef.current?.scrollToEnd(), 100)
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 150)
     }
     setReplyTo(null)
     triggerDmReload()
@@ -347,8 +394,18 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         keyExtractor={item => item.id}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => {
+          // コンテンツサイズが変わったとき（初回レンダリング含む）最下部へ
+          if (isAtBottomRef.current) {
+            flatListRef.current?.scrollToEnd({ animated: false })
+          }
+        }}
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+          const distFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height
+          isAtBottomRef.current = distFromBottom < 100
+        }}
+        scrollEventThrottle={100}
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={40} color={Colors.border} />
@@ -362,6 +419,13 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
           if (item.content === '〔担当者への対応依頼〕') {
             return (
               <View style={styles.escalationCardWrap}>
+                {showDate(item, prev) && (
+                  <View style={styles.dateDivider}>
+                    <Text style={styles.dateText}>
+                      {new Date(item.created_at).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.escalationCard}>
                   <View style={styles.escalationCardIcon}>
                     <Ionicons name="alert-circle" size={22} color="#fff" />
@@ -396,19 +460,21 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
                   onMouseLeave: () => setHoveredMsgId(null),
                 } as any : {})}
               >
-                {!isOwn ? (
-                  partnerAvatar
-                    ? <Image source={{ uri: partnerAvatar }} style={styles.msgAvatar} />
-                    : <View style={styles.msgAvatarFallback}>
-                        <Text style={styles.msgAvatarText}>{partnerName[0]}</Text>
-                      </View>
-                ) : (
-                  myAvatar
-                    ? <Image source={{ uri: myAvatar }} style={styles.msgAvatar} />
-                    : <View style={styles.msgAvatarFallback}>
-                        <Text style={styles.msgAvatarText}>{myName[0]}</Text>
-                      </View>
-                )}
+                <TouchableOpacity onPress={() => router.push(`/creator/${isOwn ? (myId ?? '') : partnerId}` as any)} activeOpacity={0.8}>
+                  {!isOwn ? (
+                    partnerAvatar
+                      ? <Image source={{ uri: partnerAvatar }} style={styles.msgAvatar} />
+                      : <View style={styles.msgAvatarFallback}>
+                          <Text style={styles.msgAvatarText}>{partnerName[0]}</Text>
+                        </View>
+                  ) : (
+                    myAvatar
+                      ? <Image source={{ uri: myAvatar }} style={styles.msgAvatar} />
+                      : <View style={styles.msgAvatarFallback}>
+                          <Text style={styles.msgAvatarText}>{myName[0]}</Text>
+                        </View>
+                  )}
+                </TouchableOpacity>
                 <View style={[styles.bubbleWrap, isOwn && styles.bubbleWrapOwn]}>
                   <View style={styles.msgNameRow}>
                     <Text style={styles.msgNameLabel}>{isOwn ? myName : partnerName}</Text>

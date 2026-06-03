@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  ActivityIndicator, Image, Modal, Pressable, Linking, Platform,
+  ActivityIndicator, Image, Modal, Pressable, Linking, Platform, Animated,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -62,6 +62,13 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const initialScrollDoneRef = useRef(false)
+  const userScrolledUpRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevScrollYRef = useRef(0)         // スクロール方向検出用
+  const tileGridAnim = useRef(new Animated.Value(1)).current  // 1=open, 0=closed
+  const tileClosedByScrollRef = useRef(false)  // スクロールで閉じたかどうか
+  const tileOpenRef = useRef(true)             // stale closure回避用
 
   const load = useCallback(async () => {
     try {
@@ -93,7 +100,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
           .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId).eq('status', 'published')
           .order('created_at', { ascending: true }),
-        supabase.from('rich_menus').select('buttons, is_active, panel_bg_image').eq('creator_id', senderId).maybeSingle(),
+        supabase.from('tiles').select('buttons, is_active, panel_bg_image').eq('creator_id', senderId).maybeSingle(),
       ])
 
       setSenderName(profile?.display_name ?? '')
@@ -168,10 +175,30 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
 
   // creatorId が変わったらリロード
   useEffect(() => {
+    userScrolledUpRef.current = false
+    initialLoadDoneRef.current = false
+    initialScrollDoneRef.current = false
     setLoading(true)
     setGroups([])
     load()
   }, [load])
+
+  // 配信グループ数が変わったらスクロール処理
+  useEffect(() => {
+    if (groups.length === 0) return
+    if (!initialLoadDoneRef.current) {
+      // 初回: 複数タイミングでscrollToEndを打ち、レイアウト確定を確実に捕捉
+      initialLoadDoneRef.current = true
+      userScrolledUpRef.current = false
+      const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50)
+      const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 250)
+      const t3 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 600)
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+    } else if (!userScrolledUpRef.current) {
+      // 新着: ユーザーが下にいる場合のみ追従
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 80)
+    }
+  }, [groups.length])
 
   // groups が更新されたら、含まれる画像URLのサイズを取得
   useEffect(() => {
@@ -302,6 +329,24 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
   }
 
+  // タイルをアニメーション付きで閉じる
+  const closeTileAnimated = (byScroll = false) => {
+    tileClosedByScrollRef.current = byScroll
+    tileOpenRef.current = false
+    setTileOpen(false)
+    Animated.timing(tileGridAnim, {
+      toValue: 0, duration: 220, useNativeDriver: false,
+    }).start()
+  }
+  // タイルをアニメーション付きで開く
+  const openTileAnimated = () => {
+    tileOpenRef.current = true
+    setTileOpen(true)
+    Animated.timing(tileGridAnim, {
+      toValue: 1, duration: 250, useNativeDriver: false,
+    }).start()
+  }
+
   const normalizedButtons = tileMenu?.buttons.map((b: any, i: number) =>
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
@@ -312,10 +357,18 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         <Image source={{ uri: tileMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
       )}
       {tileMenu.panel_bg_image && <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.35)' }]} pointerEvents="none" />}
-      <TouchableOpacity style={[styles.tileHandle, !tileMenu.panel_bg_image && { borderBottomColor: 'rgba(0,0,0,0.06)' }]} onPress={() => setTileOpen(p => !p)} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={[styles.tileHandle, !tileMenu.panel_bg_image && { borderBottomColor: 'rgba(0,0,0,0.06)' }]}
+        onPress={() => tileOpen ? closeTileAnimated(false) : openTileAnimated()}
+        activeOpacity={0.7}
+      >
         <View style={[styles.tileHandleBar, !tileMenu.panel_bg_image && { backgroundColor: 'rgba(0,0,0,0.15)' }]} />
       </TouchableOpacity>
-      {tileOpen && (
+      {/* Animated.Viewでグリッドエリアを滑らかに開閉 */}
+      <Animated.View style={{
+        overflow: 'hidden',
+        maxHeight: tileGridAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 500] }),
+      }}>
         <View style={styles.tileGridArea}>
           {normalizedButtons.map((btn: any) => (
             <TouchableOpacity
@@ -360,7 +413,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
             </TouchableOpacity>
           ))}
         </View>
-      )}
+      </Animated.View>
     </View>
   ) : null
 
@@ -411,7 +464,35 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         keyExtractor={item => item.anchorId}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onContentSizeChange={() => {
+          if (!userScrolledUpRef.current) {
+            flatListRef.current?.scrollToEnd({ animated: false })
+          }
+        }}
+        onScrollBeginDrag={() => {
+          // ネイティブ: ドラッグ開始で追従を止める
+          userScrolledUpRef.current = true
+        }}
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
+          const currentY = contentOffset.y
+          const distFromBottom = contentSize.height - currentY - layoutMeasurement.height
+          if (distFromBottom < 60) {
+            userScrolledUpRef.current = false
+            // 最下部に戻ったとき、スクロールで閉じたタイルを再表示（refで最新のopen状態を参照）
+            if (!tileOpenRef.current && tileClosedByScrollRef.current && tileMenu) {
+              openTileAnimated()
+            }
+          } else {
+            // 上方向スクロールを検出してタイルを閉じる（方向ベース）
+            if (tileOpenRef.current && currentY < prevScrollYRef.current) {
+              closeTileAnimated(true)
+            }
+            userScrolledUpRef.current = true
+          }
+          prevScrollYRef.current = currentY
+        }}
+        scrollEventThrottle={50}
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="radio-outline" size={40} color={Colors.border} />
@@ -434,13 +515,13 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
               )}
               <View style={styles.groupWrap}>
                 <View style={styles.broadcastRow}>
-                  {/* アバター */}
-                  <View style={styles.broadcastAvatar}>
+                  {/* アバター（タップでプロフィールへ） */}
+                  <TouchableOpacity onPress={() => router.push(`/creator/${senderId}` as any)} activeOpacity={0.8} style={styles.broadcastAvatar}>
                     {senderAvatar
                       ? <Image source={{ uri: senderAvatar }} style={styles.broadcastAvatarImg} />
                       : <Text style={styles.broadcastAvatarText}>{senderName[0]}</Text>
                     }
-                  </View>
+                  </TouchableOpacity>
 
                   {/* バブル群 */}
                   <View style={styles.blocksWrap}>

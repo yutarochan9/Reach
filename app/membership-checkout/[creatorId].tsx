@@ -56,6 +56,25 @@ export default function MembershipCheckout() {
 
       // Stripe決済完了後にリダイレクトで戻ってきた場合
       if (payment === 'success') {
+        // Webhook fallback: DBに直接subscriptionをupsert（Webhookが遅延/未着の場合の保険）
+        try {
+          const { data: existingSub } = await supabase
+            .from('subscriptions')
+            .select('id, status')
+            .eq('subscriber_id', user.id)
+            .eq('creator_id', creatorId)
+            .maybeSingle()
+          if (!existingSub) {
+            await supabase.from('subscriptions').insert({
+              subscriber_id: user.id,
+              creator_id: creatorId,
+              status: 'active',
+            })
+          } else if (existingSub.status !== 'active') {
+            await supabase.from('subscriptions').update({ status: 'active' }).eq('id', existingSub.id)
+          }
+        } catch {}
+
         const welcomeMsg = data?.membership_welcome?.trim()
         const baseMsg = `${data?.display_name ?? 'クリエーター'} のメンバーシップに加入しました！`
         const fullMsg = welcomeMsg ? `${baseMsg}\n\n${welcomeMsg}` : baseMsg
@@ -119,18 +138,26 @@ export default function MembershipCheckout() {
       } else {
         // ── Web: Stripe Checkout へリダイレクト ──────────────────
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session) { Alert.alert('エラー', 'ログインが必要です'); return }
+        if (!session) {
+          window.alert('エラー: ログインが必要です')
+          return
+        }
         const price = profile?.membership_price ?? DEFAULT_PRICE
         const res = await supabase.functions.invoke('stripe-checkout', {
           body: { type: 'membership', creatorId, amount: price },
         })
-        if (res.error) throw new Error(res.error.message)
+        if (res.error || res.data?.error) throw new Error(res.data?.error ?? res.error?.message ?? '購入に失敗しました')
+        if (!res.data?.url) throw new Error('決済URLの取得に失敗しました')
         window.location.href = res.data.url
         return // リダイレクト後は処理不要
       }
     } catch (e: any) {
       if (e?.code !== 'E_USER_CANCELLED') {
-        Alert.alert('エラー', e.message ?? '購入に失敗しました')
+        if (IS_WEB) {
+          window.alert('エラー: ' + (e.message ?? '購入に失敗しました'))
+        } else {
+          Alert.alert('エラー', e.message ?? '購入に失敗しました')
+        }
       }
     } finally {
       setProcessing(false)

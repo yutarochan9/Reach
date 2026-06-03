@@ -98,28 +98,24 @@ serve(async (req) => {
     if (type === 'membership') {
       if (!creatorId || !amount) throw new Error('creatorId and amount are required')
 
-      // クリエイターが振込口座を登録済みか確認
-      const { data: creatorProfile } = await supabase
-        .from('profiles')
-        .select('bank_account_number, membership_active')
-        .eq('id', creatorId)
-        .single()
-
-      if (!creatorProfile?.bank_account_number) {
-        throw new Error('クリエイターが振込先口座を登録していません')
+      if (!amount || ![500, 1000, 3000].includes(amount as number)) {
+        throw new Error(`Unsupported membership amount: ${amount}`)
       }
 
-      // 固定 Price ID を使用（500 / 1000 / 3000 のいずれか）
-      const membershipPriceId = MEMBERSHIP_PRICE_IDS[amount as number]
-      if (!membershipPriceId) throw new Error(`Unsupported membership amount: ${amount}`)
-
-      // 全額 Reach のアカウントに入る（Stripe Connect なし）
-      // webhook で creator_earnings に収益を記録し、月次で振込
+      // price_data で都度作成（事前にPrice IDを登録不要）
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: 'subscription',
         payment_method_types: ['card'],
-        line_items: [{ price: membershipPriceId, quantity: 1 }],
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: 'jpy',
+            unit_amount: amount as number,
+            recurring: { interval: 'month' },
+            product_data: { name: `メンバーシップ（月額 ¥${amount}）` },
+          },
+        }],
         success_url: `${APP_URL}/membership-checkout/${creatorId}?payment=success`,
         cancel_url: `${APP_URL}/creator/${creatorId}`,
         locale: 'ja',
@@ -176,8 +172,9 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (error) {
+    // 200で返してクライアント側でエラーメッセージを読めるようにする
     return new Response(JSON.stringify({ error: (error as Error).message }), {
-      status: 400,
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
