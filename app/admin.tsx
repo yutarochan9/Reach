@@ -1440,13 +1440,56 @@ export default function AdminScreen() {
       ════════════════════════════════════ */}
       {tab === 'flags' && (
         <ScrollView style={paneStyle} contentContainerStyle={st.tabContent}>
+
+          {/* ── メンテナンスモード（専用カード） ─────────────────── */}
+          {(() => {
+            const maintenanceFlag = flags.find(f => f.key === 'maintenance_mode')
+            const isOn = maintenanceFlag?.enabled ?? false
+            const toggle = async () => {
+              if (maintenanceFlag) {
+                toggleFlag(maintenanceFlag)
+              } else {
+                // まだDBにない場合は作成してトグル
+                const { data } = await supabase.from('feature_flags').insert({
+                  key: 'maintenance_mode',
+                  enabled: true,
+                  description: 'trueにすると管理者以外はメンテナンス画面のみ表示',
+                }).select().single()
+                if (data) setFlags(prev => [...prev, data as FeatureFlag])
+              }
+            }
+            return (
+              <View style={[st.card, { borderWidth: isOn ? 2 : 1, borderColor: isOn ? '#E05555' : Colors.border, gap: 10 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isOn ? '#FEE2E2' : Colors.background, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="construct-outline" size={18} color={isOn ? '#E05555' : Colors.textLight} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.flagKey, { color: isOn ? '#E05555' : Colors.text }]}>メンテナンスモード</Text>
+                    <Text style={st.listSub}>ONにすると管理者以外アクセス不可</Text>
+                  </View>
+                  <ToggleSwitch value={isOn} onValueChange={toggle} />
+                </View>
+                {isOn && (
+                  <View style={{ backgroundColor: '#FEF2F2', borderRadius: 8, padding: 10 }}>
+                    <Text style={{ fontSize: 12, color: '#B91C1C', fontWeight: '600' }}>
+                      ⚠ 現在メンテナンス中です。管理者以外はアクセスできません。
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )
+          })()}
+
+          <View style={{ height: 1, backgroundColor: Colors.border, marginVertical: 4 }} />
+
           <TouchableOpacity style={st.addBtn} onPress={addFlag}>
             <Ionicons name="add-circle-outline" size={18} color={Colors.accent} />
             <Text style={{ color: Colors.accent, fontWeight: '600', fontSize: 14 }}>フラグを追加</Text>
           </TouchableOpacity>
-          {flags.length === 0
+          {flags.filter(f => f.key !== 'maintenance_mode').length === 0
             ? <Text style={st.empty}>フラグがありません</Text>
-            : flags.map(f => (
+            : flags.filter(f => f.key !== 'maintenance_mode').map(f => (
               <View key={f.id} style={[st.card, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={st.flagKey}>{f.key}</Text>

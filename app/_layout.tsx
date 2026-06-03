@@ -14,7 +14,7 @@ import CookieBanner from './components/CookieBanner'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from '../constants/colors'
-import { BETA_GATE, MAINTENANCE_MODE, ADMIN_USER_ID } from '../constants/config'
+import { BETA_GATE, ADMIN_USER_ID } from '../constants/config'
 import BetaGate, { isBetaUnlocked } from './beta-gate'
 
 // ── メンテナンス画面 ────────────────────────────────────────────────
@@ -141,19 +141,27 @@ export default function RootLayout() {
   }, [])
 
   useEffect(() => {
-    if (!MAINTENANCE_MODE) {
-      setIsMaintenanceBlocked(false)
-      setMaintenanceChecked(true)
-      return
+    // feature_flagsテーブルの maintenance_mode を参照（管理者画面からリアルタイム切替可能）
+    const checkMaintenance = async () => {
+      try {
+        const [{ data: flagData }, { data: { user } }] = await Promise.all([
+          supabase.from('feature_flags').select('enabled').eq('key', 'maintenance_mode').maybeSingle(),
+          supabase.auth.getUser(),
+        ])
+        const isOn = flagData?.enabled ?? false
+        if (!isOn) {
+          setIsMaintenanceBlocked(false)
+        } else {
+          // メンテ中: ログインユーザーが管理者(ADMIN_USER_ID)かチェック
+          setIsMaintenanceBlocked(!user || user.id !== ADMIN_USER_ID)
+        }
+      } catch {
+        setIsMaintenanceBlocked(false)
+      } finally {
+        setMaintenanceChecked(true)
+      }
     }
-    // メンテ中: ログインユーザーが管理者かチェック
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setIsMaintenanceBlocked(!user || user.id !== ADMIN_USER_ID)
-      setMaintenanceChecked(true)
-    }).catch(() => {
-      setIsMaintenanceBlocked(true)
-      setMaintenanceChecked(true)
-    })
+    checkMaintenance()
   }, [])
 
   // パスが変わるたびに保存（認証・オンボーディング画面は除く）

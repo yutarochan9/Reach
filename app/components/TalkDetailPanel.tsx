@@ -70,6 +70,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const tileClosedByScrollRef = useRef(false)  // スクロールで閉じたかどうか
   const tileOpenRef = useRef(true)             // stale closure回避用
   const scrolledFarEnoughRef = useRef(false)   // 十分上にスクロールしたかどうか（再開条件）
+  const tileClosedAtRef = useRef(0)            // タイルを閉じた時刻（クールダウン用）
 
   const load = useCallback(async () => {
     try {
@@ -458,13 +459,17 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
           if (tileOpenRef.current) {
             // タイル表示中: 上に30px以上スクロールしたら閉じる
             if (currentY > prevScrollYRef.current + 30) {
-              scrolledFarEnoughRef.current = true
+              scrolledFarEnoughRef.current = false
+              tileClosedAtRef.current = Date.now()
               closeTileAnimated(true)
             }
           } else if (tileClosedByScrollRef.current && tileMenu) {
-            // タイルが閉じた後: 下方向に30px以上スクロールしたら再表示
-            // （絶対位置ではなく方向で判定 → 一番上でも動作する）
-            if (scrolledFarEnoughRef.current && currentY < prevScrollYRef.current - 30) {
+            // 閉じてから800ms以内は再開しない（揺り戻し防止）
+            const cooldownOk = Date.now() - tileClosedAtRef.current > 800
+            // 閉じた後: 上に50px以上行ったら「十分上に行った」とみなす
+            if (currentY > prevScrollYRef.current + 50) scrolledFarEnoughRef.current = true
+            // 十分上に行った後、下方向に50px以上スクロールしたら再表示
+            if (cooldownOk && scrolledFarEnoughRef.current && currentY < prevScrollYRef.current - 50) {
               scrolledFarEnoughRef.current = false
               openTileAnimated()
             }
