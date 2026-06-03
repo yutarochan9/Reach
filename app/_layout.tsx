@@ -319,7 +319,7 @@ export default function RootLayout() {
   // ゲート確認中は何も表示しない（チラつき防止）
   if (!gateChecked || !maintenanceChecked) return null
   // メンテナンス中は管理者以外にメンテ画面のみ表示
-  if (MAINTENANCE_MODE && isMaintenanceBlocked) {
+  if (isMaintenanceBlocked) {
     return <MaintenanceScreen />
   }
   // パスワード未入力ならゲート画面だけ表示
