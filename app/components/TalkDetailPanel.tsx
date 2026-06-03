@@ -62,9 +62,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
-  const initialScrollDoneRef = useRef(false)
-  const userScrolledUpRef = useRef(false)
-  const initialLoadDoneRef = useRef(false)
   const prevScrollYRef = useRef(0)         // スクロール方向検出用
   const tileGridAnim = useRef(new Animated.Value(1)).current  // 1=open, 0=closed
   const tileClosedByScrollRef = useRef(false)  // スクロールで閉じたかどうか
@@ -175,30 +172,16 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
 
   // creatorId が変わったらリロード
   useEffect(() => {
-    userScrolledUpRef.current = false
-    initialLoadDoneRef.current = false
-    initialScrollDoneRef.current = false
     setLoading(true)
     setGroups([])
     load()
   }, [load])
 
-  // 配信グループ数が変わったらスクロール処理
+  // 開いたとき一回だけ最下部へ
   useEffect(() => {
     if (groups.length === 0) return
-    if (!initialLoadDoneRef.current) {
-      // 初回: 複数タイミングでscrollToEndを打ち、レイアウト確定を確実に捕捉
-      initialLoadDoneRef.current = true
-      userScrolledUpRef.current = false
-      const t1 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50)
-      const t2 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 250)
-      const t3 = setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 600)
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
-    } else if (!userScrolledUpRef.current) {
-      // 新着: ユーザーが下にいる場合のみ追従
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 80)
-    }
-  }, [groups.length])
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
+  }, [senderId])
 
   // groups が更新されたら、含まれる画像URLのサイズを取得
   useEffect(() => {
@@ -464,31 +447,11 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         keyExtractor={item => item.anchorId}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => {
-          if (!userScrolledUpRef.current) {
-            flatListRef.current?.scrollToEnd({ animated: false })
-          }
-        }}
-        onScrollBeginDrag={() => {
-          // ネイティブ: ドラッグ開始で追従を止める
-          userScrolledUpRef.current = true
-        }}
         onScroll={(e) => {
-          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-          const currentY = contentOffset.y
-          const distFromBottom = contentSize.height - currentY - layoutMeasurement.height
-          if (distFromBottom < 60) {
-            userScrolledUpRef.current = false
-            // 最下部に戻ったとき、スクロールで閉じたタイルを再表示（refで最新のopen状態を参照）
-            if (!tileOpenRef.current && tileClosedByScrollRef.current && tileMenu) {
-              openTileAnimated()
-            }
-          } else {
-            // 上方向スクロールを検出してタイルを閉じる（方向ベース）
-            if (tileOpenRef.current && currentY < prevScrollYRef.current) {
-              closeTileAnimated(true)
-            }
-            userScrolledUpRef.current = true
+          const currentY = e.nativeEvent.contentOffset.y
+          // 上スクロールでタイルを閉じる
+          if (tileOpenRef.current && currentY < prevScrollYRef.current) {
+            closeTileAnimated(true)
           }
           prevScrollYRef.current = currentY
         }}

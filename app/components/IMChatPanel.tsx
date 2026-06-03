@@ -56,8 +56,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const myIdRef = useRef<string | null>(null)
   const escalationCooldownRef = useRef(false)
-  const initialScrollDoneRef = useRef(false)  // 初回スクロール完了フラグ
-  const userScrolledUpRef = useRef(false)     // ユーザーが手動で上スクロール中かどうか（talk/[id].tsxと同じ方式）
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -158,9 +156,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   }, [partnerId])
 
   useEffect(() => {
-    // 会話が切り替わったらフラグをリセット
-    initialScrollDoneRef.current = false
-    userScrolledUpRef.current = false
     const cached = _dmCache.get(partnerId)
     if (cached && cached.length > 0) {
       // モジュールキャッシュあり: データは即時、scroll確定後に表示
@@ -189,16 +184,11 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     }
   }, [load, partnerId])
 
-  // ロード完了時スクロール（talk/[id].tsxと同じ方式）
-  // 初回のみ最下部へ強制スクロール
+  // 開いたとき一回だけ最下部へ
   useEffect(() => {
-    if (messages.length === 0 || initialScrollDoneRef.current) return
-    initialScrollDoneRef.current = true
-    userScrolledUpRef.current = false
-    const scroll = () => flatListRef.current?.scrollToEnd({ animated: false })
-    scroll()
-    setTimeout(scroll, 200)
-  }, [messages.length])
+    if (messages.length === 0) return
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
+  }, [partnerId])
 
   // ポーリング：2秒おきに新着メッセージ取得 + クールダウン解除チェック
   useEffect(() => {
@@ -220,10 +210,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
           const newMsgs = msgs.filter((m: any) => !prevIds.has(m.id))
           if (newMsgs.length === 0) return prev
           triggerDmReload()
-          // 最下部にいる場合のみ新着で追従スクロール
-          if (!userScrolledUpRef.current) {
-            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200)
-          }
+          setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100)
           return [...prev, ...newMsgs.map((m: any) => ({ ...m, reply_preview: null }))]
         })
       }
@@ -269,8 +256,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       }).select().single()
       if (data) {
         setMessages(prev => [...prev, { ...data, reply_preview: null }])
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 300)
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 600)
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
       }
       // クリエーターにプッシュ通知を送信
       sendPushToUsers(
@@ -303,7 +289,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     const { data } = await supabase.from('messages').insert(insertData).select().single()
     if (data) {
       setMessages(prev => [...prev, { ...data, reply_preview: replyTo ? replyTo.content : null }])
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 150)
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
     }
     setReplyTo(null)
     triggerDmReload()
@@ -397,21 +383,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         keyExtractor={item => item.id}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => {
-          // 初回スクロールはuseEffectで処理するのでスキップ（talk/[id].tsxと同じ）
-          if (!initialScrollDoneRef.current) return
-          // ユーザーが上にスクロール中でなければ最下部へ追従
-          if (!userScrolledUpRef.current) {
-            flatListRef.current?.scrollToEnd({ animated: false })
-          }
-        }}
-        onScroll={(e) => {
-          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-          const distFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height
-          // 最下部60px以内なら「下にいる」とみなす（talk/[id].tsxと同じ閾値）
-          userScrolledUpRef.current = distFromBottom > 60
-        }}
-        scrollEventThrottle={50}
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={40} color={Colors.border} />

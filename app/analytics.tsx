@@ -236,6 +236,8 @@ export default function AnalyticsScreen() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([])
   const [memberStats, setMemberStats] = useState({ memberCount: 0, totalPosts: 0, monthlyPosts: 0, retentionRate: 0 })
   const [activeTab, setActiveTab] = useState<'broadcast' | 'revenue'>('broadcast')
+  const [totalRevenue, setTotalRevenue] = useState(0)
+  const [monthlyRevenue, setMonthlyRevenue] = useState(0)
   const [durationBuckets, setDurationBuckets] = useState([
     { label: '1ヶ月未満', count: 0, color: '#C4956A' },
     { label: '1〜3ヶ月', count: 0, color: '#8B5E3C' },
@@ -319,6 +321,18 @@ export default function AnalyticsScreen() {
       monthlyPosts: monthlyMbPosts ?? 0,
       retentionRate,
     })
+
+    // 収益データ取得
+    const startOfThisMonth = new Date(); startOfThisMonth.setDate(1); startOfThisMonth.setHours(0,0,0,0)
+    const [{ data: allEarnings }, { data: monthlyEarnings }] = await Promise.all([
+      supabase.from('creator_earnings').select('net_amount').eq('creator_id', user.id),
+      supabase.from('creator_earnings').select('net_amount').eq('creator_id', user.id).gte('created_at', startOfThisMonth.toISOString()),
+    ])
+    const NET_RATE = 0.264  // Reachの取り分30% - Stripe手数料3.6%
+    const totalRaw = (allEarnings ?? []).reduce((s: number, r: any) => s + (r.net_amount ?? 0), 0)
+    const monthlyRaw = (monthlyEarnings ?? []).reduce((s: number, r: any) => s + (r.net_amount ?? 0), 0)
+    setTotalRevenue(Math.floor(totalRaw * NET_RATE))
+    setMonthlyRevenue(Math.floor(monthlyRaw * NET_RATE))
 
     const bcIds = (bcs ?? []).map((b: any) => b.id)
     const [{ data: reactions }, { data: reads }, { data: replies }] = await Promise.all([
@@ -473,7 +487,7 @@ export default function AnalyticsScreen() {
           <Text style={[s.tabText, activeTab === 'broadcast' && s.tabTextActive]}>配信分析</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[s.tabItem, activeTab === 'revenue' && s.tabItemActive]} onPress={() => setActiveTab('revenue')}>
-          <Text style={[s.tabText, activeTab === 'revenue' && s.tabTextActive]}>メンバーシップ</Text>
+          <Text style={[s.tabText, activeTab === 'revenue' && s.tabTextActive]}>収益</Text>
         </TouchableOpacity>
       </View>
 
@@ -575,6 +589,25 @@ export default function AnalyticsScreen() {
         </>}
 
         {activeTab === 'revenue' && <>
+
+        {/* ── 収益サマリー ── */}
+        <View style={s.card}>
+          <Text style={s.cardSectionLabel}>収益</Text>
+          <Text style={[s.cardSub, { marginBottom: 12 }]}>Reach取り分30% - Stripe手数料3.6% = 26.4%</Text>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={[s.mbCard, { flex: 1, borderWidth: 1.5, borderColor: C.green + '60' }]}>
+              <Ionicons name="cash-outline" size={16} color={C.green} />
+              <Text style={{ fontSize: 28, fontWeight: '800', color: C.green, letterSpacing: -1 }}>¥{totalRevenue.toLocaleString()}</Text>
+              <Text style={s.mbLabel}>累計収益</Text>
+            </View>
+            <View style={[s.mbCard, { flex: 1 }]}>
+              <Ionicons name="calendar-outline" size={16} color={C.button} />
+              <Text style={{ fontSize: 22, fontWeight: '800', color: C.button, letterSpacing: -1 }}>¥{monthlyRevenue.toLocaleString()}</Text>
+              <Text style={s.mbLabel}>今月の収益</Text>
+            </View>
+          </View>
+        </View>
+
         {/* ── メンバーシップ（会員数は常に表示） ── */}
         <View style={s.card}>
           <View style={s.chartHead}>
