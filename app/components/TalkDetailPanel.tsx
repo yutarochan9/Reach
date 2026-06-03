@@ -458,14 +458,13 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
           if (tileOpenRef.current) {
             // タイル表示中: 上に30px以上スクロールしたら閉じる
             if (currentY > prevScrollYRef.current + 30) {
-              scrolledFarEnoughRef.current = false
+              scrolledFarEnoughRef.current = true
               closeTileAnimated(true)
             }
           } else if (tileClosedByScrollRef.current && tileMenu) {
-            // タイルが閉じた後: 100px以上スクロールしたら「十分上に行った」とみなす
-            if (currentY > 100) scrolledFarEnoughRef.current = true
-            // 十分上まで行った後、最下部(y<20)に戻ったら再表示
-            if (scrolledFarEnoughRef.current && currentY < 20) {
+            // タイルが閉じた後: 下方向に30px以上スクロールしたら再表示
+            // （絶対位置ではなく方向で判定 → 一番上でも動作する）
+            if (scrolledFarEnoughRef.current && currentY < prevScrollYRef.current - 30) {
               scrolledFarEnoughRef.current = false
               openTileAnimated()
             }
