@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Tabs, router, usePathname } from 'expo-router'
+import { Tabs, router, usePathname, useSegments } from 'expo-router'
 import { Colors } from '../../constants/colors'
 import { View, Text, StyleSheet, TouchableOpacity, Platform, useWindowDimensions } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
@@ -82,6 +82,7 @@ export default function TabLayout() {
   const { width } = useWindowDimensions()
   const isDesktop = Platform.OS === 'web' && width >= 900
   const pathname = usePathname()
+  const segments = useSegments()
 
   const [selectedTalkId, setSelectedTalkId] = useState<string | null>(null)
   const [selectedDmId, setSelectedDmId] = useState<string | null>(null)
@@ -101,7 +102,7 @@ export default function TabLayout() {
   }, [pathname])
 
   // デスクトップのトークページでは常に2カラム表示
-  const isTalkPage = pathname.startsWith('/talk') || pathname === '/talk'
+  const isTalkPage = segments.includes('talk')
   const showTwoCol = isDesktop && isTalkPage
 
   return (
