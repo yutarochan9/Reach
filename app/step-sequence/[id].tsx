@@ -13,6 +13,7 @@ type StepMessage = {
   day_offset: number
   content: string
   sort_order: number
+  is_subscriber_only: boolean  // メンバーシップ限定フロー配信
 }
 
 // 固定の日数選択肢（カスタム入力は別途 UI で対応）
@@ -67,7 +68,7 @@ export default function StepSequenceEditScreen() {
   useFocusEffect(useCallback(() => { load() }, [load]))
 
   const openNew = (day: number) => {
-    setEditingMsg({ day_offset: day, content: '' })
+    setEditingMsg({ day_offset: day, content: '', is_subscriber_only: false })
     // DAY_OPTIONSにない値はカスタム入力として扱う
     const isCustom = !DAY_OPTIONS.includes(day)
     setShowCustomDay(isCustom)
@@ -91,6 +92,7 @@ export default function StepSequenceEditScreen() {
       await supabase.from('step_messages').update({
         day_offset: editingMsg.day_offset,
         content: editingMsg.content.trim(),
+        is_subscriber_only: editingMsg.is_subscriber_only ?? false,
       }).eq('id', editingMsg.id)
     } else {
       // sort_order は同日内の最大値 + 1
@@ -103,6 +105,7 @@ export default function StepSequenceEditScreen() {
         day_offset: editingMsg.day_offset ?? 0,
         content: editingMsg.content?.trim(),
         sort_order: nextOrder,
+        is_subscriber_only: editingMsg.is_subscriber_only ?? false,
       })
     }
 
@@ -245,10 +248,16 @@ export default function StepSequenceEditScreen() {
                     </View>
                     {/* カード */}
                     <TouchableOpacity
-                      style={styles.msgCard}
+                      style={[styles.msgCard, msg.is_subscriber_only && styles.msgCardMembership]}
                       onPress={() => openEdit(msg)}
                       activeOpacity={0.75}
                     >
+                      {msg.is_subscriber_only && (
+                        <View style={styles.membershipBadge}>
+                          <Ionicons name="star" size={10} color="#fff" />
+                          <Text style={styles.membershipBadgeText}>メンバーシップ限定</Text>
+                        </View>
+                      )}
                       <Text style={styles.msgContent} numberOfLines={3}>{msg.content}</Text>
                     </TouchableOpacity>
                     {/* 操作ボタン */}
@@ -418,6 +427,23 @@ export default function StepSequenceEditScreen() {
                   <Text style={styles.customDayUnit}>日後に送信</Text>
                 </View>
               )}
+              {/* メンバーシップ限定トグル */}
+              <TouchableOpacity
+                style={styles.membershipToggleRow}
+                onPress={() => setEditingMsg(prev => ({ ...prev, is_subscriber_only: !prev?.is_subscriber_only }))}
+                activeOpacity={0.8}
+              >
+                <View style={styles.membershipToggleLeft}>
+                  <Ionicons name="star-outline" size={18} color={Colors.accent} />
+                  <View>
+                    <Text style={styles.membershipToggleLabel}>メンバーシップ限定</Text>
+                    <Text style={styles.membershipToggleSub}>ONにするとメンバーのみに送信されます</Text>
+                  </View>
+                </View>
+                <View style={[styles.toggleTrack, editingMsg?.is_subscriber_only && styles.toggleTrackOn]}>
+                  <View style={[styles.toggleThumb, editingMsg?.is_subscriber_only && styles.toggleThumbOn]} />
+                </View>
+              </TouchableOpacity>
               <Text style={styles.fieldLabel}>メッセージ内容</Text>
               <TextInput
                 style={styles.textarea}
@@ -553,6 +579,32 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border, padding: 12,
   },
   msgContent: { fontSize: 13, color: Colors.text, lineHeight: 19 },
+  msgCardMembership: { borderColor: Colors.accent, borderWidth: 1.5 },
+  membershipBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: Colors.accent, borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 6,
+  },
+  membershipBadgeText: { fontSize: 9, color: '#fff', fontWeight: '700' },
+  membershipToggleRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border, padding: 14,
+  },
+  membershipToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  membershipToggleLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  membershipToggleSub: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
+  toggleTrack: {
+    width: 46, height: 26, borderRadius: 13,
+    backgroundColor: '#D1D5DB', justifyContent: 'center', padding: 2,
+  },
+  toggleTrackOn: { backgroundColor: Colors.accent },
+  toggleThumb: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#fff', shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
+  },
+  toggleThumbOn: { transform: [{ translateX: 20 }] },
   msgActions: { gap: 2, paddingTop: 6 },
   moveBtn: { padding: 3 },
   deleteBtn: { padding: 3, marginTop: 2 },

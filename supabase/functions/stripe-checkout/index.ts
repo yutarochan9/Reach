@@ -68,6 +68,33 @@ serve(async (req) => {
       await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
     }
 
+    // ── メンバーシップ加入確認（payment=success リダイレクト後のフォールバック） ──
+    // Stripeウェブフックが遅延/未着の場合にクライアントからservice_roleで直接upsertする
+    if (type === 'confirm-membership') {
+      if (!creatorId) throw new Error('creatorId is required')
+
+      const { data: existing } = await supabase
+        .from('subscriptions')
+        .select('id, status')
+        .eq('subscriber_id', user.id)
+        .eq('creator_id', creatorId)
+        .maybeSingle()
+
+      if (!existing) {
+        await supabase.from('subscriptions').insert({
+          subscriber_id: user.id,
+          creator_id: creatorId,
+          status: 'active',
+        })
+      } else if (existing.status !== 'active') {
+        await supabase.from('subscriptions').update({ status: 'active' }).eq('id', existing.id)
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     // ── 開発支援金（一回払い・自由金額） ─────────────────────
     if (type === 'support') {
       if (!amount || amount < 100 || amount > 500000) throw new Error('Invalid amount')

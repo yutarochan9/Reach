@@ -40,14 +40,30 @@ serve(async (req) => {
     // 今日送るべきステップメッセージを取得
     const { data: messages } = await supabase
       .from('step_messages')
-      .select('id, content')
+      .select('id, content, is_subscriber_only')
       .eq('sequence_id', enrollment.sequence_id)
       .eq('day_offset', daysSince)
 
     if (!messages?.length) continue
 
+    // メンシプ限定メッセージを送るかどうか: フォロワーがアクティブ会員か確認
+    let isSubscriber = false
+    if (messages.some((m: any) => m.is_subscriber_only)) {
+      const { data: subData } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('subscriber_id', enrollment.follower_id)
+        .eq('creator_id', enrollment.creator_id)
+        .eq('status', 'active')
+        .maybeSingle()
+      isSubscriber = !!subData
+    }
+
     // 既に今日送信済みか確認（broadcasts テーブルで重複チェック）
     for (const msg of messages) {
+      // メンシプ限定メッセージは会員のみ送信
+      if ((msg as any).is_subscriber_only && !isSubscriber) continue
+
       const { count } = await supabase
         .from('broadcasts')
         .select('id', { count: 'exact', head: true })
@@ -65,6 +81,7 @@ serve(async (req) => {
         target: 'step',
         step_message_id: msg.id,
         recipient_id: enrollment.follower_id,
+        is_subscriber_only: (msg as any).is_subscriber_only ?? false,
       })
 
       sent++

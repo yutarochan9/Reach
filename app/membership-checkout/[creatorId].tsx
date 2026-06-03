@@ -56,34 +56,15 @@ export default function MembershipCheckout() {
 
       // Stripe決済完了後にリダイレクトで戻ってきた場合
       if (payment === 'success') {
-        // Webhook fallback: DBに直接subscriptionをupsert（Webhookが遅延/未着の場合の保険）
+        // Webhook fallback: stripe-checkout edge function (service_role) でupsert
+        // クライアントからの直接insertはRLSでブロックされる可能性があるため
         try {
-          const { data: existingSub } = await supabase
-            .from('subscriptions')
-            .select('id, status')
-            .eq('subscriber_id', user.id)
-            .eq('creator_id', creatorId)
-            .maybeSingle()
-          if (!existingSub) {
-            await supabase.from('subscriptions').insert({
-              subscriber_id: user.id,
-              creator_id: creatorId,
-              status: 'active',
-            })
-          } else if (existingSub.status !== 'active') {
-            await supabase.from('subscriptions').update({ status: 'active' }).eq('id', existingSub.id)
-          }
+          await supabase.functions.invoke('stripe-checkout', {
+            body: { type: 'confirm-membership', creatorId },
+          })
         } catch {}
-
-        const welcomeMsg = data?.membership_welcome?.trim()
-        const baseMsg = `${data?.display_name ?? 'クリエーター'} のメンバーシップに加入しました！`
-        const fullMsg = welcomeMsg ? `${baseMsg}\n\n${welcomeMsg}` : baseMsg
-        if (IS_WEB) {
-          window.alert(`加入完了 🎉\n${fullMsg}`)
-        } else {
-          Alert.alert('加入完了 🎉', fullMsg)
-        }
-        router.replace(`/creator/${creatorId}` as any)
+        // トーク画面（配信一覧）へリダイレクト → 加入後すぐにメンシプ限定配信を閲覧できる
+        router.replace(`/talk/${creatorId}` as any)
       }
     }
     fetch()
