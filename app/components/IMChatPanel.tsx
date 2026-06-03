@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Modal, Pressable, Alert,
@@ -56,7 +56,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const myIdRef = useRef<string | null>(null)
   const escalationCooldownRef = useRef(false)
-  const initialScrolledRef = useRef(false)  // 初回スクロール済みフラグ
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -185,10 +184,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     }
   }, [load, partnerId])
 
-  // partnerId切り替え時にフラグリセット
-  useEffect(() => {
-    initialScrolledRef.current = false
-  }, [partnerId])
 
   // ポーリング：2秒おきに新着メッセージ取得 + クールダウン解除チェック
   useEffect(() => {
@@ -345,6 +340,9 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     )
   }
 
+  // invertedで下から描画するため逆順にする
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages])
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, isWeb && webKbHeight > 0 ? { paddingBottom: webKbHeight } : undefined]}
@@ -379,15 +377,11 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
 
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={reversedMessages}
         keyExtractor={item => item.id}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => {
-          if (initialScrolledRef.current) return
-          initialScrolledRef.current = true
-          flatListRef.current?.scrollToEnd({ animated: false })
-        }}
+        inverted
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={40} color={Colors.border} />
@@ -396,7 +390,8 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         )}
         renderItem={({ item, index }) => {
           const isOwn = item.sender_id === myId
-          const prev = index > 0 ? messages[index - 1] : null
+          // invertedなので index+1 が1つ古いメッセージ
+          const prev = index < reversedMessages.length - 1 ? reversedMessages[index + 1] : null
           // 担当者呼び出しメッセージ — 担当者側にも目立つよう全幅カードで表示
           if (item.content === '〔担当者への対応依頼〕') {
             return (

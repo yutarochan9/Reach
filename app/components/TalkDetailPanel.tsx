@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
   ActivityIndicator, Image, Modal, Pressable, Linking, Platform, Animated,
@@ -63,7 +63,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const prevScrollYRef = useRef(0)         // スクロール方向検出用
-  const initialScrolledRef = useRef(false) // 初回スクロール済みフラグ
   const tileGridAnim = useRef(new Animated.Value(1)).current  // 1=open, 0=closed
   const tileClosedByScrollRef = useRef(false)  // スクロールで閉じたかどうか
   const tileOpenRef = useRef(true)             // stale closure回避用
@@ -178,10 +177,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     load()
   }, [load])
 
-  // senderId切り替え時にフラグリセット
-  useEffect(() => {
-    initialScrolledRef.current = false
-  }, [senderId])
 
   // groups が更新されたら、含まれる画像URLのサイズを取得
   useEffect(() => {
@@ -400,6 +395,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     </View>
   ) : null
 
+  // invertedで下から描画するため逆順にする
+  const reversedGroups = useMemo(() => [...groups].reverse(), [groups])
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -443,24 +441,11 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       {/* メッセージ一覧 */}
       <FlatList
         ref={flatListRef}
-        data={groups}
+        data={reversedGroups}
         keyExtractor={item => item.anchorId}
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => {
-          if (initialScrolledRef.current) return
-          initialScrolledRef.current = true
-          flatListRef.current?.scrollToEnd({ animated: false })
-        }}
-        onScroll={(e) => {
-          const currentY = e.nativeEvent.contentOffset.y
-          // 上スクロールでタイルを閉じる
-          if (tileOpenRef.current && currentY < prevScrollYRef.current) {
-            closeTileAnimated(true)
-          }
-          prevScrollYRef.current = currentY
-        }}
-        scrollEventThrottle={50}
+        inverted
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="radio-outline" size={40} color={Colors.border} />
@@ -469,7 +454,8 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         )}
         renderItem={({ item: group, index }) => {
           if (!group.blocks.length) return null
-          const prevGroup = index > 0 ? groups[index - 1] : null
+          // invertedなので index+1 が1つ古いグループ
+          const prevGroup = index < reversedGroups.length - 1 ? reversedGroups[index + 1] : null
           const showDate = !prevGroup || !prevGroup.blocks.length ||
             new Date(group.blocks[0].created_at).toDateString() !== new Date(prevGroup.blocks[0].created_at).toDateString()
           return (
