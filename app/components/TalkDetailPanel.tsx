@@ -63,6 +63,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const prevScrollYRef = useRef(0)         // スクロール方向検出用
+  const initialScrolledRef = useRef(false) // 初回スクロール済みフラグ
   const tileGridAnim = useRef(new Animated.Value(1)).current  // 1=open, 0=closed
   const tileClosedByScrollRef = useRef(false)  // スクロールで閉じたかどうか
   const tileOpenRef = useRef(true)             // stale closure回避用
@@ -177,11 +178,17 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     load()
   }, [load])
 
-  // 開いたとき一回だけ最下部へ
+  // senderId切り替え時にフラグリセット
   useEffect(() => {
-    if (groups.length === 0) return
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
+    initialScrolledRef.current = false
   }, [senderId])
+
+  // 配信が初めて表示されたとき一回だけ最下部へ
+  useEffect(() => {
+    if (groups.length === 0 || initialScrolledRef.current) return
+    initialScrolledRef.current = true
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
+  }, [groups.length])
 
   // groups が更新されたら、含まれる画像URLのサイズを取得
   useEffect(() => {

@@ -56,6 +56,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const myIdRef = useRef<string | null>(null)
   const escalationCooldownRef = useRef(false)
+  const initialScrolledRef = useRef(false)  // 初回スクロール済みフラグ
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -184,11 +185,17 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     }
   }, [load, partnerId])
 
-  // 開いたとき一回だけ最下部へ
+  // partnerId切り替え時にフラグリセット
   useEffect(() => {
-    if (messages.length === 0) return
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
+    initialScrolledRef.current = false
   }, [partnerId])
+
+  // メッセージが初めて表示されたとき一回だけ最下部へ
+  useEffect(() => {
+    if (messages.length === 0 || initialScrolledRef.current) return
+    initialScrolledRef.current = true
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100)
+  }, [messages.length])
 
   // ポーリング：2秒おきに新着メッセージ取得 + クールダウン解除チェック
   useEffect(() => {
