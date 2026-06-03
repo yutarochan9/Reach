@@ -329,6 +329,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     b.x != null ? b : { ...b, ...(DEFAULT_TILE_POS[i] ?? { x: 0, y: 0, w: 6, h: 9 }) }
   ) ?? []
 
+  // invertedで下から描画するため逆順にする（hooksはearly returnより前）
+  const reversedGroups = useMemo(() => [...groups].reverse(), [groups])
+
   const TilePanel = tileMenu && normalizedButtons.length > 0 ? (
     <View style={styles.tileContainer}>
       {tileMenu.panel_bg_image && (
@@ -394,9 +397,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       </Animated.View>
     </View>
   ) : null
-
-  // invertedで下から描画するため逆順にする
-  const reversedGroups = useMemo(() => [...groups].reverse(), [groups])
 
   if (loading) {
     return (

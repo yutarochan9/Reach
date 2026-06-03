@@ -312,6 +312,9 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     return new Date(cur.created_at).toDateString() !== new Date(prev.created_at).toDateString()
   }
 
+  // invertedで下から描画するため逆順にする（hooksはearly returnより前）
+  const reversedMessages = useMemo(() => [...messages].reverse(), [messages])
+
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -339,9 +342,6 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
       </View>
     )
   }
-
-  // invertedで下から描画するため逆順にする
-  const reversedMessages = useMemo(() => [...messages].reverse(), [messages])
 
   return (
     <KeyboardAvoidingView
