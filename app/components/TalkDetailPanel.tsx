@@ -12,6 +12,9 @@ import { useTalkContext } from '../contexts/TalkContext'
 
 const isWeb = Platform.OS === 'web'
 
+// タイルメニューのモジュールレベルキャッシュ（即時表示用）
+const _tileCache = new Map<string, any>()
+
 // ─── 型定義 ────────────────────────────────────────────────────────
 type Broadcast = {
   id: string
@@ -58,7 +61,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
   const [imText, setImText] = useState('')
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
-  const [tileMenu, setTileMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
+  const [tileMenu, setTileMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(_tileCache.get(senderId) ?? null)
   const [tileOpen, setTileOpen] = useState(true)
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
@@ -103,7 +106,9 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       setSenderName(profile?.display_name ?? '')
       setSenderAvatar(profile?.avatar_url ?? null)
       setSenderIsOfficial((profile as any)?.is_official ?? false)
-      setTileMenu(menu && menu.is_active ? menu : null)
+      const tileData = menu && menu.is_active ? menu : null
+      if (tileData) _tileCache.set(senderId, tileData)
+      setTileMenu(tileData)
 
       // メンバーシップ限定配信は本人またはサブスク登録者のみ表示
       const allBcs = (broadcasts ?? []) as Broadcast[]
@@ -446,6 +451,19 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
         inverted
+        onScroll={(e) => {
+          const currentY = e.nativeEvent.contentOffset.y
+          // inverted時: y=0が最下部(新着)、yが増えると上スクロール(古い方向)
+          if (tileOpenRef.current && currentY > prevScrollYRef.current + 10) {
+            // 上にスクロール → タイルを閉じる
+            closeTileAnimated(true)
+          } else if (!tileOpenRef.current && tileClosedByScrollRef.current && currentY < 60 && tileMenu) {
+            // 最下部に戻った → タイルを再表示
+            openTileAnimated()
+          }
+          prevScrollYRef.current = currentY
+        }}
+        scrollEventThrottle={50}
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="radio-outline" size={40} color={Colors.border} />
