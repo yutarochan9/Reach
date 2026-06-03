@@ -505,44 +505,44 @@ export default function AnalyticsScreen() {
           </View>
         )}
 
-        {/* ── メンバーシップ ── */}
+        {/* ── メンバーシップ（会員数は常に表示） ── */}
         <View style={s.card}>
           <View style={s.chartHead}>
             <View>
               <Text style={s.cardSectionLabel}>メンバーシップ</Text>
-              <Text style={s.cardSub}>メンバーシップ限定配信の実績</Text>
+              <Text style={s.cardSub}>会員数・限定配信の実績</Text>
             </View>
             <View style={[s.badge, { backgroundColor: `${C.button}15`, borderColor: `${C.button}40` }]}>
               <Text style={[s.badgeText, { color: C.button }]}>限定配信</Text>
             </View>
           </View>
-          {memberStats.totalPosts === 0 ? (
-            <Text style={{ fontSize: 13, color: C.muted, textAlign: 'center', paddingVertical: 4 }}>
-              メンバーシップ配信していません
-            </Text>
-          ) : (
-            <View style={s.mbGrid}>
-              <View style={s.mbCard}>
-                <Ionicons name="people-outline" size={16} color={C.button} />
-                <Text style={s.mbNum}>{memberStats.memberCount}</Text>
-                <Text style={s.mbLabel}>会員数</Text>
-              </View>
-              <View style={s.mbCard}>
-                <Ionicons name="lock-closed-outline" size={16} color={C.button} />
-                <Text style={s.mbNum}>{memberStats.totalPosts}</Text>
-                <Text style={s.mbLabel}>総投稿数</Text>
-              </View>
-              <View style={s.mbCard}>
-                <Ionicons name="calendar-outline" size={16} color={C.button} />
-                <Text style={s.mbNum}>{memberStats.monthlyPosts}</Text>
-                <Text style={s.mbLabel}>月間投稿数</Text>
-              </View>
-              <View style={s.mbCard}>
-                <Ionicons name="refresh-circle-outline" size={16} color={C.button} />
-                <Text style={s.mbNum}>{memberStats.retentionRate}%</Text>
-                <Text style={s.mbLabel}>継続率</Text>
-              </View>
+          <View style={s.mbGrid}>
+            {/* 会員数は常に表示 */}
+            <View style={[s.mbCard, { borderWidth: 1.5, borderColor: C.button + '40' }]}>
+              <Ionicons name="star" size={16} color={C.button} />
+              <Text style={[s.mbNum, { color: C.button }]}>{memberStats.memberCount}</Text>
+              <Text style={s.mbLabel}>会員数</Text>
             </View>
+            <View style={s.mbCard}>
+              <Ionicons name="lock-closed-outline" size={16} color={C.button} />
+              <Text style={s.mbNum}>{memberStats.totalPosts}</Text>
+              <Text style={s.mbLabel}>総投稿数</Text>
+            </View>
+            <View style={s.mbCard}>
+              <Ionicons name="calendar-outline" size={16} color={C.button} />
+              <Text style={s.mbNum}>{memberStats.monthlyPosts}</Text>
+              <Text style={s.mbLabel}>月間投稿数</Text>
+            </View>
+            <View style={s.mbCard}>
+              <Ionicons name="refresh-circle-outline" size={16} color={C.button} />
+              <Text style={s.mbNum}>{memberStats.retentionRate}%</Text>
+              <Text style={s.mbLabel}>継続率</Text>
+            </View>
+          </View>
+          {memberStats.memberCount === 0 && (
+            <Text style={{ fontSize: 12, color: C.muted, textAlign: 'center', paddingTop: 4, paddingBottom: 8 }}>
+              まだメンバーシップ会員はいません
+            </Text>
           )}
         </View>
 

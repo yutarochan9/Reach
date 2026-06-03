@@ -56,8 +56,8 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const myIdRef = useRef<string | null>(null)
   const escalationCooldownRef = useRef(false)
-  const isAtBottomRef = useRef(true)          // ユーザーが最下部付近にいるかどうか
-  const initialScrollDoneRef = useRef(false)  // 初回スクロール完了フラグ（onScrollの誤検知防止）
+  const initialScrollDoneRef = useRef(false)  // 初回スクロール完了フラグ
+  const userScrolledUpRef = useRef(false)     // ユーザーが手動で上スクロール中かどうか（talk/[id].tsxと同じ方式）
   const [webKbHeight, setWebKbHeight] = useState(0)
 
   useEffect(() => {
@@ -158,9 +158,9 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   }, [partnerId])
 
   useEffect(() => {
-    // 会話が切り替わったら最下部フラグをリセット
-    isAtBottomRef.current = true
-    initialScrollDoneRef.current = false  // 初回スクロールフラグもリセット
+    // 会話が切り替わったらフラグをリセット
+    initialScrollDoneRef.current = false
+    userScrolledUpRef.current = false
     const cached = _dmCache.get(partnerId)
     if (cached && cached.length > 0) {
       // モジュールキャッシュあり: データは即時、scroll確定後に表示
@@ -189,19 +189,15 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
     }
   }, [load, partnerId])
 
-  // メッセージ件数が変わったら最下部へスクロール
-  // 初回は必ず最下部へ（isAtBottomRefに関係なく）、以降は最下部にいる場合のみ
+  // ロード完了時スクロール（talk/[id].tsxと同じ方式）
+  // 初回のみ最下部へ強制スクロール
   useEffect(() => {
-    if (messages.length === 0) return
-    const isFirst = !initialScrollDoneRef.current
-    if (!isFirst && !isAtBottomRef.current) return
-    const scroll = () => {
-      flatListRef.current?.scrollToEnd({ animated: false })
-      initialScrollDoneRef.current = true
-    }
+    if (messages.length === 0 || initialScrollDoneRef.current) return
+    initialScrollDoneRef.current = true
+    userScrolledUpRef.current = false
+    const scroll = () => flatListRef.current?.scrollToEnd({ animated: false })
     scroll()
-    const t = setTimeout(scroll, 300)
-    return () => clearTimeout(t)
+    setTimeout(scroll, 200)
   }, [messages.length])
 
   // ポーリング：2秒おきに新着メッセージ取得 + クールダウン解除チェック
@@ -225,7 +221,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
           if (newMsgs.length === 0) return prev
           triggerDmReload()
           // 最下部にいる場合のみ新着で追従スクロール
-          if (isAtBottomRef.current) {
+          if (!userScrolledUpRef.current) {
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200)
           }
           return [...prev, ...newMsgs.map((m: any) => ({ ...m, reply_preview: null }))]
@@ -402,20 +398,20 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         style={{ flex: 1 }}
         contentContainerStyle={styles.messageList}
         onContentSizeChange={() => {
-          // 初回 or 最下部にいる場合はスクロール（初回は必ず）
-          if (!initialScrollDoneRef.current || isAtBottomRef.current) {
+          // 初回スクロールはuseEffectで処理するのでスキップ（talk/[id].tsxと同じ）
+          if (!initialScrollDoneRef.current) return
+          // ユーザーが上にスクロール中でなければ最下部へ追従
+          if (!userScrolledUpRef.current) {
             flatListRef.current?.scrollToEnd({ animated: false })
-            initialScrollDoneRef.current = true
           }
         }}
         onScroll={(e) => {
-          // 初回スクロール完了前はonScrollを無視（初期レンダリング時の誤検知防止）
-          if (!initialScrollDoneRef.current) return
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
           const distFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height
-          isAtBottomRef.current = distFromBottom < 100
+          // 最下部60px以内なら「下にいる」とみなす（talk/[id].tsxと同じ閾値）
+          userScrolledUpRef.current = distFromBottom > 60
         }}
-        scrollEventThrottle={100}
+        scrollEventThrottle={50}
         ListEmptyComponent={() => (
           <View style={styles.emptyWrap}>
             <Ionicons name="chatbubbles-outline" size={40} color={Colors.border} />

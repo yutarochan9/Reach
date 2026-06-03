@@ -13,14 +13,15 @@ type StepMessage = {
   day_offset: number
   content: string
   sort_order: number
-  is_subscriber_only: boolean  // メンバーシップ限定フロー配信
+  is_subscriber_only: boolean
 }
 
 // 固定の日数選択肢（カスタム入力は別途 UI で対応）
 const DAY_OPTIONS = [0, 1, 3, 7, 30]
 
-function dayLabel(offset: number) {
-  return offset === 0 ? 'フォロー直後' : `${offset}日後`
+function dayLabel(offset: number, type: 'follow' | 'membership' = 'follow') {
+  const prefix = type === 'membership' ? 'メンシプ加入' : 'フォロー'
+  return offset === 0 ? `${prefix}直後` : `${offset}日後`
 }
 
 function groupByDay(msgs: StepMessage[]): { day: number; items: StepMessage[] }[] {
@@ -41,6 +42,7 @@ export default function StepSequenceEditScreen() {
   const { width } = useWindowDimensions()
   const isWide = width >= 768   // タブレット/PCはサイドバイサイド、スマホはエディタのみ
   const [name, setName] = useState('')
+  const [seqType, setSeqType] = useState<'follow' | 'membership'>('follow')  // シーケンスの種類
   const [nameSaving, setNameSaving] = useState(false)
   const [messages, setMessages] = useState<StepMessage[]>([])
   const [loading, setLoading] = useState(true)
@@ -57,11 +59,12 @@ export default function StepSequenceEditScreen() {
 
   const load = useCallback(async () => {
     const [{ data: seq }, { data: msgs }] = await Promise.all([
-      supabase.from('step_sequences').select('name').eq('id', id).single(),
+      supabase.from('step_sequences').select('name, type').eq('id', id).single(),
       supabase.from('step_messages').select('*').eq('sequence_id', id).order('day_offset').order('sort_order'),
     ])
     setName(seq?.name ?? '')
-    setMessages(msgs ?? [])
+    setSeqType((seq?.type ?? 'follow') as 'follow' | 'membership')
+    setMessages((msgs ?? []).map((m: any) => ({ ...m, is_subscriber_only: m.is_subscriber_only ?? false })))
     setLoading(false)
   }, [id])
 
@@ -88,11 +91,13 @@ export default function StepSequenceEditScreen() {
     if (!editingMsg?.content?.trim()) return
     setSaving(true)
 
+    // メンシプ版シーケンスのメッセージはis_subscriber_only=trueを自動設定
+    const isMembership = seqType === 'membership'
     if (editingMsg.id) {
       await supabase.from('step_messages').update({
         day_offset: editingMsg.day_offset,
         content: editingMsg.content.trim(),
-        is_subscriber_only: editingMsg.is_subscriber_only ?? false,
+        is_subscriber_only: isMembership,
       }).eq('id', editingMsg.id)
     } else {
       // sort_order は同日内の最大値 + 1
@@ -105,7 +110,7 @@ export default function StepSequenceEditScreen() {
         day_offset: editingMsg.day_offset ?? 0,
         content: editingMsg.content?.trim(),
         sort_order: nextOrder,
-        is_subscriber_only: editingMsg.is_subscriber_only ?? false,
+        is_subscriber_only: isMembership,
       })
     }
 
@@ -187,7 +192,7 @@ export default function StepSequenceEditScreen() {
           ) : grouped.map((group, gi) => (
             <View key={group.day}>
               <View style={styles.dateBadge}>
-                <Text style={styles.dateBadgeText}>{dayLabel(group.day)}</Text>
+                <Text style={styles.dateBadgeText}>{dayLabel(group.day, seqType)}</Text>
               </View>
               {group.items.map((msg, mi) => (
                 <View key={msg.id} style={styles.bubbleRow}>
@@ -234,7 +239,7 @@ export default function StepSequenceEditScreen() {
                 <View style={styles.dayDot} />
                 <View style={styles.dayBadge}>
                   <Ionicons name="time-outline" size={13} color={Colors.accent} />
-                  <Text style={styles.dayBadgeText}>{dayLabel(group.day)}</Text>
+                  <Text style={styles.dayBadgeText}>{dayLabel(group.day, seqType)}</Text>
                 </View>
               </View>
 
@@ -395,7 +400,7 @@ export default function StepSequenceEditScreen() {
                     onPress={() => { setShowCustomDay(false); setCustomDayInput(''); setEditingMsg(prev => ({ ...prev, day_offset: d })) }}
                   >
                     <Text style={[styles.dayChipText, !showCustomDay && editingMsg?.day_offset === d && styles.dayChipTextActive]}>
-                      {d === 0 ? '直後' : `${d}日後`}
+                      {d === 0 ? (seqType === 'membership' ? 'メンシプ加入直後' : 'フォロー直後') : `${d}日後`}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -427,23 +432,13 @@ export default function StepSequenceEditScreen() {
                   <Text style={styles.customDayUnit}>日後に送信</Text>
                 </View>
               )}
-              {/* メンバーシップ限定トグル */}
-              <TouchableOpacity
-                style={styles.membershipToggleRow}
-                onPress={() => setEditingMsg(prev => ({ ...prev, is_subscriber_only: !prev?.is_subscriber_only }))}
-                activeOpacity={0.8}
-              >
-                <View style={styles.membershipToggleLeft}>
-                  <Ionicons name="star-outline" size={18} color={Colors.accent} />
-                  <View>
-                    <Text style={styles.membershipToggleLabel}>メンバーシップ限定</Text>
-                    <Text style={styles.membershipToggleSub}>ONにするとメンバーのみに送信されます</Text>
-                  </View>
+              {/* メンシプ版であることを表示（編集不可の情報表示のみ） */}
+              {seqType === 'membership' && (
+                <View style={styles.membershipInfo}>
+                  <Ionicons name="star" size={14} color={Colors.accent} />
+                  <Text style={styles.membershipInfoText}>メンシプ会員のみに送信されます</Text>
                 </View>
-                <View style={[styles.toggleTrack, editingMsg?.is_subscriber_only && styles.toggleTrackOn]}>
-                  <View style={[styles.toggleThumb, editingMsg?.is_subscriber_only && styles.toggleThumbOn]} />
-                </View>
-              </TouchableOpacity>
+              )}
               <Text style={styles.fieldLabel}>メッセージ内容</Text>
               <TextInput
                 style={styles.textarea}
@@ -586,25 +581,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 6,
   },
   membershipBadgeText: { fontSize: 9, color: '#fff', fontWeight: '700' },
-  membershipToggleRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.white, borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.border, padding: 14,
+  membershipInfo: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.accent + '18', borderRadius: 10,
+    padding: 10, borderWidth: 1, borderColor: Colors.accent + '40',
   },
-  membershipToggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  membershipToggleLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  membershipToggleSub: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
-  toggleTrack: {
-    width: 46, height: 26, borderRadius: 13,
-    backgroundColor: '#D1D5DB', justifyContent: 'center', padding: 2,
-  },
-  toggleTrackOn: { backgroundColor: Colors.accent },
-  toggleThumb: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: '#fff', shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
-  },
-  toggleThumbOn: { transform: [{ translateX: 20 }] },
+  membershipInfoText: { fontSize: 13, color: Colors.accent, fontWeight: '600' },
   msgActions: { gap: 2, paddingTop: 6 },
   moveBtn: { padding: 3 },
   deleteBtn: { padding: 3, marginTop: 2 },

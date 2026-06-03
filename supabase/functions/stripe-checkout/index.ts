@@ -90,6 +90,32 @@ serve(async (req) => {
         await supabase.from('subscriptions').update({ status: 'active' }).eq('id', existing.id)
       }
 
+      // メンシプ型のアクティブなstep_sequencesにエンロール（重複防止）
+      const { data: membershipSeqs } = await supabase
+        .from('step_sequences')
+        .select('id')
+        .eq('creator_id', creatorId)
+        .eq('type', 'membership')
+        .eq('is_active', true)
+
+      for (const seq of (membershipSeqs ?? [])) {
+        const { count } = await supabase
+          .from('step_enrollments')
+          .select('id', { count: 'exact', head: true })
+          .eq('follower_id', user.id)
+          .eq('sequence_id', seq.id)
+
+        if ((count ?? 0) === 0) {
+          await supabase.from('step_enrollments').insert({
+            follower_id: user.id,
+            creator_id: creatorId,
+            sequence_id: seq.id,
+            enrolled_at: new Date().toISOString(),
+            completed: false,
+          })
+        }
+      }
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
