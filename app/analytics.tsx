@@ -621,9 +621,9 @@ export default function AnalyticsScreen() {
           </View>
           <View style={s.mbGrid}>
             {/* 会員数は常に表示 */}
-            <View style={[s.mbCard, { borderWidth: 1.5, borderColor: C.button + '40', paddingVertical: 16 }]}>
+            <View style={[s.mbCard, { borderWidth: 1.5, borderColor: C.button + '40' }]}>
               <Ionicons name="star" size={16} color={C.button} />
-              <Text style={s.mbNumLarge}>{memberStats.memberCount}</Text>
+              <Text style={[s.mbNumLarge, { color: C.button }]}>{memberStats.memberCount}</Text>
               <Text style={s.mbLabel}>会員数</Text>
             </View>
             <View style={s.mbCard}>
@@ -649,21 +649,30 @@ export default function AnalyticsScreen() {
           )}
 
           {/* 継続期間の円グラフ */}
-          {memberStats.memberCount > 0 && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingTop: 12, paddingBottom: 4 }}>
-              <DurationPieChart buckets={durationBuckets} size={110} />
-              <View style={{ flex: 1, gap: 6 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: C.muted, marginBottom: 2 }}>継続期間の内訳</Text>
-                {durationBuckets.map(b => (
-                  <View key={b.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: b.color }} />
-                    <Text style={{ fontSize: 11, color: C.text, flex: 1 }}>{b.label}</Text>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: C.text }}>{b.count}人</Text>
-                  </View>
-                ))}
+          <View style={{ borderTopWidth: 1, borderTopColor: C.border, paddingTop: 14, marginTop: 4 }}>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: C.muted, marginBottom: 10 }}>継続期間の内訳</Text>
+            {memberStats.memberCount > 0 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                <DurationPieChart buckets={durationBuckets} size={110} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  {durationBuckets.map(b => (
+                    <View key={b.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: b.color }} />
+                      <Text style={{ fontSize: 12, color: C.text, flex: 1 }}>{b.label}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: C.text }}>{b.count}人</Text>
+                      <Text style={{ fontSize: 11, color: C.muted }}>
+                        {Math.round((b.count / memberStats.memberCount) * 100)}%
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-            </View>
-          )}
+            ) : (
+              <Text style={{ fontSize: 12, color: C.muted, textAlign: 'center', paddingVertical: 12 }}>
+                会員が増えると表示されます
+              </Text>
+            )}
+          </View>
         </View>
 
         </>}
@@ -894,11 +903,12 @@ const s = StyleSheet.create({
   mbCard: {
     flex: 1, backgroundColor: C.light, borderRadius: 10,
     borderWidth: 1, borderColor: C.border,
-    paddingVertical: 10, paddingHorizontal: 4,
-    alignItems: 'center', gap: 4,
+    paddingVertical: 14, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center', gap: 4,
+    minHeight: 90,
   },
   mbNum: { fontSize: 18, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
-  mbNumLarge: { fontSize: 56, fontWeight: '800', color: C.button, letterSpacing: -2, lineHeight: 60 },
+  mbNumLarge: { fontSize: 18, fontWeight: '800', color: C.button, letterSpacing: -0.5 },
   mbLabel: { fontSize: 9, fontWeight: '600', color: C.muted, textAlign: 'center' },
 
   // 日時フィルター行
