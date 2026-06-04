@@ -4,7 +4,7 @@ import {
   Alert, useWindowDimensions, Image, ActivityIndicator, FlatList
 } from 'react-native'
 import { BETA_MODE } from '../../constants/config'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '../../lib/supabase'
@@ -47,8 +47,12 @@ function genUUID() {
 
 // ─── メインコンポーネント ────────────────────────────────────
 export default function ComposeScreen() {
+  // ツール画面から戻ってきたときにツールタブを表示する
+  const { tab: tabParam } = useLocalSearchParams<{ tab?: string }>()
   // タブ
-  const [activeTab, setActiveTab] = useState<'new' | 'drafts' | 'tools'>('new')
+  const [activeTab, setActiveTab] = useState<'new' | 'drafts' | 'tools'>(
+    tabParam === 'tools' ? 'tools' : 'new'
+  )
 
   // 新規配信
   const [blocks, setBlocks] = useState<Block[]>([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', videoUri: null, videoUrl: null, uploading: false }])

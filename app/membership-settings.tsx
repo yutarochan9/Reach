@@ -347,7 +347,7 @@ export default function MembershipSettingsScreen() {
         {/* ヘッダー */}
         <View style={s.header}>
           <TouchableOpacity
-            onPress={() => router.canGoBack() ? router.back() : router.push('/(tabs)/compose' as any)}
+            onPress={() => router.push('/(tabs)/compose?tab=tools' as any)}
             style={s.backBtn}
           >
             <Ionicons name="chevron-back" size={24} color={Colors.accent} />

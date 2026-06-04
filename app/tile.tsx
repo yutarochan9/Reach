@@ -224,7 +224,7 @@ export default function RichMenuScreen() {
       if (data) setMenuId(data.id)
     }
     setSaving(false)
-    router.replace('/(tabs)/mypage' as any)
+    router.push('/(tabs)/compose?tab=tools' as any)
   }
 
   const openAddModal = () => {
@@ -304,7 +304,7 @@ export default function RichMenuScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/mypage' as any)} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/compose?tab=tools' as any)} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>タイル</Text>
