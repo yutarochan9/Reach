@@ -173,8 +173,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     const navigateTo = async (userId: string) => {
-      const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', userId).single()
-      if (!prof?.display_name || prof.display_name.includes('@')) {
+      const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', userId).single()
+      // 表示名未設定 or メールアドレスのまま or ユーザーアドレス未設定 → オンボーディングへ
+      if (!prof?.display_name || prof.display_name.includes('@') || !prof?.username) {
         router.replace('/onboarding')
         return
       }
