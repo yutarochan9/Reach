@@ -265,9 +265,20 @@ const openEdit = () => {
     if (!editName.trim()) return
     setUsernameError('')
 
+    // ユーザーアドレスは必須
+    const trimmedUsername = editUsername.trim().toLowerCase() || null
+    if (!trimmedUsername) {
+      setUsernameError('ユーザーアドレスは必須です')
+      return
+    }
+    // 形式チェック
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(trimmedUsername)) {
+      setUsernameError('3〜30文字の英数字・_のみ使用できます')
+      return
+    }
+
     // ユーザーID重複チェック
-    const trimmedUsername = editUsername.trim() || null
-    if (trimmedUsername && trimmedUsername !== profile?.username) {
+    if (trimmedUsername !== profile?.username) {
       const { data: existing } = await supabase
         .from('profiles')
         .select('id')
@@ -487,17 +498,21 @@ const openEdit = () => {
               placeholder="表示名"
               placeholderTextColor={Colors.textLight}
             />
-            <Text style={styles.fieldLabel}>ユーザーID（アドレス）</Text>
+            <Text style={styles.fieldLabel}>ユーザーアドレス <Text style={{ color: '#E53E3E' }}>*</Text></Text>
             <TextInput
               style={[styles.fieldInput, usernameError ? styles.fieldInputError : null]}
               value={editUsername}
-              onChangeText={v => { setEditUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
-              placeholder="例: reach_user123（英数字・_のみ）"
+              onChangeText={v => { setEditUsername(v.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()); setUsernameError('') }}
+              placeholder="例: reach_user123（英数字・_のみ・必須）"
               placeholderTextColor={Colors.textLight}
               autoCapitalize="none"
               autoCorrect={false}
+              maxLength={30}
             />
-            {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
+            {usernameError
+              ? <Text style={styles.errorText}>{usernameError}</Text>
+              : <Text style={{ fontSize: 11, color: Colors.textLight, marginBottom: 4 }}>3〜30文字・英数字・_のみ</Text>
+            }
             <Text style={styles.fieldLabel}>自己紹介</Text>
             <TextInput
               style={[styles.fieldInput, styles.bioInput]}
