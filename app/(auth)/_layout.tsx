@@ -1,5 +1,10 @@
 import { Stack } from 'expo-router'
 
 export default function AuthLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />
+  return (
+    <Stack screenOptions={{
+      headerShown: false,
+      gestureEnabled: false,   // ログアウト後のスワイプバック戻りを防ぐ
+    }} />
+  )
 }

@@ -227,6 +227,8 @@ export default function RootLayout() {
         if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicPath(window.location.pathname)) return
         navigated.current = false
         // Web ではランディングページへ、ネイティブはログインへ
+        // dismissAll でスタックを全消去してからreplaceすることでスワイプバック戻りを防ぐ
+        try { router.dismissAll() } catch {}
         router.replace(Platform.OS === 'web' ? '/landing' as any : '/(auth)/login')
       }
       if (event === 'SIGNED_IN') {
