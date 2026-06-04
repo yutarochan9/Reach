@@ -246,6 +246,24 @@ export default function RootLayout() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // ── Web: BFCache対策（ブラウザの戻るジェスチャーでログアウト後の画面が復元されるのを防ぐ）─
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return
+    const handlePageShow = (e: PageTransitionEvent) => {
+      // persisted = true の場合はBFCacheから復元された（JSが再実行されない）
+      if (e.persisted) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) {
+            // 未ログイン状態でキャッシュ復元 → ランディングへ強制移動
+            window.location.replace('/landing')
+          }
+        })
+      }
+    }
+    window.addEventListener('pageshow', handlePageShow)
+    return () => window.removeEventListener('pageshow', handlePageShow)
+  }, [])
+
   // ── Web: バージョンポーリング（1分ごとに version.json をチェックして自動リロード）─
   useEffect(() => {
     if (Platform.OS !== 'web') return
