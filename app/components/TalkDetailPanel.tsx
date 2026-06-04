@@ -63,6 +63,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [tileMenu, setTileMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(_tileCache.get(senderId) ?? null)
   const [tileOpen, setTileOpen] = useState(true)
+  const [tileFullHeight, setTileFullHeight] = useState(0)  // タイルパネルの実際の高さ（FlatListのpaddingBottom用）
   const flatListRef = useRef<FlatList>(null)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const prevScrollYRef = useRef(0)         // スクロール方向検出用
@@ -339,8 +340,33 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   // invertedで下から描画するため逆順にする（hooksはearly returnより前）
   const reversedGroups = useMemo(() => [...groups].reverse(), [groups])
 
+  // タイルボタンコンテンツ（レイアウト計測用に常にレンダリングし、translateYで出し入れ）
   const TilePanel = tileMenu && normalizedButtons.length > 0 ? (
-    <View style={styles.tileContainer}>
+    // タイルの高さを計測するためのラッパー（レイアウト計算に使うが画面外に隠す仕組みはtranslateYで行う）
+    <Animated.View
+      style={[
+        styles.tileContainer,
+        {
+          // position absoluteでFlatListのレイアウトに影響しない
+          position: 'absolute',
+          bottom: 0, left: 0, right: 0,
+          // translateYで下にスライドして隠す（tileFullHeightが0の間は表示したまま）
+          transform: [{
+            translateY: tileFullHeight > 0
+              ? tileGridAnim.interpolate({
+                  inputRange: [0, 1],
+                  // 0=閉じた状態: handleの高さ(30px)だけ残して残りを下にスライド
+                  outputRange: [tileFullHeight - 30, 0],
+                })
+              : 0,
+          }],
+        },
+      ]}
+      onLayout={(e) => {
+        const h = e.nativeEvent.layout.height
+        if (h > 0) setTileFullHeight(h)
+      }}
+    >
       {tileMenu.panel_bg_image && (
         <Image source={{ uri: tileMenu.panel_bg_image }} style={StyleSheet.absoluteFillObject} resizeMode="cover" pointerEvents="none" />
       )}
@@ -352,57 +378,51 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       >
         <View style={[styles.tileHandleBar, !tileMenu.panel_bg_image && { backgroundColor: 'rgba(0,0,0,0.15)' }]} />
       </TouchableOpacity>
-      {/* Animated.Viewでグリッドエリアを滑らかに開閉 */}
-      <Animated.View style={{
-        overflow: 'hidden',
-        maxHeight: tileGridAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 500] }),
-      }}>
-        <View style={styles.tileGridArea}>
-          {normalizedButtons.map((btn: any) => (
-            <TouchableOpacity
-              key={btn.id}
-              style={{
-                position: 'absolute',
-                left: `${(btn.x / GRID_C) * 100}%` as any,
-                top: `${(btn.y / GRID_R) * 100}%` as any,
-                width: `${(btn.w / GRID_C) * 100}%` as any,
-                height: `${(btn.h / GRID_R) * 100}%` as any,
-                alignItems: 'center', justifyContent: 'center',
-                borderRightWidth: 0.5, borderBottomWidth: 0.5,
-                borderColor: tileMenu.panel_bg_image ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', overflow: 'hidden',
-              }}
-              onPress={async () => {
-                if (btn.action === 'code') {
-                  const code = btn.code?.trim()
-                  if (!code || !myId) return
-                  await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: code })
-                  router.push(`/im/${senderId}` as any)
-                } else if (btn.action === 'page') {
-                  router.push(btn.url as any)
-                } else if (btn.url) {
-                  try {
-                    const parsed = new URL(btn.url)
-                    if (isWeb && parsed.origin === window.location.origin) {
-                      router.push(parsed.pathname as any)
-                    } else if (btn.url.startsWith('/')) {
-                      router.push(btn.url as any)
-                    } else {
-                      Linking.openURL(btn.url)
-                    }
-                  } catch {
-                    if (btn.url.startsWith('/')) router.push(btn.url as any)
-                    else Linking.openURL(btn.url)
+      <View style={styles.tileGridArea}>
+        {normalizedButtons.map((btn: any) => (
+          <TouchableOpacity
+            key={btn.id}
+            style={{
+              position: 'absolute',
+              left: `${(btn.x / GRID_C) * 100}%` as any,
+              top: `${(btn.y / GRID_R) * 100}%` as any,
+              width: `${(btn.w / GRID_C) * 100}%` as any,
+              height: `${(btn.h / GRID_R) * 100}%` as any,
+              alignItems: 'center', justifyContent: 'center',
+              borderRightWidth: 0.5, borderBottomWidth: 0.5,
+              borderColor: tileMenu.panel_bg_image ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', overflow: 'hidden',
+            }}
+            onPress={async () => {
+              if (btn.action === 'code') {
+                const code = btn.code?.trim()
+                if (!code || !myId) return
+                await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content: code })
+                router.push(`/im/${senderId}` as any)
+              } else if (btn.action === 'page') {
+                router.push(btn.url as any)
+              } else if (btn.url) {
+                try {
+                  const parsed = new URL(btn.url)
+                  if (isWeb && parsed.origin === window.location.origin) {
+                    router.push(parsed.pathname as any)
+                  } else if (btn.url.startsWith('/')) {
+                    router.push(btn.url as any)
+                  } else {
+                    Linking.openURL(btn.url)
                   }
+                } catch {
+                  if (btn.url.startsWith('/')) router.push(btn.url as any)
+                  else Linking.openURL(btn.url)
                 }
-              }}
-              activeOpacity={0.75}
-            >
-              {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </Animated.View>
-    </View>
+              }
+            }}
+            activeOpacity={0.75}
+          >
+            {btn.bgImage && <Image source={{ uri: btn.bgImage }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </Animated.View>
   ) : null
 
   if (loading) {
@@ -445,13 +465,15 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         </View>
       )}
 
-      {/* メッセージ一覧 */}
+      {/* メッセージ一覧 + タイルパネルのコンテナ（relativeでタイルをabsolute配置） */}
+      <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
       <FlatList
         ref={flatListRef}
         data={reversedGroups}
         keyExtractor={item => item.anchorId}
         style={{ flex: 1 }}
-        contentContainerStyle={styles.messageList}
+        // タイルが表示中はその高さ分だけpaddingBottomを取る（タイルの下にコンテンツが隠れないよう）
+        contentContainerStyle={[styles.messageList, tileFullHeight > 0 && tileMenu ? { paddingBottom: 24 + tileFullHeight } : undefined]}
         inverted
         onScroll={(e) => {
           const currentY = e.nativeEvent.contentOffset.y
@@ -592,6 +614,10 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         }}
       />
 
+      {/* タイルパネル（position absoluteでFlatListのスクロールに影響しない） */}
+      {TilePanel}
+      </View>
+
       {/* リアクションポップアップ */}
       <Modal visible={!!longPressGroup} transparent animationType="slide" onRequestClose={() => setLongPressGroup(null)}>
         <Pressable style={styles.popupOverlay} onPress={() => setLongPressGroup(null)}>
@@ -622,8 +648,6 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
           </Pressable>
         </Pressable>
       </Modal>
-
-      {TilePanel}
 
       {/* DM入力エリア */}
       <View style={styles.inputArea}>
