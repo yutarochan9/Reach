@@ -230,7 +230,7 @@ export default function SignupScreen() {
               ]}>
                 <Ionicons
                   name="mail-outline" size={18}
-                  color={emailError ? '#E53E3E' : email ? Colors.text : Colors.textLight}
+                  color={emailError ? '#E53E3E' : Colors.textLight}
                   style={styles.inputIcon}
                 />
                 <TextInput
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputWrapError: { borderColor: '#E53E3E' },
-  inputWrapFilled: { borderColor: Colors.text },
+  inputWrapFilled: { borderColor: Colors.textLight },
   inputIcon: { marginRight: 8 },
   atSign: { fontSize: 16, color: Colors.textLight, marginRight: 4 },
   eyeBtn: { padding: 4 },

@@ -212,7 +212,7 @@ export default function LoginScreen() {
               <Text style={styles.cardTitle}>サインイン</Text>
               <Text style={styles.cardSub}>登録済みのメールアドレスとパスワードを入力してください</Text>
               <View style={[styles.inputWrap, email ? styles.inputWrapFilled : null]}>
-                <Ionicons name="mail-outline" size={18} color={email ? Colors.text : Colors.textLight} style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, Platform.OS === 'web' && {
                     // ブラウザのオートフィル青色を背景色で上書き
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingHorizontal: 14,
   },
-  inputWrapFilled: { borderColor: Colors.text },
+  inputWrapFilled: { borderColor: Colors.textLight },
   inputIcon: { marginRight: 8 },
   eyeBtn: { padding: 4 },
   input: {
