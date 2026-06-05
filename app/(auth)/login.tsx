@@ -211,8 +211,8 @@ export default function LoginScreen() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>サインイン</Text>
               <Text style={styles.cardSub}>登録済みのメールアドレスとパスワードを入力してください</Text>
-              <View style={styles.inputWrap}>
-                <Ionicons name="mail-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
+              <View style={[styles.inputWrap, email ? styles.inputWrapFilled : null]}>
+                <Ionicons name="mail-outline" size={18} color={email ? Colors.text : Colors.textLight} style={styles.inputIcon} />
                 <TextInput
                   style={[styles.input, Platform.OS === 'web' && {
                     // ブラウザのオートフィル青色を背景色で上書き
@@ -220,7 +220,7 @@ export default function LoginScreen() {
                     WebkitTextFillColor: Colors.text,
                   } as any]}
                   placeholder="メールアドレス"
-                  placeholderTextColor={Colors.textLight}
+                  placeholderTextColor={Colors.text}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -382,6 +382,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     paddingHorizontal: 14,
   },
+  inputWrapFilled: { borderColor: Colors.text },
   inputIcon: { marginRight: 8 },
   eyeBtn: { padding: 4 },
   input: {
