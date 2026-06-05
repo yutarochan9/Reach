@@ -53,14 +53,11 @@ const consentStyles = StyleSheet.create({
 })
 
 export default function SignupScreen() {
-  const [step, setStep] = useState<'form' | 'otp' | 'profile'>('form')
-  const [displayName, setDisplayName] = useState('')
-  const [username, setUsername] = useState('')
+  const [step, setStep] = useState<'form' | 'otp'>('form')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [otp, setOtp] = useState('')
-  const [usernameError, setUsernameError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -144,46 +141,14 @@ export default function SignupScreen() {
       }
     }
 
+    // OTPで作成されたアカウントにパスワードを設定
+    if (password) {
+      await supabase.auth.updateUser({ password }).catch(e => console.warn('password set failed:', e))
+    }
+
     setLoading(false)
-    setStep('profile')
-  }
-
-  const handleSaveProfile = async () => {
-    if (!displayName.trim()) {
-      Alert.alert('入力エラー', 'ユーザー名を入力してください')
-      return
-    }
-    setUsernameError('')
-
-    const trimmedUsername = username.trim() || null
-    if (trimmedUsername) {
-      const { data: existing } = await supabase
-        .from('profiles').select('id').eq('username', trimmedUsername).maybeSingle()
-      if (existing) {
-        setUsernameError('このユーザーアドレスはすでに使われています')
-        return
-      }
-    }
-
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      // OTP で作成されたアカウントにパスワードを設定
-      // （signUp を使わないため、ここで初めてパスワードを登録する）
-      if (password) {
-        const { error: pwErr } = await supabase.auth.updateUser({ password })
-        if (pwErr) {
-          console.warn('updateUser password failed:', pwErr.message)
-          // パスワード設定失敗でもプロフィール保存は続行（メール認証でも引き続きログイン可能）
-        }
-      }
-      await supabase.from('profiles').update({
-        display_name: displayName.trim(),
-        username: trimmedUsername,
-      }).eq('id', user.id)
-    }
-    setLoading(false)
-    router.replace('/(tabs)/' as any)
+    authFlags.skipNextSignedIn = false
+    router.replace('/onboarding' as any)
   }
 
   const handleResend = async () => {
@@ -207,11 +172,11 @@ export default function SignupScreen() {
             <TouchableOpacity onPress={() => { setStep('form'); setOtp('') }} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
-          ) : step === 'form' ? (
+          ) : (
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
-          ) : <View />}
+          )}
         </View>
 
         <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
@@ -321,51 +286,6 @@ export default function SignupScreen() {
             </View>
           )}
 
-          {step === 'profile' && (
-            <View style={styles.card}>
-              <View style={styles.otpIconWrap}>
-                <Ionicons name="person-circle-outline" size={40} color={Colors.accent} />
-              </View>
-              <Text style={styles.cardTitle}>プロフィール設定</Text>
-              <Text style={styles.cardSub}>あなたの名前とアドレスを設定してください</Text>
-
-              <View style={styles.inputWrap}>
-                <Ionicons name="person-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="ユーザー名（表示名）"
-                  placeholderTextColor={Colors.textLight}
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  maxLength={30}
-                  autoFocus
-                />
-              </View>
-
-              <View style={[styles.inputWrap, usernameError ? styles.inputWrapError : null]}>
-                <Text style={styles.atSign}>@</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="ユーザーアドレス（英数字・_のみ）"
-                  placeholderTextColor={Colors.textLight}
-                  value={username}
-                  onChangeText={v => { setUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  maxLength={30}
-                />
-              </View>
-              {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
-
-              <TouchableOpacity
-                style={[styles.button, (!displayName.trim() || loading) && styles.buttonDisabled]}
-                onPress={handleSaveProfile}
-                disabled={!displayName.trim() || loading}
-              >
-                <Text style={styles.buttonText}>{loading ? '保存中...' : 'はじめる'}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -403,7 +323,6 @@ const styles = StyleSheet.create({
   inputWrapError: { borderColor: '#E53E3E' },
   inputWrapFilled: { borderColor: Colors.textLight },
   inputIcon: { marginRight: 8 },
-  atSign: { fontSize: 16, color: Colors.textLight, marginRight: 4 },
   eyeBtn: { padding: 4 },
   input: {
     flex: 1,
