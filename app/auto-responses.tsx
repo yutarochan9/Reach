@@ -223,8 +223,8 @@ export default function AutoResponsesScreen() {
           <Ionicons name="chevron-back" size={24} color={Colors.accent} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>自動応答</Text>
-        <TouchableOpacity onPress={openNew} style={styles.addButton}>
-          <Ionicons name="add" size={24} color={Colors.accent} />
+        <TouchableOpacity onPress={() => router.push('/(tabs)/compose?tab=tools' as any)} style={styles.saveButton}>
+          <Text style={styles.saveButtonText}>保存</Text>
         </TouchableOpacity>
       </View>
 
@@ -326,6 +326,11 @@ export default function AutoResponsesScreen() {
           )}
         />
       )}
+
+      {/* 新規作成FAB */}
+      <TouchableOpacity style={styles.fab} onPress={openNew}>
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
 
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -483,7 +488,15 @@ const styles = StyleSheet.create({
   },
   backButton: { padding: 4, width: 32 },
   headerTitle: { fontSize: 24, fontWeight: '700', color: Colors.text },
-  addButton: { padding: 4, width: 32, alignItems: 'flex-end' },
+  saveButton: { paddingVertical: 6, paddingHorizontal: 14, backgroundColor: Colors.accent, borderRadius: 10 },
+  saveButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  fab: {
+    position: 'absolute', right: 20, bottom: 32,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
+    shadowColor: Colors.accent, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 8, elevation: 8,
+  },
   infoBox: {
     flexDirection: 'row', gap: 8, alignItems: 'flex-start',
     margin: 16, padding: 12, backgroundColor: Colors.white,
