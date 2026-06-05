@@ -203,10 +203,13 @@ export default function RootLayout() {
       if (!session) {
         // パブリックルートはログインなしで通過
         if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicPath(window.location.pathname)) return
-        // Web でルート（/）にアクセスした場合はランディングページへ
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname === '/') {
-          router.replace('/landing' as any)
-          return
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          const p = window.location.pathname
+          // ルート（/）はランディングページへ
+          if (p === '/') { router.replace('/landing' as any); return }
+          // 既にログイン/サインアップ/ランディングページにいる場合はナビゲート不要
+          // （SIGNED_OUTイベントとの二重ナビゲーションを防ぐ）
+          if (p === '/login' || p === '/signup' || p === '/landing') return
         }
         router.replace('/(auth)/login')
       } else {
@@ -227,8 +230,8 @@ export default function RootLayout() {
         if (Platform.OS === 'web' && typeof window !== 'undefined' && isPublicPath(window.location.pathname)) return
         navigated.current = false
         // Web ではランディングページへ、ネイティブはログインへ
-        // dismissAll でスタックを全消去してからreplaceすることでスワイプバック戻りを防ぐ
-        try { router.dismissAll() } catch {}
+        // dismissAll はWeb上で高速ナビゲーション多重発火の原因になるためWebでは使わない
+        if (Platform.OS !== 'web') { try { router.dismissAll() } catch {} }
         router.replace(Platform.OS === 'web' ? '/landing' as any : '/(auth)/login')
       }
       if (event === 'SIGNED_IN') {
