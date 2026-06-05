@@ -78,16 +78,21 @@ export default function SignupScreen() {
     setLoading(true)
 
     // 既存ユーザーチェック: 同じメール+パスワードでログインを試みる
-    // 成功した場合は既存ユーザー → サインアウトしてエラー表示
+    // skipNextSignedInを先にtrueにして_layout.tsxのナビゲートを防ぐ
+    authFlags.skipNextSignedIn = true
     const { error: checkErr } = await supabase.auth.signInWithPassword({
       email: email.trim(), password,
     })
     if (!checkErr) {
+      // ログイン成功 = 既存ユーザー → サインアウトしてエラー表示
+      authFlags.skipNextSignedOut = true
       await supabase.auth.signOut()
+      authFlags.skipNextSignedIn = false
       setLoading(false)
       setEmailError('このメールアドレスはすでに登録されています。サインインからログインしてください。')
       return
     }
+    authFlags.skipNextSignedIn = false
 
     // OTP送信（shouldCreateUser: true = 未登録なら新規作成、登録済みならOTPログイン）
     authFlags.skipNextSignedIn = true
@@ -222,7 +227,10 @@ export default function SignupScreen() {
               <View style={[styles.inputWrap, emailError ? styles.inputWrapError : null]}>
                 <Ionicons name="mail-outline" size={18} color={emailError ? '#E53E3E' : Colors.textLight} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, Platform.OS === 'web' && {
+                    WebkitBoxShadow: `0 0 0 1000px ${Colors.background} inset`,
+                    WebkitTextFillColor: Colors.text,
+                  } as any]}
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.textLight}
                   value={email}
