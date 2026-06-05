@@ -76,10 +76,20 @@ export default function SignupScreen() {
     }
 
     setLoading(true)
-    // signUp ではなく OTP を使う。
-    // signUp は認証前にアカウントを作成してしまうため、
-    // OTP（shouldCreateUser: true）で送信のみ行い、
-    // 認証後に初めてアカウントが確定する方式に変更。
+
+    // 既存ユーザーチェック: 同じメール+パスワードでログインを試みる
+    // 成功した場合は既存ユーザー → サインアウトしてエラー表示
+    const { error: checkErr } = await supabase.auth.signInWithPassword({
+      email: email.trim(), password,
+    })
+    if (!checkErr) {
+      await supabase.auth.signOut()
+      setLoading(false)
+      setEmailError('このメールアドレスはすでに登録されています。サインインからログインしてください。')
+      return
+    }
+
+    // OTP送信（shouldCreateUser: true = 未登録なら新規作成、登録済みならOTPログイン）
     authFlags.skipNextSignedIn = true
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
@@ -111,15 +121,19 @@ export default function SignupScreen() {
       return
     }
 
-    // 認証成功後、すでにプロフィールが設定済みなら既存ユーザー → ホームへ
-    // 未設定なら新規ユーザー → プロフィール設定へ
+    // 認証成功後、すでにプロフィールが設定済みなら既存ユーザー
+    // → サインアウトしてフォームに戻りエラー表示（サインアップ画面からのログインは不可）
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
       if (prof?.display_name && !prof.display_name.includes('@')) {
-        // 既存ユーザー: すでに登録済みなのでそのままホームへ
+        authFlags.skipNextSignedOut = true
+        await supabase.auth.signOut()
+        authFlags.skipNextSignedIn = false
         setLoading(false)
-        router.replace('/(tabs)/' as any)
+        setStep('form')
+        setOtp('')
+        setEmailError('このメールアドレスはすでに登録されています。サインインからログインしてください。')
         return
       }
     }
