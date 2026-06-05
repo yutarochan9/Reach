@@ -130,8 +130,9 @@ export default function SignupScreen() {
     // → サインアウトしてフォームに戻りエラー表示（サインアップ画面からのログインは不可）
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: prof } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
-      if (prof?.display_name && !prof.display_name.includes('@')) {
+      const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', user.id).maybeSingle()
+      // display_name と username 両方が設定済み = プロフィール設定まで完了した既存ユーザー
+      if (prof?.display_name && prof?.username) {
         authFlags.skipNextSignedOut = true
         await supabase.auth.signOut()
         authFlags.skipNextSignedIn = false
