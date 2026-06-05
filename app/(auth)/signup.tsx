@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Alert, SafeAreaView, ScrollView, Image,
@@ -63,30 +63,6 @@ export default function SignupScreen() {
   const [usernameError, setUsernameError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [loading, setLoading] = useState(false)
-  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // メール+パスワード両方入力されたら既存ユーザーチェック（800msデバウンス）
-  useEffect(() => {
-    if (checkTimerRef.current) clearTimeout(checkTimerRef.current)
-    if (!email.includes('@') || password.length < 8) {
-      setEmailError('')
-      return
-    }
-    checkTimerRef.current = setTimeout(async () => {
-      authFlags.skipNextSignedIn = true
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-      if (!error) {
-        authFlags.skipNextSignedOut = true
-        await supabase.auth.signOut()
-        authFlags.skipNextSignedIn = false
-        setEmailError('このメールアドレスはすでに登録されています。サインインからログインしてください。')
-      } else {
-        authFlags.skipNextSignedIn = false
-        setEmailError('')
-      }
-    }, 800)
-    return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
-  }, [email, password])
 
   const handleRegister = async () => {
     setEmailError('')
@@ -265,7 +241,7 @@ export default function SignupScreen() {
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.text}
                   value={email}
-                  onChangeText={v => { setEmail(v) }}
+                  onChangeText={v => { setEmail(v); setEmailError('') }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
