@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
@@ -93,9 +93,7 @@ export default function OnboardingScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.inner}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="radio" size={48} color={Colors.accent} />
-        </View>
+        <Image source={require('../assets/icon.png')} style={styles.iconWrap} />
 
         <Text style={styles.title}>Reachへようこそ</Text>
         <Text style={styles.subtitle}>まずはプロフィールを設定しましょう</Text>
@@ -148,12 +146,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   inner: { flex: 1, padding: 32, justifyContent: 'center', gap: 8 },
   iconWrap: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: Colors.white,
-    alignItems: 'center', justifyContent: 'center',
+    width: 80, height: 80, borderRadius: 20,
     alignSelf: 'center',
     marginBottom: 8,
-    borderWidth: 1, borderColor: Colors.border,
   },
   title:    { fontSize: 26, fontWeight: '800', color: Colors.text, textAlign: 'center' },
   subtitle: { fontSize: 14, color: Colors.textLight, textAlign: 'center', marginBottom: 16 },
