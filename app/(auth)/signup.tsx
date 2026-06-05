@@ -91,11 +91,11 @@ export default function SignupScreen() {
   const handleRegister = async () => {
     setEmailError('')
     if (!email.trim() || !password) {
-      Alert.alert('入力エラー', 'すべての項目を入力してください')
+      setEmailError('メールアドレスとパスワードを入力してください')
       return
     }
     if (password.length < 8) {
-      Alert.alert('パスワードエラー', 'パスワードは8文字以上で入力してください')
+      setEmailError('パスワードは8文字以上で入力してください')
       return
     }
 
@@ -127,7 +127,7 @@ export default function SignupScreen() {
     setLoading(false)
     if (otpError) {
       authFlags.skipNextSignedIn = false
-      Alert.alert('エラー', otpError.message)
+      setEmailError('メールの送信に失敗しました。しばらくしてからもう一度お試しください。')
     } else {
       setStep('otp')
     }
