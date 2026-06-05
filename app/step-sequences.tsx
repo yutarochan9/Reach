@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, Animated
+  ActivityIndicator, Alert, TextInput, Modal, Animated, Platform
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -92,17 +92,19 @@ export default function StepSequencesScreen() {
     setSequences(prev => prev.map(s => s.id === seq.id ? { ...s, is_active: !s.is_active } : s))
   }
 
-  const handleDelete = (seq: Sequence) => {
-    Alert.alert('削除', `「${seq.name}」を削除しますか？`, [
-      { text: 'キャンセル', style: 'cancel' },
-      {
-        text: '削除', style: 'destructive',
-        onPress: async () => {
-          await supabase.from('step_sequences').delete().eq('id', seq.id)
-          setSequences(prev => prev.filter(s => s.id !== seq.id))
-        },
-      },
-    ])
+  const handleDelete = async (seq: Sequence) => {
+    // WebではAlert.alertが動作しないためwindow.confirmを使用
+    const ok = Platform.OS === 'web'
+      ? window.confirm(`「${seq.name}」を削除しますか？`)
+      : await new Promise<boolean>(resolve =>
+          Alert.alert('削除', `「${seq.name}」を削除しますか？`, [
+            { text: 'キャンセル', style: 'cancel', onPress: () => resolve(false) },
+            { text: '削除', style: 'destructive', onPress: () => resolve(true) },
+          ])
+        )
+    if (!ok) return
+    await supabase.from('step_sequences').delete().eq('id', seq.id)
+    setSequences(prev => prev.filter(s => s.id !== seq.id))
   }
 
   if (loading) {

@@ -120,17 +120,19 @@ export default function StepSequenceEditScreen() {
     load()
   }
 
-  const handleDelete = (msg: StepMessage) => {
-    Alert.alert('削除', 'このメッセージを削除しますか？', [
-      { text: 'キャンセル', style: 'cancel' },
-      {
-        text: '削除', style: 'destructive',
-        onPress: async () => {
-          await supabase.from('step_messages').delete().eq('id', msg.id)
-          setMessages(prev => prev.filter(m => m.id !== msg.id))
-        },
-      },
-    ])
+  const handleDelete = async (msg: StepMessage) => {
+    // WebではAlert.alertが動作しないためwindow.confirmを使用
+    const ok = Platform.OS === 'web'
+      ? window.confirm('このメッセージを削除しますか？')
+      : await new Promise<boolean>(resolve =>
+          Alert.alert('削除', 'このメッセージを削除しますか？', [
+            { text: 'キャンセル', style: 'cancel', onPress: () => resolve(false) },
+            { text: '削除', style: 'destructive', onPress: () => resolve(true) },
+          ])
+        )
+    if (!ok) return
+    await supabase.from('step_messages').delete().eq('id', msg.id)
+    setMessages(prev => prev.filter(m => m.id !== msg.id))
   }
 
   // 同日内の順番を上下に入れ替え

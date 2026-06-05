@@ -102,6 +102,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         supabase.from('broadcasts')
           .select('id, content, image_url, image_link_url, created_at, block_order, group_id, public_reactions, is_subscriber_only')
           .eq('sender_id', senderId).eq('status', 'published')
+          .is('step_message_id', null)   // フロー配信（個別送信）は配信一覧に表示しない
           .order('created_at', { ascending: true }),
         supabase.from('tiles').select('buttons, is_active, panel_bg_image').eq('creator_id', senderId).maybeSingle(),
       ])
