@@ -502,7 +502,8 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         }}
         scrollEventThrottle={50}
         ListEmptyComponent={() => (
-          <View style={styles.emptyWrap}>
+          // invertedで180°回転するため、scaleY:-1で打ち消す
+          <View style={[styles.emptyWrap, { transform: [{ scaleY: -1 }] }]}>
             <Ionicons name="radio-outline" size={40} color={Colors.border} />
             <Text style={styles.emptyText}>まだ配信がありません</Text>
           </View>

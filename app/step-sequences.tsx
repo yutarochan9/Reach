@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, TextInput, Modal, Animated, Platform
+  ActivityIndicator, TextInput, Modal, Animated
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -41,6 +41,8 @@ export default function StepSequencesScreen() {
   const [newType, setNewType] = useState<'follow' | 'membership'>('follow')
   const [saving, setSaving] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Sequence | null>(null)  // 削除確認モーダル用
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -92,19 +94,17 @@ export default function StepSequencesScreen() {
     setSequences(prev => prev.map(s => s.id === seq.id ? { ...s, is_active: !s.is_active } : s))
   }
 
-  const handleDelete = async (seq: Sequence) => {
-    // WebではAlert.alertが動作しないためwindow.confirmを使用
-    const ok = Platform.OS === 'web'
-      ? window.confirm(`「${seq.name}」を削除しますか？`)
-      : await new Promise<boolean>(resolve =>
-          Alert.alert('削除', `「${seq.name}」を削除しますか？`, [
-            { text: 'キャンセル', style: 'cancel', onPress: () => resolve(false) },
-            { text: '削除', style: 'destructive', onPress: () => resolve(true) },
-          ])
-        )
-    if (!ok) return
-    await supabase.from('step_sequences').delete().eq('id', seq.id)
-    setSequences(prev => prev.filter(s => s.id !== seq.id))
+  const handleDelete = (seq: Sequence) => {
+    setDeleteTarget(seq)  // 削除確認モーダルを開く
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    await supabase.from('step_sequences').delete().eq('id', deleteTarget.id)
+    setSequences(prev => prev.filter(s => s.id !== deleteTarget.id))
+    setDeleting(false)
+    setDeleteTarget(null)
   }
 
   if (loading) {
@@ -183,6 +183,36 @@ export default function StepSequencesScreen() {
           </>
         )}
       />
+
+      {/* 削除確認モーダル */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>削除の確認</Text>
+            <Text style={{ fontSize: 14, color: Colors.textLight, lineHeight: 21 }}>
+              「{deleteTarget?.name}」を削除しますか？{'\n'}この操作は取り消せません。
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setDeleteTarget(null)}
+              >
+                <Text style={styles.cancelText}>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createBtn, { backgroundColor: '#E53E3E' }, deleting && { opacity: 0.5 }]}
+                onPress={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.createText}>削除する</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 新規作成モーダル */}
       <Modal visible={modalVisible} transparent animationType="fade">
