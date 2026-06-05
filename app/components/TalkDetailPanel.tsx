@@ -474,7 +474,8 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         keyExtractor={item => item.anchorId}
         style={{ flex: 1 }}
         // タイルが表示中はその高さ分だけpaddingBottomを取る（タイルの下にコンテンツが隠れないよう）
-        contentContainerStyle={[styles.messageList, tileFullHeight > 0 && tileMenu ? { paddingBottom: 24 + tileFullHeight } : undefined]}
+        // invertedなのでpaddingTopが視覚的な下（最新メッセージ側）に効く＝タイルの後ろに隠れないよう余白を確保
+        contentContainerStyle={[styles.messageList, tileFullHeight > 0 && tileMenu ? { paddingTop: tileFullHeight } : undefined]}
         inverted
         onScroll={(e) => {
           const currentY = e.nativeEvent.contentOffset.y
