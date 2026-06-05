@@ -78,19 +78,17 @@ export default function LoginScreen() {
       return
     }
 
-    // TOTP未登録 → メールOTP二段階認証へ
-    authFlags.skipNextSignedOut = true
-    await supabase.auth.signOut()
-
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false },
-    })
+    // TOTP未登録 → OTPなしでそのまま直接サインイン
+    const { data: { user: signedInUser } } = await supabase.auth.getUser()
+    authFlags.skipNextSignedIn = false
     setLoading(false)
-    if (otpError) {
-      Alert.alert('エラー', otpError.message)
-    } else {
-      setStep('otp')
+    if (signedInUser) {
+      const { data: prof } = await supabase.from('profiles').select('display_name, username').eq('id', signedInUser.id).single()
+      if (!prof?.display_name || prof.display_name.includes('@') || !prof?.username) {
+        router.replace('/onboarding' as any)
+      } else {
+        router.replace('/(tabs)/' as any)
+      }
     }
   }
 
@@ -216,7 +214,11 @@ export default function LoginScreen() {
               <View style={styles.inputWrap}>
                 <Ionicons name="mail-outline" size={18} color={Colors.textLight} style={styles.inputIcon} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, Platform.OS === 'web' && {
+                    // ブラウザのオートフィル青色を背景色で上書き
+                    WebkitBoxShadow: `0 0 0 1000px ${Colors.background} inset`,
+                    WebkitTextFillColor: Colors.text,
+                  } as any]}
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.textLight}
                   value={email}
