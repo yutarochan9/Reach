@@ -220,7 +220,7 @@ export default function LoginScreen() {
                     WebkitTextFillColor: Colors.text,
                   } as any]}
                   placeholder="メールアドレス"
-                  placeholderTextColor={Colors.text}
+                  placeholderTextColor={Colors.textLight}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"

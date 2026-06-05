@@ -239,7 +239,7 @@ export default function SignupScreen() {
                     WebkitTextFillColor: Colors.text,
                   } as any]}
                   placeholder="メールアドレス"
-                  placeholderTextColor={Colors.text}
+                  placeholderTextColor={Colors.textLight}
                   value={email}
                   onChangeText={v => { setEmail(v); setEmailError('') }}
                   keyboardType="email-address"
@@ -254,7 +254,7 @@ export default function SignupScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="パスワード（8文字以上）"
-                  placeholderTextColor={Colors.text}
+                  placeholderTextColor={Colors.textLight}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -334,7 +334,7 @@ export default function SignupScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="ユーザー名（表示名）"
-                  placeholderTextColor={Colors.text}
+                  placeholderTextColor={Colors.textLight}
                   value={displayName}
                   onChangeText={setDisplayName}
                   maxLength={30}
@@ -347,7 +347,7 @@ export default function SignupScreen() {
                 <TextInput
                   style={styles.input}
                   placeholder="ユーザーアドレス（英数字・_のみ）"
-                  placeholderTextColor={Colors.text}
+                  placeholderTextColor={Colors.textLight}
                   value={username}
                   onChangeText={v => { setUsername(v.replace(/[^a-zA-Z0-9_]/g, '')); setUsernameError('') }}
                   autoCapitalize="none"
