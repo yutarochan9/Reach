@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Alert, SafeAreaView, ScrollView, Image,
@@ -63,6 +63,30 @@ export default function SignupScreen() {
   const [usernameError, setUsernameError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [loading, setLoading] = useState(false)
+  const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // メール+パスワード両方入力されたら既存ユーザーチェック（800msデバウンス）
+  useEffect(() => {
+    if (checkTimerRef.current) clearTimeout(checkTimerRef.current)
+    if (!email.includes('@') || password.length < 8) {
+      setEmailError('')
+      return
+    }
+    checkTimerRef.current = setTimeout(async () => {
+      authFlags.skipNextSignedIn = true
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      if (!error) {
+        authFlags.skipNextSignedOut = true
+        await supabase.auth.signOut()
+        authFlags.skipNextSignedIn = false
+        setEmailError('このメールアドレスはすでに登録されています。サインインからログインしてください。')
+      } else {
+        authFlags.skipNextSignedIn = false
+        setEmailError('')
+      }
+    }, 800)
+    return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current) }
+  }, [email, password])
 
   const handleRegister = async () => {
     setEmailError('')
@@ -224,8 +248,15 @@ export default function SignupScreen() {
               <Text style={styles.cardTitle}>サインアップ</Text>
               <Text style={styles.cardSub}>アカウントを作成してはじめましょう</Text>
 
-              <View style={[styles.inputWrap, emailError ? styles.inputWrapError : null]}>
-                <Ionicons name="mail-outline" size={18} color={emailError ? '#E53E3E' : Colors.textLight} style={styles.inputIcon} />
+              <View style={[
+                styles.inputWrap,
+                emailError ? styles.inputWrapError : email ? styles.inputWrapFilled : null
+              ]}>
+                <Ionicons
+                  name="mail-outline" size={18}
+                  color={emailError ? '#E53E3E' : email ? Colors.text : Colors.textLight}
+                  style={styles.inputIcon}
+                />
                 <TextInput
                   style={[styles.input, Platform.OS === 'web' && {
                     WebkitBoxShadow: `0 0 0 1000px ${Colors.background} inset`,
@@ -234,7 +265,7 @@ export default function SignupScreen() {
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.textLight}
                   value={email}
-                  onChangeText={v => { setEmail(v); setEmailError('') }}
+                  onChangeText={v => { setEmail(v) }}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -394,6 +425,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputWrapError: { borderColor: '#E53E3E' },
+  inputWrapFilled: { borderColor: Colors.text },
   inputIcon: { marginRight: 8 },
   atSign: { fontSize: 16, color: Colors.textLight, marginRight: 4 },
   eyeBtn: { padding: 4 },
