@@ -237,7 +237,6 @@ export default function SignupScreen() {
                 <TextInput
                   style={[styles.input, Platform.OS === 'web' && {
                     WebkitBoxShadow: `0 0 0 1000px ${Colors.background} inset`,
-                    WebkitTextFillColor: Colors.text,
                   } as any]}
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.textLight}

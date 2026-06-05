@@ -217,7 +217,6 @@ export default function LoginScreen() {
                   style={[styles.input, Platform.OS === 'web' && {
                     // ブラウザのオートフィル青色を背景色で上書き
                     WebkitBoxShadow: `0 0 0 1000px ${Colors.background} inset`,
-                    WebkitTextFillColor: Colors.text,
                   } as any]}
                   placeholder="メールアドレス"
                   placeholderTextColor={Colors.textLight}
