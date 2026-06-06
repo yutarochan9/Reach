@@ -383,7 +383,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         contentContainerStyle={styles.messageList}
         inverted
         ListEmptyComponent={() => (
-          <View style={styles.emptyWrap}>
+          <View style={[styles.emptyWrap, { transform: [{ scaleY: -1 }] }]}>
             <Ionicons name="chatbubbles-outline" size={40} color={Colors.border} />
             <Text style={styles.emptyText}>まだメッセージはありません</Text>
           </View>

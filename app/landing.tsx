@@ -85,7 +85,6 @@ export default function LandingPage() {
         <Text style={styles.heroDesc}>
           Reachは、クリエイターがファンへ直接届ける一斉配信・メンバーシップ・メッセージ機能を備えた日本発のプラットフォームです。
         </Text>
-        <Text style={styles.heroNote}>登録無料</Text>
       </Animated.View>
 
       {/* ── 機能紹介 ─────────────────────────────────────────── */}
