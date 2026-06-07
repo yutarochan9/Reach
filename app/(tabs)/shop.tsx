@@ -8,6 +8,14 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
+// ── スコアリング係数 ──────────────────────────────────────────
+const W_TAG_MATCH  = 40   // タグ一致（1タグにつき）
+const W_LIKE_COUNT = 15   // いいね数（上限50でキャップ）
+const W_COMMENT    = 10   // コメント数（上限50でキャップ）
+// 時間減衰：半減期48時間（2日経つとスコアが半分になる）
+const DECAY_HALF_LIFE_H = 48
+const DECAY_RATE = Math.LN2 / DECAY_HALF_LIFE_H
+
 // ── 型定義 ──────────────────────────────────────────────────
 type FeedItem = {
   id: string
@@ -21,6 +29,7 @@ type FeedItem = {
   avatar_url: string | null
   username: string | null
   my_liked: boolean
+  score: number
 }
 
 // ── 相対時間フォーマット ──────────────────────────────────────
@@ -72,18 +81,22 @@ export default function DiscoverFeedScreen() {
     const bcIds = broadcasts.map((b: any) => b.id)
     const senderIds = [...new Set(broadcasts.map((b: any) => b.sender_id))]
 
-    // クリエイター情報・いいね数・コメント数・自分のいいねを並列取得
+    // クリエイター情報・いいね数・コメント数・自分のいいね・自分のタグを並列取得
     const [
       { data: profiles },
       { data: reactions },
       { data: comments },
       { data: myReactions },
+      { data: myProfile },
     ] = await Promise.all([
-      supabase.from('profiles').select('id, display_name, avatar_url, username').in('id', senderIds),
+      supabase.from('profiles').select('id, display_name, avatar_url, username, tags').in('id', senderIds),
       supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds),
       supabase.from('messages').select('broadcast_id').in('broadcast_id', bcIds).not('broadcast_id', 'is', null),
       supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds).eq('user_id', user.id),
+      supabase.from('profiles').select('tags').eq('id', user.id).single(),
     ])
+
+    const myTags: Set<string> = new Set(((myProfile as any)?.tags ?? []).map((t: string) => t.toLowerCase()))
 
     const profileMap: Record<string, any> = {}
     for (const p of (profiles ?? [])) profileMap[p.id] = p
@@ -95,23 +108,45 @@ export default function DiscoverFeedScreen() {
     for (const c of (comments ?? [])) commentMap[c.broadcast_id] = (commentMap[c.broadcast_id] ?? 0) + 1
 
     const myLikedSet = new Set((myReactions ?? []).map((r: any) => r.broadcast_id))
+    const now = Date.now()
 
     const feed: FeedItem[] = broadcasts.map((b: any) => {
       const p = profileMap[b.sender_id] ?? {}
+      const likeCount = likeMap[b.id] ?? 0
+      const commentCount = commentMap[b.id] ?? 0
+
+      // タグ一致数（クリエイターのタグと自分のタグ）
+      const creatorTags: string[] = (p.tags ?? []).map((t: string) => t.toLowerCase())
+      const tagMatch = myTags.size > 0
+        ? creatorTags.filter(t => myTags.has(t)).length
+        : 0
+
+      // 時間減衰：投稿からの経過時間（時間単位）
+      const hoursAgo = (now - new Date(b.created_at).getTime()) / 3600000
+      const decay = Math.exp(-DECAY_RATE * hoursAgo)
+
+      // ベーススコア × 時間減衰
+      const baseScore =
+        tagMatch    * W_TAG_MATCH +
+        Math.min(likeCount, 50)    / 50 * W_LIKE_COUNT +
+        Math.min(commentCount, 50) / 50 * W_COMMENT
+      const score = baseScore * decay
+
       return {
         id: b.id,
         public_title: b.public_title ?? null,
         content: b.content,
         created_at: b.created_at,
-        like_count: likeMap[b.id] ?? 0,
-        comment_count: commentMap[b.id] ?? 0,
+        like_count: likeCount,
+        comment_count: commentCount,
         sender_id: b.sender_id,
         display_name: p.display_name ?? '不明',
         avatar_url: p.avatar_url ?? null,
         username: p.username ?? null,
         my_liked: myLikedSet.has(b.id),
+        score,
       }
-    })
+    }).sort((a: any, b: any) => b.score - a.score)
 
     _cache = feed
     _loaded = true
