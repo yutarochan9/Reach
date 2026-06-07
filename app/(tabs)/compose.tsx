@@ -389,11 +389,11 @@ export default function ComposeScreen() {
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
         <TouchableOpacity style={[styles.toolBtn, styles.toolBtnFirst, (showPublic || isPublic) && styles.toolBtnActive]} onPress={() => { setShowPublic(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}>
-          <Ionicons name="compass-outline" size={14} color={(showPublic || isPublic) ? Colors.white : Colors.accent} />
+          <Ionicons name="compass-outline" size={14} color={Colors.accent} />
           <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive]} numberOfLines={1}>{isPublic ? '発見✓' : '発見'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}>
-          <Ionicons name="time-outline" size={14} color={showSchedule ? Colors.white : Colors.accent} />
+          <Ionicons name="time-outline" size={14} color={Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
@@ -401,9 +401,9 @@ export default function ComposeScreen() {
             style={[styles.toolBtn, (showCommentOption || commentsDisabled) && styles.toolBtnActive]}
             onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}
           >
-            <Ionicons name="chatbubble-outline" size={14} color={(showCommentOption || commentsDisabled) ? Colors.white : Colors.accent} />
+            <Ionicons name={commentsDisabled ? 'chatbubble-ellipses-outline' : 'chatbubble-outline'} size={14} color={Colors.accent} />
             <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]} numberOfLines={1}>
-              {commentsDisabled ? 'コメント✗' : 'コメント'}
+              {commentsDisabled ? 'コメ✗' : 'コメント'}
             </Text>
           </TouchableOpacity>
         )}
@@ -411,7 +411,7 @@ export default function ComposeScreen() {
           style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
           onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowPublic(false); setShowSubscriber(false) }}
         >
-          <Ionicons name="archive-outline" size={14} color={showArchive ? Colors.white : Colors.accent} />
+          <Ionicons name="archive-outline" size={14} color={Colors.accent} />
           <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
             {visibleToNew ? '全員' : '現在のみ'}
           </Text>
@@ -420,7 +420,7 @@ export default function ComposeScreen() {
           style={[styles.toolBtn, styles.toolBtnLast, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
           onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false) }}
         >
-          <Ionicons name="lock-closed-outline" size={14} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
+          <Ionicons name="lock-closed-outline" size={14} color={Colors.accent} />
           <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
             {isSubscriberOnly ? 'MB限定' : '全員'}
           </Text>
@@ -1033,9 +1033,9 @@ const styles = StyleSheet.create({
   },
   toolBtnFirst: {},
   toolBtnLast: {},
-  toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  toolBtnActive: { borderColor: Colors.accent, borderWidth: 1.5 },
   toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
-  toolBtnTextActive: { color: Colors.white },
+  toolBtnTextActive: { color: Colors.accent },
 
   optionCard: {
     backgroundColor: Colors.white, borderRadius: 12,
