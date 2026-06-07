@@ -19,7 +19,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     index:  { active: 'home',         inactive: 'home-outline',         label: 'ホーム' },
     talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'メッセージ' },
     shop:   { active: 'compass',      inactive: 'compass-outline',      label: '発見' },
-    mypage: { active: 'person',       inactive: 'person-outline',       label: 'マイページ' },
+    search: { active: 'search',       inactive: 'search-outline',       label: '検索' },
   }
 
   const tabs = state.routes.map((route, index) => {
@@ -96,7 +96,7 @@ export default function TabLayout() {
       setSelectedDmId(null)
     }
     // タブを記憶（全プラットフォーム）
-    const tabRoutes = ['/(tabs)/', '/(tabs)/talk', '/(tabs)/shop', '/(tabs)/mypage']
+    const tabRoutes = ['/(tabs)/', '/(tabs)/talk', '/(tabs)/shop', '/(tabs)/search']
     const match = tabRoutes.find(r => r === pathname || (r !== '/(tabs)/' && pathname.startsWith(r)))
     if (match) AsyncStorage.setItem('reach_last_tab', match).catch(() => {})
   }, [pathname])
@@ -118,8 +118,10 @@ export default function TabLayout() {
             <Tabs.Screen name="index" />
             <Tabs.Screen name="talk" />
             <Tabs.Screen name="shop" />
-            <Tabs.Screen name="mypage" />
+            <Tabs.Screen name="search" />
             <Tabs.Screen name="compose" />
+            {/* マイページはタブから外してホームのアバターから遷移 */}
+            <Tabs.Screen name="mypage" options={{ href: null }} />
           </Tabs>
         </View>
 

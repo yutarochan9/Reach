@@ -123,7 +123,7 @@ export default function HomeScreen() {
         <View style={styles.headerTop}>
           <TouchableOpacity
             style={styles.headerProfile}
-            onPress={() => myUserId && router.push(`/creator/${myUserId}` as any)}
+            onPress={() => router.push('/(tabs)/mypage' as any)}
             activeOpacity={0.75}
           >
             <View style={styles.headerAvatar}>

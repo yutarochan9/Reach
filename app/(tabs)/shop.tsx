@@ -1,359 +1,307 @@
-﻿import { useState, useEffect, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, TextInput, Image } from 'react-native'
-import { router } from 'expo-router'
+import { useState, useCallback } from 'react'
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  RefreshControl, ActivityIndicator, Image,
+} from 'react-native'
+import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 
-const PAGE_SIZE = 20
-
-// ── スコアリング係数 ──────────────────────────────────
-// 返信率を最重視（YouTube/Xで「コメント率」が最強エンゲージメント指標とされる）
-// いいね率は次点（Instagramリールのエンゲージメント計算式参考）
-// 配信頻度：継続して届けているクリエイターをブースト（TikTok「コンスタンシー」参考）
-// ソーシャル近接：フォロー中の人もフォローしているかは補足信号のみ
-const W_REPLY_RATE    = 200  // 返信率（返信数 / 閲覧数）
-const W_REACTION_RATE = 100  // いいね率（いいね数 / 閲覧数）
-const W_FREQ          = 3    // 配信本数（30日以内、上限20本）
-const W_SOCIAL        = 4    // ソーシャル近接（1人につき）
-const W_POPULARITY    = 8    // フォロワー数（上限500でキャップ）
-const W_TAG_MATCH     = 15   // 自分のタグと一致（1タグにつき）
-
-type Creator = {
+// ── 型定義 ──────────────────────────────────────────────────
+type FeedItem = {
   id: string
+  public_title: string | null
+  content: string
+  created_at: string
+  like_count: number
+  comment_count: number
+  sender_id: string
   display_name: string
-  bio: string | null
   avatar_url: string | null
-  follower_count: number
-  is_following: boolean
-  score: number
-  social_count: number
-  broadcast_count: number
-  reaction_rate: number
-  reply_rate: number
-  tags: string[]
-  tag_match_count: number   // 自分のタグとの一致数
   username: string | null
+  my_liked: boolean
 }
 
-// ── モジュールレベルキャッシュ（再マウント時のフラッシュ防止）──────────
-let _cachedScored: Creator[] = []
-let _cachedProfiles: Creator[] = []
-let _shopLoaded = false
+// ── 相対時間フォーマット ──────────────────────────────────────
+function timeAgo(iso: string): string {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000
+  if (diff < 60) return 'たった今'
+  if (diff < 3600) return `${Math.floor(diff / 60)}分前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}時間前`
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}日前`
+  const d = new Date(iso)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
 
-export default function DiscoverScreen() {
-  const [allScored, setAllScored] = useState<Creator[]>(_cachedScored)
-  const [allProfiles, setAllProfiles] = useState<Creator[]>(_cachedProfiles)
-  const [loading, setLoading] = useState(!_shopLoaded)
+// ── モジュールキャッシュ ──────────────────────────────────────
+let _cache: FeedItem[] = []
+let _loaded = false
+
+export default function DiscoverFeedScreen() {
+  const [items, setItems] = useState<FeedItem[]>(_cache)
+  const [loading, setLoading] = useState(!_loaded)
   const [refreshing, setRefreshing] = useState(false)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
   const [myId, setMyId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setMyId(user.id)
 
-    // 1. 自分のフォロー中リスト
-    const { data: myFollows } = await supabase
-      .from('follows').select('following_id').eq('follower_id', user.id)
-    const myFollowingIds = (myFollows ?? []).map((f: any) => f.following_id)
-    const myFollowingSet = new Set([user.id, ...myFollowingIds])
+    // is_public=true の配信を新着順で取得（自分以外）
+    const { data: broadcasts } = await supabase
+      .from('broadcasts')
+      .select('id, public_title, content, created_at, sender_id')
+      .eq('status', 'published')
+      .eq('is_public', true)
+      .neq('sender_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(200)
 
-    // 2. 自分のプロフィール（タグ取得）と候補プロフィール（未フォロー・自分以外、最大300件）
-    const [{ data: myProfile }, { data: profiles }] = await Promise.all([
-      supabase.from('profiles').select('tags').eq('id', user.id).single(),
-      supabase.from('profiles').select('id, display_name, bio, avatar_url, tags, username').neq('id', user.id).neq('is_test', true).limit(300),
-    ])
-    const myTags: string[] = (myProfile as any)?.tags ?? []
-    const myTagSet = new Set(myTags.map((t: string) => t.toLowerCase()))
-    if (!profiles?.length) { setLoading(false); return }
-
-    const candidateIds = profiles.map((p: any) => p.id).filter((id: string) => !myFollowingSet.has(id))
-    if (!candidateIds.length) { setAllScored([]); setAllProfiles([]); setLoading(false); return }
-
-    const since30 = new Date(Date.now() - 30 * 86400_000).toISOString()
-
-    // 3. 並列取得
-    const [
-      { data: allFollows },
-      { data: socialFollows },
-      { data: recentBroadcasts },
-    ] = await Promise.all([
-      // フォロワー数
-      supabase.from('follows').select('following_id').in('following_id', candidateIds),
-      // ソーシャル近接
-      myFollowingIds.length > 0
-        ? supabase.from('follows').select('following_id')
-            .in('follower_id', myFollowingIds).in('following_id', candidateIds)
-        : Promise.resolve({ data: [] }),
-      // 30日以内の配信（id + sender_id のみ）
-      supabase.from('broadcasts')
-        .select('id, sender_id')
-        .in('sender_id', candidateIds)
-        .eq('status', 'published')
-        .gte('created_at', since30)
-        .limit(2000),
-    ])
-
-    // 配信IDリストを構築
-    const bcList = (recentBroadcasts ?? []) as { id: string; sender_id: string }[]
-    const bcIds = bcList.map(b => b.id)
-
-    // 4. 配信があれば reactions / reads / replies を取得
-    const [{ data: reactions }, { data: reads }, { data: replies }] =
-      bcIds.length > 0
-        ? await Promise.all([
-            supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds),
-            supabase.from('broadcast_reads').select('broadcast_id').in('broadcast_id', bcIds),
-            supabase.from('messages').select('broadcast_id').in('broadcast_id', bcIds).not('broadcast_id', 'is', null),
-          ])
-        : [{ data: [] }, { data: [] }, { data: [] }]
-
-    // 5. per-creator 集計
-    const followerMap: Record<string, number> = {}
-    for (const f of (allFollows ?? [])) followerMap[f.following_id] = (followerMap[f.following_id] ?? 0) + 1
-
-    const socialMap: Record<string, number> = {}
-    for (const f of (socialFollows ?? [])) socialMap[f.following_id] = (socialMap[f.following_id] ?? 0) + 1
-
-    // 配信ごとのリアクション・閲覧・返信数
-    const reactionByBc: Record<string, number> = {}
-    for (const r of (reactions ?? [])) reactionByBc[r.broadcast_id] = (reactionByBc[r.broadcast_id] ?? 0) + 1
-    const readByBc: Record<string, number> = {}
-    for (const r of (reads ?? [])) readByBc[r.broadcast_id] = (readByBc[r.broadcast_id] ?? 0) + 1
-    const replyByBc: Record<string, number> = {}
-    for (const r of (replies ?? [])) replyByBc[r.broadcast_id] = (replyByBc[r.broadcast_id] ?? 0) + 1
-
-    // クリエイターごとに集約
-    const creatorStats: Record<string, { bcCount: number; totalReactions: number; totalReads: number; totalReplies: number }> = {}
-    for (const b of bcList) {
-      if (!creatorStats[b.sender_id]) creatorStats[b.sender_id] = { bcCount: 0, totalReactions: 0, totalReads: 0, totalReplies: 0 }
-      creatorStats[b.sender_id].bcCount++
-      creatorStats[b.sender_id].totalReactions += reactionByBc[b.id] ?? 0
-      creatorStats[b.sender_id].totalReads     += readByBc[b.id] ?? 0
-      creatorStats[b.sender_id].totalReplies   += replyByBc[b.id] ?? 0
+    if (!broadcasts?.length) {
+      _cache = []
+      _loaded = true
+      setItems([])
+      setLoading(false)
+      return
     }
 
-    // 6. スコアリング（全ユーザー対象、is_followingを正しくセット）
-    const allScoredFull: Creator[] = profiles
-      .map((p: any) => {
-        const fc = followerMap[p.id] ?? 0
-        const sc = socialMap[p.id] ?? 0
-        const st = creatorStats[p.id]
+    const bcIds = broadcasts.map((b: any) => b.id)
+    const senderIds = [...new Set(broadcasts.map((b: any) => b.sender_id))]
 
-        const bcCount      = st?.bcCount ?? 0
-        const totalReads   = st?.totalReads ?? 0
-        const reactionRate = totalReads > 0 ? st!.totalReactions / totalReads : 0
-        const replyRate    = totalReads > 0 ? st!.totalReplies   / totalReads : 0
+    // クリエイター情報・いいね数・コメント数・自分のいいねを並列取得
+    const [
+      { data: profiles },
+      { data: reactions },
+      { data: comments },
+      { data: myReactions },
+    ] = await Promise.all([
+      supabase.from('profiles').select('id, display_name, avatar_url, username').in('id', senderIds),
+      supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds),
+      supabase.from('messages').select('broadcast_id').in('broadcast_id', bcIds).not('broadcast_id', 'is', null),
+      supabase.from('reactions').select('broadcast_id').in('broadcast_id', bcIds).eq('user_id', user.id),
+    ])
 
-        const creatorTags: string[] = (p as any).tags ?? []
-        const tagMatchCount = myTagSet.size > 0
-          ? creatorTags.filter((t: string) => myTagSet.has(t.toLowerCase())).length
-          : 0
+    const profileMap: Record<string, any> = {}
+    for (const p of (profiles ?? [])) profileMap[p.id] = p
 
-        const score =
-          replyRate      * W_REPLY_RATE +
-          reactionRate   * W_REACTION_RATE +
-          Math.min(bcCount, 20) * W_FREQ +
-          sc             * W_SOCIAL +
-          Math.min(fc, 500) / 500 * W_POPULARITY +
-          tagMatchCount  * W_TAG_MATCH
+    const likeMap: Record<string, number> = {}
+    for (const r of (reactions ?? [])) likeMap[r.broadcast_id] = (likeMap[r.broadcast_id] ?? 0) + 1
 
-        return {
-          ...p,
-          follower_count: fc,
-          is_following: myFollowingSet.has(p.id),
-          score,
-          social_count: sc,
-          broadcast_count: bcCount,
-          reaction_rate: reactionRate,
-          reply_rate: replyRate,
-          tags: creatorTags,
-          tag_match_count: tagMatchCount,
-          username: (p as any).username ?? null,
-        }
-      })
-      .sort((a: Creator, b: Creator) => b.score - a.score)
+    const commentMap: Record<string, number> = {}
+    for (const c of (comments ?? [])) commentMap[c.broadcast_id] = (commentMap[c.broadcast_id] ?? 0) + 1
 
-    // フォロー済みを除いたリスト（おすすめ・ランキング表示用）
-    const scored = allScoredFull.filter(c => !c.is_following)
+    const myLikedSet = new Set((myReactions ?? []).map((r: any) => r.broadcast_id))
 
-    _cachedScored = scored
-    _cachedProfiles = allScoredFull
-    _shopLoaded = true
-    setAllScored(scored)
-    setAllProfiles(allScoredFull)
+    const feed: FeedItem[] = broadcasts.map((b: any) => {
+      const p = profileMap[b.sender_id] ?? {}
+      return {
+        id: b.id,
+        public_title: b.public_title ?? null,
+        content: b.content,
+        created_at: b.created_at,
+        like_count: likeMap[b.id] ?? 0,
+        comment_count: commentMap[b.id] ?? 0,
+        sender_id: b.sender_id,
+        display_name: p.display_name ?? '不明',
+        avatar_url: p.avatar_url ?? null,
+        username: p.username ?? null,
+        my_liked: myLikedSet.has(b.id),
+      }
+    })
+
+    _cache = feed
+    _loaded = true
+    setItems(feed)
     setPage(1)
     setLoading(false)
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useFocusEffect(useCallback(() => { load() }, [load]))
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false) }
 
-  const handleFollow = async (creatorId: string, isFollowing: boolean) => {
+  // いいねのトグル
+  const handleLike = async (item: FeedItem) => {
     if (!myId) return
-    if (isFollowing) {
-      await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', creatorId)
+    if (item.my_liked) {
+      await supabase.from('reactions').delete()
+        .eq('broadcast_id', item.id).eq('user_id', myId)
     } else {
-      await supabase.from('follows').insert({ follower_id: myId, following_id: creatorId })
+      await supabase.from('reactions').insert({ broadcast_id: item.id, user_id: myId, type: 'like' })
     }
-    const upd = (c: Creator) => c.id === creatorId
-      ? { ...c, is_following: !isFollowing, follower_count: c.follower_count + (isFollowing ? -1 : 1) }
-      : c
-    setAllScored(p => p.map(upd))
-    setAllProfiles(p => p.map(upd))
+    setItems(prev => prev.map(i => i.id === item.id
+      ? { ...i, my_liked: !i.my_liked, like_count: i.like_count + (i.my_liked ? -1 : 1) }
+      : i
+    ))
   }
 
-  const isSearching = search.length > 0
-  const searchResults = isSearching
-    ? allProfiles.filter(c => {
-        const q = search.toLowerCase().replace(/^#/, '')
-        return (
-          c.display_name.toLowerCase().includes(q) ||
-          (c.username ?? '').toLowerCase().includes(q) ||
-          (c.bio ?? '').toLowerCase().includes(q) ||
-          c.tags.some(t => t.toLowerCase().includes(q))
-        )
-      })
-    : []
+  const pagedItems = items.slice(0, page * PAGE_SIZE)
+  const hasMore = items.length > page * PAGE_SIZE
 
-  const pagedList = allScored.slice(0, page * PAGE_SIZE)
-  const hasMore = allScored.length > page * PAGE_SIZE
-
-  if (loading) return (
-    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-      <ActivityIndicator color={Colors.accent} />
-    </View>
-  )
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator color={Colors.accent} />
+      </View>
+    )
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>発見</Text>
+        <Text style={styles.headerSub}>クリエイターの投稿をチェック</Text>
       </View>
 
-      <View style={styles.searchWrap}>
-        <Ionicons name="search-outline" size={16} color={Colors.textLight} style={{ marginRight: 6 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="名前・キーワードで検索"
-          placeholderTextColor={Colors.textLight}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={16} color={Colors.textLight} />
-          </TouchableOpacity>
+      <FlatList
+        data={pagedItems}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
+        ListEmptyComponent={() => (
+          <View style={styles.emptyWrap}>
+            <Ionicons name="newspaper-outline" size={52} color={Colors.border} />
+            <Text style={styles.emptyTitle}>まだ投稿がありません</Text>
+            <Text style={styles.emptyDesc}>クリエイターが「発見に投稿」すると{'\n'}ここに表示されます</Text>
+          </View>
         )}
-      </View>
-
-      {isSearching ? (
-        <FlatList
-          data={searchResults}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={() => <Text style={styles.empty}>見つかりませんでした</Text>}
-          renderItem={({ item }) => <CreatorRow item={item} onFollow={handleFollow} />}
-        />
-      ) : (
-        <FlatList
-          data={pagedList}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
-          ListHeaderComponent={() => (
-            <View style={[styles.sectionRow, { paddingHorizontal: 12 }]}>
-              <Ionicons name="star-outline" size={15} color={Colors.accent} />
-              <Text style={styles.sectionTitle}>おすすめ</Text>
-              <Text style={styles.sectionCount}>{allScored.length}人</Text>
-            </View>
-          )}
-          ListEmptyComponent={() => <Text style={styles.empty}>クリエイターがまだいません</Text>}
-          renderItem={({ item }) => <CreatorRow item={item} onFollow={handleFollow} />}
-          ListFooterComponent={() => hasMore ? (
-            <TouchableOpacity style={styles.moreBtn} onPress={() => setPage(p => p + 1)}>
-              <Text style={styles.moreTxt}>さらに表示</Text>
-              <Ionicons name="chevron-down" size={14} color={Colors.accent} />
-            </TouchableOpacity>
-          ) : null}
-        />
-      )}
+        renderItem={({ item }) => (
+          <FeedCard item={item} onLike={handleLike} />
+        )}
+        ListFooterComponent={() => hasMore ? (
+          <TouchableOpacity style={styles.moreBtn} onPress={() => setPage(p => p + 1)}>
+            <Text style={styles.moreTxt}>さらに読み込む</Text>
+            <Ionicons name="chevron-down" size={14} color={Colors.accent} />
+          </TouchableOpacity>
+        ) : null}
+      />
     </View>
   )
 }
 
+// ── フィードカード ────────────────────────────────────────────
+function FeedCard({ item, onLike }: { item: FeedItem; onLike: (item: FeedItem) => void }) {
+  const hasTitle = item.public_title && item.public_title.trim().length > 0
 
-function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, f: boolean) => void }) {
   return (
-    <TouchableOpacity style={styles.card}
-      onPress={() => router.push(`/creator/${item.id}` as any)} activeOpacity={0.85}>
-      {item.avatar_url
-        ? <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-        : <View style={styles.avatarFb}><Text style={styles.avatarTxt}>{item.display_name[0]}</Text></View>
-      }
-      <View style={styles.info}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text style={styles.name}>{item.display_name}</Text>
-        </View>
-        {item.bio && <Text style={styles.bio} numberOfLines={1}>{item.bio}</Text>}
-        <Text style={styles.sub}>{item.follower_count.toLocaleString()} フォロワー</Text>
-      </View>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => router.push(`/broadcast-thread/${item.id}` as any)}
+      activeOpacity={0.88}
+    >
+      {/* クリエイター情報 */}
       <TouchableOpacity
-        style={[styles.followBtn, item.is_following && styles.followingBtn]}
-        onPress={() => onFollow(item.id, item.is_following)}
+        style={styles.creatorRow}
+        onPress={() => router.push(`/creator/${item.sender_id}` as any)}
+        activeOpacity={0.75}
       >
-        <Text style={[styles.followTxt, item.is_following && styles.followingTxt]}>
-          {item.is_following ? 'フォロー中' : 'フォロー'}
-        </Text>
+        {item.avatar_url
+          ? <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+          : <View style={styles.avatarFb}><Text style={styles.avatarTxt}>{item.display_name[0]}</Text></View>
+        }
+        <View style={styles.creatorInfo}>
+          <Text style={styles.creatorName}>{item.display_name}</Text>
+          {item.username && <Text style={styles.creatorAt}>@{item.username}</Text>}
+        </View>
+        <Text style={styles.timeAgo}>{timeAgo(item.created_at)}</Text>
       </TouchableOpacity>
+
+      {/* タイトル（あれば） */}
+      {hasTitle && (
+        <Text style={styles.title} numberOfLines={2}>{item.public_title}</Text>
+      )}
+
+      {/* 本文 */}
+      <Text
+        style={[styles.body, hasTitle && styles.bodyWithTitle]}
+        numberOfLines={hasTitle ? 3 : 5}
+      >
+        {item.content}
+      </Text>
+
+      {/* フッター：いいね・コメント */}
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.footerBtn}
+          onPress={(e) => { e.stopPropagation?.(); onLike(item) }}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={item.my_liked ? 'heart' : 'heart-outline'}
+            size={17}
+            color={item.my_liked ? '#E53E3E' : Colors.textLight}
+          />
+          <Text style={[styles.footerCount, item.my_liked && styles.footerCountLiked]}>
+            {item.like_count > 0 ? item.like_count.toLocaleString() : ''}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.footerBtn}
+          onPress={() => router.push(`/broadcast-thread/${item.id}` as any)}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chatbubble-outline" size={16} color={Colors.textLight} />
+          <Text style={styles.footerCount}>
+            {item.comment_count > 0 ? item.comment_count.toLocaleString() : ''}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+
   header: {
-    backgroundColor: Colors.header, paddingTop: 36,
-    paddingHorizontal: 20, paddingBottom: 16,
+    backgroundColor: Colors.header,
+    paddingTop: 36, paddingHorizontal: 20, paddingBottom: 14,
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
-  searchWrap: {
-    flexDirection: 'row', alignItems: 'center', margin: 12,
-    backgroundColor: Colors.white, borderRadius: 12,
-    paddingHorizontal: 12, borderWidth: 1, borderColor: Colors.border,
-  },
-  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: Colors.text },
-  list: { paddingBottom: 40 },
-  empty: { textAlign: 'center', color: Colors.textLight, marginTop: 32 },
+  headerSub: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
 
-  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.text, flex: 1 },
-  sectionCount: { fontSize: 11, color: Colors.textLight },
+  list: { paddingTop: 8, paddingBottom: 40 },
 
+  emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: Colors.textLight },
+  emptyDesc: { fontSize: 13, color: Colors.border, textAlign: 'center', lineHeight: 20 },
 
   card: {
-    backgroundColor: Colors.white, borderRadius: 14, padding: 14,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderWidth: 1, borderColor: Colors.border, marginHorizontal: 12, marginBottom: 8,
+    backgroundColor: Colors.white,
+    marginHorizontal: 12, marginBottom: 10,
+    borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: Colors.border,
   },
-  avatar: { width: 48, height: 48, borderRadius: 24 },
-  avatarFb: { width: 48, height: 48, borderRadius: 24, backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center' },
-  avatarTxt: { fontSize: 20, fontWeight: '700', color: Colors.white },
-  info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  bio: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
-  sub: { fontSize: 11, color: Colors.textLight, marginTop: 3 },
 
-  followBtn: { backgroundColor: Colors.button, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
-  followingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.button },
-  followTxt: { color: Colors.white, fontWeight: '700', fontSize: 13 },
-  followingTxt: { color: Colors.button },
+  creatorRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarFb: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.button, alignItems: 'center', justifyContent: 'center',
+  },
+  avatarTxt: { fontSize: 15, fontWeight: '700', color: Colors.white },
+  creatorInfo: { flex: 1 },
+  creatorName: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  creatorAt: { fontSize: 11, color: Colors.textLight, marginTop: 1 },
+  timeAgo: { fontSize: 11, color: Colors.border },
+
+  title: {
+    fontSize: 17, fontWeight: '800', color: Colors.text,
+    lineHeight: 24, marginBottom: 8,
+  },
+  body: { fontSize: 14, color: Colors.text, lineHeight: 22 },
+  bodyWithTitle: { color: Colors.textLight },
+
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.border },
+  footerBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  footerCount: { fontSize: 13, color: Colors.textLight, minWidth: 16 },
+  footerCountLiked: { color: '#E53E3E' },
 
   moreBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,

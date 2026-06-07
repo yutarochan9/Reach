@@ -66,6 +66,9 @@ export default function ComposeScreen() {
   const [confirmed, setConfirmed] = useState(false)
   const [commentsDisabled, setCommentsDisabled] = useState(false)
   const [visibleToNew, setVisibleToNew] = useState(true)
+  const [isPublic, setIsPublic] = useState(false)
+  const [publicTitle, setPublicTitle] = useState('')
+  const [showPublic, setShowPublic] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -316,6 +319,8 @@ export default function ComposeScreen() {
       comments_disabled: (BETA_MODE || userPlan === 'standard' || userPlan === 'pro') ? commentsDisabled : false,
       visible_to_new_followers: visibleToNew,
       is_subscriber_only: isSubscriberOnly,
+      is_public: !asDraft && isPublic,
+      public_title: !asDraft && isPublic && publicTitle.trim() ? publicTitle.trim() : null,
     }))
     const { error } = await supabase.from('broadcasts').insert(inserts)
     if (error) { Alert.alert('エラー', error.message); asDraft ? setSaving(false) : setLoading(false); return }
@@ -339,11 +344,13 @@ export default function ComposeScreen() {
       Alert.alert('下書き保存', '下書きを保存しました。「下書き・予約」タブから配信できます。')
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
       setScheduledAt(''); setConfirmed(false); setCommentsDisabled(false); setIsSubscriberOnly(false)
+      setIsPublic(false); setPublicTitle('')
       setActiveTab('drafts')
     } else if (status === 'scheduled') {
       Alert.alert('予約完了', `${scheduledLabel}に配信予定として保存しました。`)
       setBlocks([{ id: genId(), text: '', imageUri: null, imageUrl: null, imageLinkUrl: '', uploading: false }])
       setScheduledAt(''); setConfirmed(false); setCommentsDisabled(false); setIsSubscriberOnly(false)
+      setIsPublic(false); setPublicTitle('')
       setActiveTab('drafts')
     } else {
       // 配信後は自分のトーク画面へ遷移して送信内容を確認できる
@@ -375,14 +382,18 @@ export default function ComposeScreen() {
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowReaction(false); setShowArchive(false); setShowSubscriber(false) }}>
+        <TouchableOpacity style={[styles.toolBtn, (showPublic || isPublic) && styles.toolBtnActive]} onPress={() => { setShowPublic(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}>
+          <Ionicons name="compass-outline" size={15} color={(showPublic || isPublic) ? Colors.white : Colors.accent} />
+          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive]} numberOfLines={1}>{isPublic ? '発見に投稿' : '発見'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}>
           <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
             style={[styles.toolBtn, (showCommentOption || commentsDisabled) && styles.toolBtnActive]}
-            onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
+            onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}
           >
             <Ionicons name="chatbubble-outline" size={15} color={(showCommentOption || commentsDisabled) ? Colors.white : Colors.accent} />
             <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -392,7 +403,7 @@ export default function ComposeScreen() {
         )}
         <TouchableOpacity
           style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
-          onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowReaction(false); setShowSubscriber(false) }}
+          onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowPublic(false); setShowReaction(false); setShowSubscriber(false) }}
         >
           <Ionicons name="archive-outline" size={15} color={showArchive ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -401,7 +412,7 @@ export default function ComposeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toolBtn, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
-          onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowReaction(false); setShowArchive(false) }}
+          onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowPublic(false); setShowReaction(false); setShowArchive(false) }}
         >
           <Ionicons name="lock-closed-outline" size={15} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -409,6 +420,41 @@ export default function ComposeScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {showPublic && (
+        <View style={styles.optionCard}>
+          <Text style={styles.optionTitle}>発見タブへの投稿</Text>
+          {[
+            { value: false, label: 'フォロワーのみ', desc: 'フォロワーだけに届ける通常配信' },
+            { value: true,  label: '発見にも投稿',   desc: '発見タブに公開。フォロー外の人にも届く' },
+          ].map(opt => (
+            <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, isPublic === opt.value && styles.optionRowActive]}
+              onPress={() => { setIsPublic(opt.value); if (!opt.value) setPublicTitle(''); setShowPublic(opt.value) }}>
+              <View style={styles.optionLeft}>
+                <Text style={[styles.optionLabel, isPublic === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
+                <Text style={styles.optionDesc}>{opt.desc}</Text>
+              </View>
+              {isPublic === opt.value && <Ionicons name="checkmark" size={18} color={Colors.accent} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {isPublic && (
+        <View style={styles.optionCard}>
+          <Text style={styles.optionTitle}>発見タブ用タイトル（任意）</Text>
+          <Text style={styles.optionDesc}>タイトルは発見タブにのみ表示されます。フォロワーの配信ページには出ません。</Text>
+          <TextInput
+            style={styles.scheduleInput}
+            placeholder="タイトルを入力（例：今日の学び、おすすめ本3冊…）"
+            placeholderTextColor={Colors.textLight}
+            value={publicTitle}
+            onChangeText={setPublicTitle}
+            maxLength={80}
+          />
+          <Text style={[styles.scheduleHint, { textAlign: 'right', marginTop: 4 }]}>{publicTitle.length} / 80</Text>
+        </View>
+      )}
 
       {showCommentOption && (
         <View style={styles.optionCard}>
