@@ -8,16 +8,17 @@ import { Colors } from '../../constants/colors'
 const PAGE_SIZE = 20
 
 // ── スコアリング係数 ──────────────────────────────────
-// 返信率を最重視（YouTube/Xで「コメント率」が最強エンゲージメント指標とされる）
-// いいね率は次点（Instagramリールのエンゲージメント計算式参考）
-// 配信頻度：継続して届けているクリエイターをブースト（TikTok「コンスタンシー」参考）
-// ソーシャル近接：フォロー中の人もフォローしているかは補足信号のみ
-const W_REPLY_RATE    = 200  // 返信率（返信数 / 閲覧数）
-const W_REACTION_RATE = 100  // いいね率（いいね数 / 閲覧数）
+// タグ一致を最重視：自分の興味に合ったクリエイターを最優先で表示
+// 返信率・いいね率：エンゲージメントの質を評価
+// 閲覧数：配信がどれだけ読まれているかの絶対量（上限500でキャップ）
+// 配信頻度・ソーシャル近接・フォロワー数は補足信号
+const W_TAG_MATCH     = 40   // タグ一致（1タグにつき）★最重要
+const W_REPLY_RATE    = 150  // 返信率（返信数 / 閲覧数）
+const W_REACTION_RATE = 80   // いいね率（いいね数 / 閲覧数）
+const W_VIEW_COUNT    = 20   // 閲覧数（30日・上限500でキャップ）
 const W_FREQ          = 3    // 配信本数（30日以内、上限20本）
 const W_SOCIAL        = 4    // ソーシャル近接（1人につき）
 const W_POPULARITY    = 8    // フォロワー数（上限500でキャップ）
-const W_TAG_MATCH     = 15   // 自分のタグと一致（1タグにつき）
 
 type Creator = {
   id: string
@@ -154,12 +155,13 @@ export default function DiscoverScreen() {
           : 0
 
         const score =
+          tagMatchCount  * W_TAG_MATCH +
           replyRate      * W_REPLY_RATE +
           reactionRate   * W_REACTION_RATE +
+          Math.min(totalReads, 500) / 500 * W_VIEW_COUNT +
           Math.min(bcCount, 20) * W_FREQ +
           sc             * W_SOCIAL +
-          Math.min(fc, 500) / 500 * W_POPULARITY +
-          tagMatchCount  * W_TAG_MATCH
+          Math.min(fc, 500) / 500 * W_POPULARITY
 
         return {
           ...p,
