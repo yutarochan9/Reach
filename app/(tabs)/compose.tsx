@@ -1020,17 +1020,16 @@ const styles = StyleSheet.create({
   editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
   editorPanelContent: { padding: 20, gap: 14 },
 
-  toolbar: { flexDirection: 'row', gap: 0, paddingVertical: 2 },
+  toolbar: { flexDirection: 'row', gap: 4, paddingVertical: 2 },
   toolBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 4, paddingVertical: 7,
+    backgroundColor: Colors.white, borderRadius: 8,
+    paddingHorizontal: 3, paddingVertical: 6,
     borderWidth: 1, borderColor: Colors.border,
-    marginRight: -1,
   },
-  toolBtnFirst: { borderRadius: 8, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
-  toolBtnLast: { borderRadius: 8, borderTopRightRadius: 8, borderBottomRightRadius: 8, marginRight: 0 },
-  toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent, zIndex: 1 },
+  toolBtnFirst: {},
+  toolBtnLast: {},
+  toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
   toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
   toolBtnTextActive: { color: Colors.white },
 
