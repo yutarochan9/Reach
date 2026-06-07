@@ -9,16 +9,17 @@ const PAGE_SIZE = 20
 
 // ── スコアリング係数 ──────────────────────────────────
 // タグ一致を最重視：自分の興味に合ったクリエイターを最優先で表示
-// 返信率・いいね率：エンゲージメントの質を評価
-// 閲覧数：配信がどれだけ読まれているかの絶対量（上限500でキャップ）
-// 配信頻度・ソーシャル近接・フォロワー数は補足信号
-const W_TAG_MATCH     = 40   // タグ一致（1タグにつき）★最重要
-const W_REPLY_RATE    = 40   // 返信率（返信数 / 閲覧数）
-const W_REACTION_RATE = 80   // いいね率（いいね数 / 閲覧数）
-const W_VIEW_COUNT    = 20   // 閲覧数（30日・上限500でキャップ）
-const W_FREQ          = 3    // 配信本数（30日以内、上限20本）
-const W_SOCIAL        = 4    // ソーシャル近接（1人につき）
-const W_POPULARITY    = 8    // フォロワー数（上限500でキャップ）
+// 率＋数の両方を使う：質（率）と量（数）を総合評価
+// 閲覧率 = 総閲覧数 / (配信数×フォロワー数) → フォロワーがどれだけ読んでいるか
+const W_TAG_MATCH      = 40   // タグ一致（1タグにつき）★最重要
+const W_REACTION_RATE  = 80   // いいね率（いいね数 / 閲覧数）
+const W_REACTION_COUNT = 10   // いいね数（30日・上限100でキャップ）
+const W_REPLY_RATE     = 40   // 返信率（返信数 / 閲覧数）
+const W_REPLY_COUNT    = 8    // 返信数（30日・上限100でキャップ）
+const W_VIEW_RATE      = 30   // 閲覧率（閲覧数 / (配信数×フォロワー数)）
+const W_FREQ           = 3    // 配信本数（30日以内、上限20本）
+const W_SOCIAL         = 4    // ソーシャル近接（1人につき）
+const W_POPULARITY     = 8    // フォロワー数（上限500でキャップ）
 
 type Creator = {
   id: string
@@ -154,11 +155,16 @@ export default function DiscoverScreen() {
           ? creatorTags.filter((t: string) => myTagSet.has(t.toLowerCase())).length
           : 0
 
+        // 閲覧率 = 総閲覧数 / (配信数 × フォロワー数) → フォロワーが平均何割読んだか
+        const viewRate = (bcCount > 0 && fc > 0) ? Math.min(totalReads / (bcCount * fc), 1) : 0
+
         const score =
           tagMatchCount  * W_TAG_MATCH +
-          replyRate      * W_REPLY_RATE +
           reactionRate   * W_REACTION_RATE +
-          Math.min(totalReads, 500) / 500 * W_VIEW_COUNT +
+          Math.min(st?.totalReactions ?? 0, 100) / 100 * W_REACTION_COUNT +
+          replyRate      * W_REPLY_RATE +
+          Math.min(st?.totalReplies ?? 0, 100) / 100 * W_REPLY_COUNT +
+          viewRate       * W_VIEW_RATE +
           Math.min(bcCount, 20) * W_FREQ +
           sc             * W_SOCIAL +
           Math.min(fc, 500) / 500 * W_POPULARITY
