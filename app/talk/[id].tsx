@@ -1648,7 +1648,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 24,
   },
   loginCtaBtnText: { fontSize: 14, fontWeight: '700', color: Colors.white },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12 },
+  emptyWrap: { height: 400, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { fontSize: 14, color: Colors.textLight },
   // 検索バー
   searchBar: {
