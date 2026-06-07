@@ -689,7 +689,7 @@ export default function ComposeScreen() {
 
       <View style={styles.noticeBox}>
         <Ionicons name="information-circle-outline" size={15} color={Colors.textLight} />
-        <Text style={styles.noticeText}>配信後の取り消しはできません。内容をよく確認してから送信してください。</Text>
+        <Text style={styles.noticeText}>配信後の取り消しは分析画面からできます。</Text>
       </View>
 
       <View style={styles.actions}>
