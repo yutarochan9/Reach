@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import DefaultAvatar from '../components/DefaultAvatar'
 
 
 type FollowedCreator = {
@@ -216,12 +217,10 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/creator/${d.id}` as any)}
                 activeOpacity={0.8}
               >
-                <View style={styles.avatar}>
-                  {d.avatar_url
-                    ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
-                    : <Text style={styles.avatarText}>{d.display_name[0]}</Text>
-                  }
-                </View>
+                {d.avatar_url
+                  ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
+                  : <DefaultAvatar size={48} />
+                }
                 <View style={styles.creatorInfo}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Text style={styles.creatorName}>{d.display_name}</Text>
@@ -241,12 +240,10 @@ export default function HomeScreen() {
                 onPress={() => router.push(`/creator/${d.id}` as any)}
                 activeOpacity={0.8}
               >
-                <View style={styles.avatar}>
-                  {d.avatar_url
-                    ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
-                    : <Text style={styles.avatarText}>{d.display_name[0]}</Text>
-                  }
-                </View>
+                {d.avatar_url
+                  ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
+                  : <DefaultAvatar size={48} />
+                }
                 <View style={styles.creatorInfo}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Text style={styles.creatorName}>{d.display_name}</Text>

@@ -7,6 +7,7 @@ import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import DefaultAvatar from '../components/DefaultAvatar'
 import { IS_NATIVE, getMembershipSku, initIAP, endIAP, purchaseMembershipIAP } from '../../lib/iap'
 
 // Webでのカード入力フォームは不要 — Stripe Checkoutへリダイレクトする
@@ -195,9 +196,7 @@ export default function MembershipCheckout() {
             <View style={styles.summaryRow}>
               {profile.avatar_url
                 ? <Image source={{ uri: profile.avatar_url }} style={styles.summaryAvatar} />
-                : <View style={styles.summaryAvatarPlaceholder}>
-                    <Text style={styles.summaryAvatarText}>{profile.display_name[0]}</Text>
-                  </View>
+                : <DefaultAvatar size={48} />
               }
               <View style={styles.summaryInfo}>
                 <Text style={styles.summaryName}>{profile.display_name}</Text>

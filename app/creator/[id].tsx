@@ -6,6 +6,7 @@ import Head from 'expo-router/head'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import DefaultAvatar from '../components/DefaultAvatar'
 import { BETA_MODE } from '../../constants/config'
 import { TEST_IDS_CSV } from '../../constants/testAccounts'
 
@@ -306,7 +307,7 @@ export default function CreatorScreen() {
           <View style={styles.avatarWrap}>
             {profile.avatar_url
               ? <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
-              : <View style={styles.avatar}><Text style={styles.avatarText}>{profile.display_name[0]}</Text></View>
+              : <DefaultAvatar size={88} />
             }
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

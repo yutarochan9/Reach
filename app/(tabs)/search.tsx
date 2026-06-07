@@ -4,6 +4,7 @@ import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import DefaultAvatar from '../components/DefaultAvatar'
 
 const PAGE_SIZE = 20
 
@@ -302,7 +303,7 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
       onPress={() => router.push(`/creator/${item.id}` as any)} activeOpacity={0.85}>
       {item.avatar_url
         ? <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-        : <View style={styles.avatarFb}><Text style={styles.avatarTxt}>{item.display_name[0]}</Text></View>
+        : <DefaultAvatar size={48} />
       }
       <View style={styles.info}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>

@@ -7,6 +7,7 @@ import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
 import { Colors } from '../constants/colors'
+import DefaultAvatar from './components/DefaultAvatar'
 
 type Follower = {
   id: string
@@ -275,9 +276,7 @@ export default function FollowersScreen() {
                 {item.avatar_url ? (
                   <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
                 ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>{item.display_name[0]}</Text>
-                  </View>
+                  <DefaultAvatar size={44} />
                 )}
                 <View style={styles.info}>
                   <Text style={styles.name}>{item.display_name}</Text>

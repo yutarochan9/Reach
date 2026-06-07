@@ -388,9 +388,13 @@ export default function ComposeScreen() {
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, styles.toolBtnFirst, (showPublic || isPublic) && styles.toolBtnActive]} onPress={() => { setShowPublic(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}>
-          <Ionicons name="compass-outline" size={14} color={Colors.accent} />
-          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive]} numberOfLines={1}>{isPublic ? '発見✓' : '発見'}</Text>
+        <TouchableOpacity
+          style={[styles.toolBtn, styles.toolBtnFirst, (showPublic || isPublic) && styles.toolBtnActive, isPrivateAccount && styles.toolBtnDisabled]}
+          onPress={() => { if (isPrivateAccount) return; setShowPublic(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}
+          activeOpacity={isPrivateAccount ? 1 : 0.7}
+        >
+          <Ionicons name="compass-outline" size={14} color={isPrivateAccount ? Colors.border : Colors.accent} />
+          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive, isPrivateAccount && { color: Colors.border }]} numberOfLines={1}>{isPublic ? '発見✓' : '発見'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}>
           <Ionicons name="time-outline" size={14} color={Colors.accent} />
@@ -1034,6 +1038,7 @@ const styles = StyleSheet.create({
   toolBtnFirst: {},
   toolBtnLast: {},
   toolBtnActive: { borderColor: Colors.accent },
+  toolBtnDisabled: { opacity: 0.4 },
   toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
   toolBtnTextActive: { color: Colors.accent },
 

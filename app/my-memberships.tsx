@@ -12,6 +12,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../lib/supabase'
+import DefaultAvatar from './components/DefaultAvatar'
 import { Colors } from '../constants/colors'
 
 type Membership = {
@@ -252,11 +253,7 @@ export default function MyMembershipsScreen() {
                 <View style={s.cardTop}>
                   {m.creator.avatar_url
                     ? <Image source={{ uri: m.creator.avatar_url }} style={s.avatar} />
-                    : (
-                      <View style={s.avatarPlaceholder}>
-                        <Text style={s.avatarText}>{m.creator.display_name[0]}</Text>
-                      </View>
-                    )
+                    : <DefaultAvatar size={48} />
                   }
                   <View style={s.cardInfo}>
                     <Text style={s.creatorName}>{m.creator.display_name}</Text>

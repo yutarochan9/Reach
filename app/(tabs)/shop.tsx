@@ -6,6 +6,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
+import DefaultAvatar from '../components/DefaultAvatar'
 import { Colors } from '../../constants/colors'
 
 // ── スコアリング係数 ──────────────────────────────────────────
@@ -235,7 +236,7 @@ function FeedCard({ item, onLike }: { item: FeedItem; onLike: (item: FeedItem) =
       >
         {item.avatar_url
           ? <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
-          : <View style={styles.avatarFb}><Text style={styles.avatarTxt}>{item.display_name[0]}</Text></View>
+          : <DefaultAvatar size={36} />
         }
         <View style={styles.creatorInfo}>
           <Text style={styles.creatorName}>{item.display_name}</Text>

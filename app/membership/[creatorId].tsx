@@ -8,6 +8,7 @@ import Head from 'expo-router/head'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
+import DefaultAvatar from '../components/DefaultAvatar'
 
 type Profile = {
   id: string
@@ -179,7 +180,7 @@ export default function MembershipPage() {
           <View style={styles.creatorRow}>
             {profile.avatar_url
               ? <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-              : <View style={styles.avatarPlaceholder}><Text style={styles.avatarText}>{profile.display_name[0]}</Text></View>
+              : <DefaultAvatar size={56} />
             }
             <View style={styles.creatorInfo}>
               <Text style={styles.creatorName}>{profile.display_name}</Text>
