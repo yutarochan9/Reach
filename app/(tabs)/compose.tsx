@@ -401,9 +401,9 @@ export default function ComposeScreen() {
             style={[styles.toolBtn, (showCommentOption || commentsDisabled) && styles.toolBtnActive]}
             onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}
           >
-            <Ionicons name={commentsDisabled ? 'chatbubble-ellipses-outline' : 'chatbubble-outline'} size={14} color={Colors.accent} />
+            <Ionicons name="chatbubble-outline" size={14} color={Colors.accent} />
             <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]} numberOfLines={1}>
-              {commentsDisabled ? 'コメ✗' : 'コメント'}
+              {commentsDisabled ? '非表示' : '表示'}
             </Text>
           </TouchableOpacity>
         )}
@@ -1033,7 +1033,7 @@ const styles = StyleSheet.create({
   },
   toolBtnFirst: {},
   toolBtnLast: {},
-  toolBtnActive: { borderColor: Colors.accent, borderWidth: 1.5 },
+  toolBtnActive: { borderColor: Colors.accent },
   toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
   toolBtnTextActive: { color: Colors.accent },
 
