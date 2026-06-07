@@ -40,7 +40,7 @@ function DesktopSidebar() {
     { route: '/',       activeIcon: 'home'       as const, icon: 'home-outline'       as const, label: 'ホーム' },
     { route: '/talk',   activeIcon: 'chatbubble' as const, icon: 'chatbubble-outline' as const, label: 'メッセージ' },
     { route: '/shop',   activeIcon: 'compass'    as const, icon: 'compass-outline'    as const, label: '発見' },
-    { route: '/mypage', activeIcon: 'person'     as const, icon: 'person-outline'     as const, label: 'マイページ' },
+    { route: '/search', activeIcon: 'search'     as const, icon: 'search-outline'     as const, label: '検索' },
   ]
   const isActive = (route: string) => {
     if (route === '/') return pathname === '/' || pathname === ''

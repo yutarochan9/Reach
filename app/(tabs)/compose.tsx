@@ -403,7 +403,7 @@ export default function ComposeScreen() {
         )}
         <TouchableOpacity
           style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
-          onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowPublic(false); setShowReaction(false); setShowSubscriber(false) }}
+          onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowPublic(false); setShowSubscriber(false) }}
         >
           <Ionicons name="archive-outline" size={15} color={showArchive ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
@@ -412,7 +412,7 @@ export default function ComposeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toolBtn, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
-          onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowPublic(false); setShowReaction(false); setShowArchive(false) }}
+          onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false) }}
         >
           <Ionicons name="lock-closed-outline" size={15} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
