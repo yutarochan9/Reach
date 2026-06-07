@@ -13,7 +13,7 @@ const PAGE_SIZE = 20
 // 閲覧数：配信がどれだけ読まれているかの絶対量（上限500でキャップ）
 // 配信頻度・ソーシャル近接・フォロワー数は補足信号
 const W_TAG_MATCH     = 40   // タグ一致（1タグにつき）★最重要
-const W_REPLY_RATE    = 150  // 返信率（返信数 / 閲覧数）
+const W_REPLY_RATE    = 40   // 返信率（返信数 / 閲覧数）
 const W_REACTION_RATE = 80   // いいね率（いいね数 / 閲覧数）
 const W_VIEW_COUNT    = 20   // 閲覧数（30日・上限500でキャップ）
 const W_FREQ          = 3    // 配信本数（30日以内、上限20本）
