@@ -69,6 +69,7 @@ export default function ComposeScreen() {
   const [isPublic, setIsPublic] = useState(false)
   const [publicTitle, setPublicTitle] = useState('')
   const [showPublic, setShowPublic] = useState(false)
+  const [isPrivateAccount, setIsPrivateAccount] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -93,11 +94,12 @@ export default function ComposeScreen() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       setUserId(user.id)
-      supabase.from('profiles').select('display_name, plan, membership_active').eq('id', user.id).single()
+      supabase.from('profiles').select('display_name, plan, membership_active, is_private').eq('id', user.id).single()
         .then(({ data }) => {
           setSenderName(data?.display_name ?? '')
           setUserPlan((data?.plan ?? 'free') as 'free' | 'standard' | 'pro')
           setHasMembership(data?.membership_active ?? false)
+          setIsPrivateAccount(data?.is_private ?? false)
         })
       // 今月の配信数を取得
       const startOfMonth = new Date()
@@ -382,12 +384,12 @@ export default function ComposeScreen() {
   const Editor = (
     <ScrollView style={styles.editorPanel} contentContainerStyle={styles.editorPanelContent} keyboardShouldPersistTaps="handled">
       <View style={styles.toolbar}>
-        <TouchableOpacity style={[styles.toolBtn, (showPublic || isPublic) && styles.toolBtnActive]} onPress={() => { setShowPublic(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}>
-          <Ionicons name="compass-outline" size={15} color={(showPublic || isPublic) ? Colors.white : Colors.accent} />
-          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive]} numberOfLines={1}>{isPublic ? '発見に投稿' : '発見'}</Text>
+        <TouchableOpacity style={[styles.toolBtn, styles.toolBtnFirst, (showPublic || isPublic) && styles.toolBtnActive]} onPress={() => { setShowPublic(v => !v); setShowSchedule(false); setShowArchive(false); setShowSubscriber(false) }}>
+          <Ionicons name="compass-outline" size={14} color={(showPublic || isPublic) ? Colors.white : Colors.accent} />
+          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive]} numberOfLines={1}>{isPublic ? '発見✓' : '発見'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}>
-          <Ionicons name="time-outline" size={15} color={showSchedule ? Colors.white : Colors.accent} />
+          <Ionicons name="time-outline" size={14} color={showSchedule ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
@@ -395,9 +397,9 @@ export default function ComposeScreen() {
             style={[styles.toolBtn, (showCommentOption || commentsDisabled) && styles.toolBtnActive]}
             onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}
           >
-            <Ionicons name="chatbubble-outline" size={15} color={(showCommentOption || commentsDisabled) ? Colors.white : Colors.accent} />
+            <Ionicons name="chatbubble-outline" size={14} color={(showCommentOption || commentsDisabled) ? Colors.white : Colors.accent} />
             <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]} numberOfLines={1}>
-              {commentsDisabled ? 'コメント非表示' : 'コメント'}
+              {commentsDisabled ? 'コメント✗' : 'コメント'}
             </Text>
           </TouchableOpacity>
         )}
@@ -405,16 +407,16 @@ export default function ComposeScreen() {
           style={[styles.toolBtn, showArchive && styles.toolBtnActive]}
           onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowPublic(false); setShowSubscriber(false) }}
         >
-          <Ionicons name="archive-outline" size={15} color={showArchive ? Colors.white : Colors.accent} />
+          <Ionicons name="archive-outline" size={14} color={showArchive ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
             {visibleToNew ? '全員' : '現在のみ'}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toolBtn, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
+          style={[styles.toolBtn, styles.toolBtnLast, (showSubscriber || isSubscriberOnly) && styles.toolBtnActive]}
           onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false) }}
         >
-          <Ionicons name="lock-closed-outline" size={15} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
+          <Ionicons name="lock-closed-outline" size={14} color={(showSubscriber || isSubscriberOnly) ? Colors.white : Colors.accent} />
           <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
             {isSubscriberOnly ? 'MB限定' : '全員'}
           </Text>
@@ -1018,15 +1020,18 @@ const styles = StyleSheet.create({
   editorPanel: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
   editorPanelContent: { padding: 20, gap: 14 },
 
-  toolbar: { flexDirection: 'row', gap: 5, paddingVertical: 2 },
+  toolbar: { flexDirection: 'row', gap: 0, paddingVertical: 2 },
   toolBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
-    backgroundColor: Colors.white, borderRadius: 8,
-    paddingHorizontal: 6, paddingVertical: 7,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 4, paddingVertical: 7,
     borderWidth: 1, borderColor: Colors.border,
+    marginRight: -1,
   },
-  toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  toolBtnText: { fontSize: 12, color: Colors.accent, fontWeight: '600' },
+  toolBtnFirst: { borderRadius: 8, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  toolBtnLast: { borderRadius: 8, borderTopRightRadius: 8, borderBottomRightRadius: 8, marginRight: 0 },
+  toolBtnActive: { backgroundColor: Colors.accent, borderColor: Colors.accent, zIndex: 1 },
+  toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
   toolBtnTextActive: { color: Colors.white },
 
   optionCard: {
