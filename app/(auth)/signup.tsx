@@ -173,7 +173,7 @@ export default function SignupScreen() {
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <TouchableOpacity onPress={() => router.replace('/landing' as any)} style={styles.backBtn}>
               <Ionicons name="chevron-back" size={24} color={Colors.text} />
             </TouchableOpacity>
           )}

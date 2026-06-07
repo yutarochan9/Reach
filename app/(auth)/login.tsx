@@ -181,6 +181,11 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.topBar}>
+          {step === 'credentials' ? (
+            <TouchableOpacity onPress={() => router.replace('/landing' as any)} style={styles.backBtn}>
+              <Ionicons name="chevron-back" size={24} color={Colors.text} />
+            </TouchableOpacity>
+          ) : null}
           {(step === 'otp' || step === 'totp') && (
             <TouchableOpacity
               onPress={async () => {
