@@ -74,7 +74,7 @@ export default function LandingPage() {
       </View>
 
       {/* ── ヒーロー ─────────────────────────────────────────── */}
-      <Animated.View style={[styles.hero, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+      <Animated.View style={[styles.hero, { opacity: fadeAnim }]}>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>クリエイター向けプラットフォーム</Text>
         </View>
