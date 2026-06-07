@@ -305,11 +305,23 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
         : <View style={styles.avatarFb}><Text style={styles.avatarTxt}>{item.display_name[0]}</Text></View>
       }
       <View style={styles.info}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
           <Text style={styles.name}>{item.display_name}</Text>
+          {(item as any).is_official && (
+            <Ionicons name="checkmark-circle" size={14} color={Colors.accent} />
+          )}
         </View>
         {item.bio && <Text style={styles.bio} numberOfLines={1}>{item.bio}</Text>}
-        <Text style={styles.sub}>{item.follower_count.toLocaleString()} フォロワー</Text>
+        <View style={styles.statsRow}>
+          <Ionicons name="people-outline" size={12} color={Colors.textLight} />
+          <Text style={styles.sub}>{item.follower_count.toLocaleString()}</Text>
+          {item.broadcast_count > 0 && (
+            <>
+              <Ionicons name="radio-outline" size={12} color={Colors.textLight} style={{ marginLeft: 8 }} />
+              <Text style={styles.sub}>{item.broadcast_count}</Text>
+            </>
+          )}
+        </View>
       </View>
       <TouchableOpacity
         style={[styles.followBtn, item.is_following && styles.followingBtn]}
@@ -356,7 +368,8 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   name: { fontSize: 15, fontWeight: '700', color: Colors.text },
   bio: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
-  sub: { fontSize: 11, color: Colors.textLight, marginTop: 3 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
+  sub: { fontSize: 11, color: Colors.textLight },
 
   followBtn: { backgroundColor: Colors.button, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7 },
   followingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.button },
