@@ -359,8 +359,8 @@ export default function ComposeScreen() {
       setIsPublic(false); setPublicTitle('')
       setActiveTab('drafts')
     } else {
-      // 配信後は自分のトーク画面へ遷移して送信内容を確認できる
-      router.replace(`/talk/${userId}` as any)
+      // 配信後はホームへ戻る
+      router.replace('/(tabs)/' as any)
     }
     asDraft ? setSaving(false) : setLoading(false)
   }
