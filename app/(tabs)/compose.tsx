@@ -45,6 +45,10 @@ function genUUID() {
   })
 }
 
+// 前回の設定を記憶（コメント・過去配信公開範囲）
+let _savedCommentsDisabled = false
+let _savedVisibleToNew = true
+
 // ─── メインコンポーネント ────────────────────────────────────
 export default function ComposeScreen() {
   // ツール画面から戻ってきたときにツールタブを表示する
@@ -64,8 +68,8 @@ export default function ComposeScreen() {
   const [showSubscriber, setShowSubscriber] = useState(false)
   const [isSubscriberOnly, setIsSubscriberOnly] = useState(false)
   const [confirmed, setConfirmed] = useState(false)
-  const [commentsDisabled, setCommentsDisabled] = useState(false)
-  const [visibleToNew, setVisibleToNew] = useState(true)
+  const [commentsDisabled, setCommentsDisabled] = useState(_savedCommentsDisabled)
+  const [visibleToNew, setVisibleToNew] = useState(_savedVisibleToNew)
   const [isPublic, setIsPublic] = useState(false)
   const [publicTitle, setPublicTitle] = useState('')
   const [showPublic, setShowPublic] = useState(false)
@@ -466,7 +470,7 @@ export default function ComposeScreen() {
             { value: true,  label: '非表示', desc: 'この配信へのコメントを受け付けない' },
           ].map(opt => (
             <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, commentsDisabled === opt.value && styles.optionRowActive]}
-              onPress={() => { setCommentsDisabled(opt.value); setShowCommentOption(false) }}>
+              onPress={() => { setCommentsDisabled(opt.value); _savedCommentsDisabled = opt.value; setShowCommentOption(false) }}>
               <View style={styles.optionLeft}>
                 <Text style={[styles.optionLabel, commentsDisabled === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
                 <Text style={styles.optionDesc}>{opt.desc}</Text>
@@ -485,7 +489,7 @@ export default function ComposeScreen() {
             { value: false, label: '現在のフォロワーのみ', desc: '今後フォローする人には見せない' },
           ].map(opt => (
             <TouchableOpacity key={String(opt.value)} style={[styles.optionRow, visibleToNew === opt.value && styles.optionRowActive]}
-              onPress={() => { setVisibleToNew(opt.value); setShowArchive(false) }}>
+              onPress={() => { setVisibleToNew(opt.value); _savedVisibleToNew = opt.value; setShowArchive(false) }}>
               <View style={styles.optionLeft}>
                 <Text style={[styles.optionLabel, visibleToNew === opt.value && styles.optionLabelActive]}>{opt.label}</Text>
                 <Text style={styles.optionDesc}>{opt.desc}</Text>
