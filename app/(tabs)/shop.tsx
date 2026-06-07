@@ -66,7 +66,6 @@ export default function DiscoverFeedScreen() {
       .select('id, public_title, content, created_at, sender_id')
       .eq('status', 'published')
       .eq('is_public', true)
-      .neq('sender_id', user.id)
       .order('created_at', { ascending: false })
       .limit(200)
 
