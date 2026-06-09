@@ -3,7 +3,7 @@ import { Stack, router, usePathname } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as Sentry from '@sentry/react-native'
 import * as Updates from 'expo-updates'
-import { Platform, AppState, View } from 'react-native'
+import { Platform, AppState, View, Text, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
@@ -13,6 +13,7 @@ import { upsertDeviceSession } from '../lib/deviceSession'
 import CookieBanner from './components/CookieBanner'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
 import { Ionicons } from '@expo/vector-icons'
+import { Colors } from '../constants/colors'
 import { BETA_GATE, ADMIN_USER_ID } from '../constants/config'
 import BetaGate, { isBetaUnlocked } from './beta-gate'
 
@@ -31,6 +32,62 @@ function MaintenanceScreen() {
   )
 }
 
+const SIDEBAR_W = 68
+
+function DesktopSidebar() {
+  const pathname = usePathname()
+  const NAV = [
+    { route: '/',       activeIcon: 'home'       as const, icon: 'home-outline'       as const, label: 'ホーム' },
+    { route: '/talk',   activeIcon: 'chatbubble' as const, icon: 'chatbubble-outline' as const, label: 'メッセージ' },
+    { route: '/shop',   activeIcon: 'compass'    as const, icon: 'compass-outline'    as const, label: '発見' },
+    { route: '/search', activeIcon: 'search'     as const, icon: 'search-outline'     as const, label: '検索' },
+  ]
+  const isActive = (route: string) => {
+    if (route === '/') return pathname === '/' || pathname === ''
+    return pathname.startsWith(route)
+  }
+  return (
+    <View style={sb.wrap}>
+      {NAV.map(item => {
+        const active = isActive(item.route)
+        return (
+          <TouchableOpacity key={item.route} style={sb.item} onPress={() => router.push(item.route as any)} activeOpacity={0.7}>
+            <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={active ? Colors.accent : Colors.textLight} />
+            <Text style={[sb.label, { color: active ? Colors.accent : Colors.textLight }]}>{item.label}</Text>
+          </TouchableOpacity>
+        )
+      })}
+      <TouchableOpacity
+        style={sb.composeBtn}
+        onPress={async () => {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) return
+          const { count } = await supabase.from('broadcasts').select('id', { count: 'exact', head: true }).eq('sender_id', user.id)
+          router.push((count ?? 0) === 0 ? '/broadcast-intro' : '/compose')
+        }}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={22} color={Colors.white} />
+      </TouchableOpacity>
+    </View>
+  )
+}
+
+const sb = StyleSheet.create({
+  wrap: {
+    width: SIDEBAR_W,
+    backgroundColor: Colors.header,
+    borderRightWidth: 1, borderRightColor: Colors.border,
+    alignItems: 'center', paddingTop: 16, paddingBottom: 16, gap: 4,
+  },
+  item: { width: SIDEBAR_W - 8, paddingVertical: 10, alignItems: 'center', gap: 3, borderRadius: 10 },
+  label: { fontSize: 9, fontWeight: '600' },
+  composeBtn: {
+    marginTop: 12, width: 40, height: 40, borderRadius: 20,
+    backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center',
+    shadowColor: Colors.accent, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6,
+  },
+})
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
@@ -55,10 +112,13 @@ const PUBLIC_PREFIXES = ['/creator/', '/talk/', '/terms', '/tokutei', '/privacy'
 const isPublicPath = (p: string) => PUBLIC_PREFIXES.some(prefix => p.startsWith(prefix))
 
 export default function RootLayout() {
+  const { width } = useWindowDimensions()
   const pathname = usePathname()
+  const isDesktop = Platform.OS === 'web' && width >= 900
   const isAuthRoute = pathname.startsWith('/(auth)') || pathname === '/onboarding'
     || pathname === '/login' || pathname === '/signup'
   const isLanding = pathname === '/landing'
+  const showSidebar = isDesktop && !isAuthRoute && !isLanding
 
   const navigated = useRef(false)
   const currentUserId = useRef<string | null>(null)
@@ -292,7 +352,8 @@ export default function RootLayout() {
   }
 
   return (
-    <View style={{ flex: 1, flexDirection: 'column', ...(Platform.OS === 'web' ? { height: '100vh' as any } : {}) }}>
+    <View style={{ flex: 1, flexDirection: showSidebar ? 'row' : 'column', ...(Platform.OS === 'web' ? { height: '100vh' as any } : {}) }}>
+      {showSidebar && <DesktopSidebar />}
       <View style={{ flex: 1 }}>
         <StatusBar style="dark" />
         <Stack screenOptions={{ headerShown: false }} />

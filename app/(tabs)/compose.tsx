@@ -394,11 +394,11 @@ export default function ComposeScreen() {
           activeOpacity={isPrivateAccount ? 1 : 0.7}
         >
           <Ionicons name="compass-outline" size={14} color={isPrivateAccount ? Colors.border : Colors.accent} />
-          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive, isPrivateAccount && { color: Colors.border }]}>{isPublic ? '発見✓' : '発見'}</Text>
+          <Text style={[styles.toolBtnText, (showPublic || isPublic) && styles.toolBtnTextActive, isPrivateAccount && { color: Colors.border }]} numberOfLines={1}>{isPublic ? '発見✓' : '発見'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.toolBtn, showSchedule && styles.toolBtnActive]} onPress={() => { setShowSchedule(v => !v); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}>
           <Ionicons name="time-outline" size={14} color={Colors.accent} />
-          <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]}>{scheduledLabel ?? '予約'}</Text>
+          <Text style={[styles.toolBtnText, showSchedule && styles.toolBtnTextActive]} numberOfLines={1}>{scheduledLabel ?? '予約'}</Text>
         </TouchableOpacity>
         {(BETA_MODE || userPlan === 'standard' || userPlan === 'pro') && (
           <TouchableOpacity
@@ -406,7 +406,7 @@ export default function ComposeScreen() {
             onPress={() => { setShowCommentOption(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false); setShowSubscriber(false) }}
           >
             <Ionicons name="chatbubble-outline" size={14} color={Colors.accent} />
-            <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]}>
+            <Text style={[styles.toolBtnText, (showCommentOption || commentsDisabled) && styles.toolBtnTextActive]} numberOfLines={1}>
               {commentsDisabled ? '非表示' : '表示'}
             </Text>
           </TouchableOpacity>
@@ -416,7 +416,7 @@ export default function ComposeScreen() {
           onPress={() => { setShowArchive(v => !v); setShowSchedule(false); setShowPublic(false); setShowSubscriber(false) }}
         >
           <Ionicons name="archive-outline" size={14} color={Colors.accent} />
-          <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]}>
+          <Text style={[styles.toolBtnText, showArchive && styles.toolBtnTextActive]} numberOfLines={1}>
             {visibleToNew ? '全員' : '現在のみ'}
           </Text>
         </TouchableOpacity>
@@ -425,7 +425,7 @@ export default function ComposeScreen() {
           onPress={() => { setShowSubscriber(v => !v); setShowSchedule(false); setShowPublic(false); setShowArchive(false) }}
         >
           <Ionicons name="lock-closed-outline" size={14} color={Colors.accent} />
-          <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]}>
+          <Text style={[styles.toolBtnText, (showSubscriber || isSubscriberOnly) && styles.toolBtnTextActive]} numberOfLines={1}>
             {isSubscriberOnly ? 'MB限定' : '全員'}
           </Text>
         </TouchableOpacity>
@@ -641,7 +641,7 @@ export default function ComposeScreen() {
             <View style={styles.imagePreviewWrap}>
               <View style={styles.videoPreview}>
                 <Ionicons name="videocam" size={36} color={Colors.white} />
-                <Text style={styles.videoPreviewText}>
+                <Text style={styles.videoPreviewText} numberOfLines={1}>
                   {block.videoUri.split('/').pop() ?? '動画'}
                 </Text>
               </View>
@@ -1039,7 +1039,7 @@ const styles = StyleSheet.create({
   toolBtnLast: {},
   toolBtnActive: { borderColor: Colors.accent },
   toolBtnDisabled: { opacity: 0.4 },
-  toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600', textAlign: 'center' },
+  toolBtnText: { fontSize: 11, color: Colors.accent, fontWeight: '600' },
   toolBtnTextActive: { color: Colors.accent },
 
   optionCard: {
