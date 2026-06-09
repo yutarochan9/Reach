@@ -46,6 +46,10 @@ export default function BroadcastThreadScreen() {
   const [comments, setComments] = useState<Comment[]>([])
   const [loading, setLoading] = useState(true)
   const [inputText, setInputText] = useState('')
+  const BC_LINE_H = 22
+  const BC_MIN_H  = BC_LINE_H + 20
+  const BC_MAX_H  = BC_LINE_H * 5 + 20
+  const [bcInputH, setBcInputH] = useState(BC_MIN_H)
   const [replyToComment, setReplyToComment] = useState<Comment | null>(null)
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState(false)
@@ -494,12 +498,17 @@ export default function BroadcastThreadScreen() {
           <View style={styles.inputRow}>
             <TextInput
               ref={inputRef}
-              style={styles.input}
+              style={[styles.input, { height: bcInputH }]}
               placeholder={isCommentMode ? `@${replyToComment?.sender_name} に返信...` : 'コメントを追加...'}
               placeholderTextColor={Colors.textLight}
               value={inputText}
               onChangeText={setInputText}
               multiline
+              scrollEnabled={bcInputH >= BC_MAX_H}
+              onContentSizeChange={e => {
+                const h = e.nativeEvent.contentSize.height
+                setBcInputH(Math.min(Math.max(h, BC_MIN_H), BC_MAX_H))
+              }}
             />
             <TouchableOpacity
               style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendDisabled]}
@@ -654,7 +663,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: Colors.background, borderRadius: 22,
     borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 14, color: Colors.text, maxHeight: 100,
+    fontSize: 14, color: Colors.text,
   },
   sendButton: {
     width: 40, height: 40, borderRadius: 20,

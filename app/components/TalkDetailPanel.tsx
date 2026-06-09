@@ -60,6 +60,10 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
   // 画像の自然サイズキャッシュ（URL → {w, h}）
   const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
   const [imText, setImText] = useState('')
+  const IM_LINE_H = 22
+  const IM_MIN_H  = IM_LINE_H + 20
+  const IM_MAX_H  = IM_LINE_H * 5 + 20
+  const [imInputH, setImInputH] = useState(IM_MIN_H)
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [tileMenu, setTileMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(_tileCache.get(senderId) ?? null)
   const [tileOpen, setTileOpen] = useState(true)
@@ -656,12 +660,17 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
       <View style={styles.inputArea}>
         <View style={styles.inputRow}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { height: imInputH }]}
             placeholder="DMを送る..."
             placeholderTextColor={Colors.textLight}
             value={imText}
             onChangeText={setImText}
             multiline
+            scrollEnabled={imInputH >= IM_MAX_H}
+            onContentSizeChange={e => {
+              const h = e.nativeEvent.contentSize.height
+              setImInputH(Math.min(Math.max(h, IM_MIN_H), IM_MAX_H))
+            }}
           />
           <TouchableOpacity
             style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
@@ -775,7 +784,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: Colors.white, borderRadius: 18,
     borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 12, paddingVertical: 5,
-    fontSize: 13, color: Colors.text, maxHeight: 80,
+    fontSize: 13, color: Colors.text,
   },
   sendButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { backgroundColor: '#B0B0B0' },

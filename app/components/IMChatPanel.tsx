@@ -48,6 +48,10 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
   const [sendingEscalation, setSendingEscalation] = useState(false)
   const [messages, setMessages] = useState<IMMessage[]>(() => _dmCache.get(partnerId) ?? [])
   const [text, setText] = useState('')
+  const INPUT_LINE_H = 22
+  const INPUT_MIN_H  = INPUT_LINE_H + 20   // 1行分
+  const INPUT_MAX_H  = INPUT_LINE_H * 5 + 20  // 5行分
+  const [inputH, setInputH] = useState(INPUT_MIN_H)
   const [replyTo, setReplyTo] = useState<IMMessage | null>(null)
   const [loading, setLoading] = useState(!_dmCache.has(partnerId))
   const [longPressMsg, setLongPressMsg] = useState<IMMessage | null>(null)
@@ -569,12 +573,17 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         )}
         <View style={styles.inputRow}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, { height: inputH }]}
             placeholder="メッセージ..."
             placeholderTextColor={Colors.textLight}
             value={text}
             onChangeText={setText}
             multiline
+            scrollEnabled={inputH >= INPUT_MAX_H}
+            onContentSizeChange={e => {
+              const h = e.nativeEvent.contentSize.height
+              setInputH(Math.min(Math.max(h, INPUT_MIN_H), INPUT_MAX_H))
+            }}
           />
           <TouchableOpacity
             style={[styles.sendBtn, !text.trim() && styles.sendDisabled]}
@@ -694,7 +703,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: Colors.white,
     borderRadius: 22, borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 16, color: Colors.text, maxHeight: 100,
+    fontSize: 16, color: Colors.text,
   },
   sendBtn: {
     width: 40, height: 40, borderRadius: 20,

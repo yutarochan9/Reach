@@ -72,6 +72,10 @@ export default function TalkDetailScreen() {
   // 画像の自然サイズキャッシュ（URL → {w, h}）
   const [imageSizes, setImageSizes] = useState<Record<string, { w: number; h: number }>>({})
   const [imText, setImText] = useState('')
+  const IM_LINE_H = 22
+  const IM_MIN_H  = IM_LINE_H + 20
+  const IM_MAX_H  = IM_LINE_H * 5 + 20
+  const [imInputH, setImInputH] = useState(IM_MIN_H)
   const [longPressGroup, setLongPressGroup] = useState<BroadcastGroup | null>(null)
   const [richMenu, setRichMenu] = useState<{ buttons: any[]; is_active: boolean; panel_bg_image?: string | null } | null>(null)
   const [richMenuLoading, setRichMenuLoading] = useState(true)
@@ -1393,12 +1397,17 @@ export default function TalkDetailScreen() {
           <View style={styles.inputArea}>
             <View style={styles.inputRow}>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { height: imInputH }]}
                 placeholder="DMを送る..."
                 placeholderTextColor={Colors.textLight}
                 value={imText}
                 onChangeText={setImText}
                 multiline
+                scrollEnabled={imInputH >= IM_MAX_H}
+                onContentSizeChange={e => {
+                  const h = e.nativeEvent.contentSize.height
+                  setImInputH(Math.min(Math.max(h, IM_MIN_H), IM_MAX_H))
+                }}
               />
               <TouchableOpacity
                 style={[styles.sendButton, !imText.trim() && styles.sendDisabled]}
@@ -1630,7 +1639,7 @@ const styles = StyleSheet.create({
     flex: 1, backgroundColor: Colors.white, borderRadius: 22,
     borderWidth: 1, borderColor: Colors.border,
     paddingHorizontal: 16, paddingVertical: 10,
-    fontSize: 16, color: Colors.text, maxHeight: 100,
+    fontSize: 16, color: Colors.text,
   },
   sendButton: {
     width: 40, height: 40, borderRadius: 20,
