@@ -1,10 +1,11 @@
 ﻿import { useState, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image, TextInput } from 'react-native'
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator, Image, TextInput, Platform, useWindowDimensions } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import DefaultAvatar from '../components/DefaultAvatar'
+import CreatorPanel from '../components/CreatorPanel'
 
 
 type FollowedCreator = {
@@ -38,6 +39,9 @@ let _homeLoaded = false
 
 // ── ホーム画面 ────────────────────────────────────────────
 export default function HomeScreen() {
+  const { width } = useWindowDimensions()
+  const isDesktop = Platform.OS === 'web' && width >= 900
+
   const [creators, setCreators] = useState<FollowedCreator[]>(_cachedCreators)
   const [followers, setFollowers] = useState<FollowerProfile[]>(_cachedFollowers)
   const [myDisplayName, setMyDisplayName] = useState(_cachedMyDisplayName)
@@ -51,6 +55,7 @@ export default function HomeScreen() {
   const [showSearch, setShowSearch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<TextInput>(null)
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -118,9 +123,19 @@ export default function HomeScreen() {
     ...(followersOpen ? filteredFollowers.map(f => ({ type: 'follower-item' as const, data: f })) : []),
   ]
 
-  return (
-    <View style={styles.container}>
+  // デスクトップ用の右パネル空状態
+  const RightEmpty = (
+    <View style={styles.rightEmpty}>
+      <Ionicons name="person-outline" size={48} color={Colors.border} />
+      <Text style={styles.rightEmptyText}>アカウントを選択してください</Text>
+    </View>
+  )
+
+  // リスト部分（左カラムとして共通化）
+  const ListContent = (
+    <>
       <View style={styles.header}>
+
         <View style={styles.headerTop}>
           <TouchableOpacity
             style={styles.headerProfile}
@@ -211,10 +226,11 @@ export default function HomeScreen() {
 
           if (item.type === 'following-item') {
             const d = item.data
+            const selected = isDesktop && selectedCreatorId === d.id
             return (
               <TouchableOpacity
-                style={styles.creatorRow}
-                onPress={() => router.push(`/creator/${d.id}` as any)}
+                style={[styles.creatorRow, selected && styles.creatorRowSelected]}
+                onPress={() => isDesktop ? setSelectedCreatorId(d.id) : router.push(`/creator/${d.id}` as any)}
                 activeOpacity={0.8}
               >
                 {d.avatar_url
@@ -234,10 +250,11 @@ export default function HomeScreen() {
 
           if (item.type === 'follower-item') {
             const d = item.data
+            const selected = isDesktop && selectedCreatorId === d.id
             return (
               <TouchableOpacity
-                style={styles.creatorRow}
-                onPress={() => router.push(`/creator/${d.id}` as any)}
+                style={[styles.creatorRow, selected && styles.creatorRowSelected]}
+                onPress={() => isDesktop ? setSelectedCreatorId(d.id) : router.push(`/creator/${d.id}` as any)}
                 activeOpacity={0.8}
               >
                 {d.avatar_url
@@ -257,12 +274,41 @@ export default function HomeScreen() {
           return null
         }}
       />
+    </>
+  )
+
+  // デスクトップ：2カラム / モバイル：1カラム
+  if (isDesktop) {
+    return (
+      <View style={styles.desktopLayout}>
+        <View style={styles.desktopLeft}>
+          {ListContent}
+        </View>
+        <View style={styles.desktopRight}>
+          {selectedCreatorId
+            ? <CreatorPanel key={selectedCreatorId} creatorId={selectedCreatorId} />
+            : RightEmpty
+          }
+        </View>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.container}>
+      {ListContent}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  desktopLayout: { flex: 1, flexDirection: 'row', backgroundColor: Colors.background },
+  desktopLeft: { flex: 1, borderRightWidth: 1, borderRightColor: Colors.border },
+  desktopRight: { width: 480, borderLeftWidth: 1, borderLeftColor: Colors.border, overflow: 'hidden' },
+  rightEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: Colors.background },
+  rightEmptyText: { fontSize: 14, color: Colors.textLight, fontWeight: '500' },
+  creatorRowSelected: { backgroundColor: '#F5EDE4' },
   header: {
     backgroundColor: Colors.header,
     paddingTop: 18,
