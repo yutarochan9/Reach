@@ -479,12 +479,12 @@ const openEdit = () => {
       <Modal visible={editVisible} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => setEditVisible(false)}>
+            <TouchableOpacity onPress={() => setEditVisible(false)} style={styles.modalHeaderSide}>
               <Text style={styles.modalCancel}>キャンセル</Text>
             </TouchableOpacity>
             <Text style={styles.modalTitle}>プロフィール編集</Text>
-            <TouchableOpacity onPress={handleSave} disabled={saving || !editName.trim()}>
-              <Text style={[styles.modalSave, (saving || !editName.trim()) && { opacity: 0.4 }]}>
+            <TouchableOpacity onPress={handleSave} disabled={saving || !editName.trim()} style={styles.modalHeaderSide}>
+              <Text style={[styles.modalSave, (saving || !editName.trim()) && { opacity: 0.4 }, { textAlign: 'right' }]}>
                 {saving ? '保存中' : '保存'}
               </Text>
             </TouchableOpacity>
@@ -802,7 +802,8 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   modalCancel: { fontSize: 15, color: Colors.textLight },
-  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  modalTitle: { fontSize: 16, fontWeight: '700', color: Colors.text, flex: 1, textAlign: 'center' },
+  modalHeaderSide: { minWidth: 60 },
   modalSave: { fontSize: 15, color: Colors.accent, fontWeight: '700' },
   modalBody: { padding: 20 },
   fieldLabel: { fontSize: 13, color: Colors.textLight, fontWeight: '600', marginTop: 12, marginBottom: 4 },
