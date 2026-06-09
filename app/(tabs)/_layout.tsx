@@ -112,7 +112,7 @@ export default function TabLayout() {
         {/* タブコンテンツ */}
         <View style={{ flex: 1, borderRightWidth: showTwoCol ? 1 : 0, borderRightColor: Colors.border }}>
           <Tabs
-            tabBar={(props) => isDesktop ? <></> : <CustomTabBar {...props} />}
+            tabBar={(props) => <CustomTabBar {...props} />}
             screenOptions={{ headerShown: false }}
           >
             <Tabs.Screen name="index" />
