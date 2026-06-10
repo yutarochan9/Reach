@@ -1046,7 +1046,7 @@ export default function TalkScreen() {
             // セクションごとに異なるアイコン・アクセントカラーを設定
             const isFollowing = item.sectionId === 'following'
             const sectionIcon = isFollowing ? 'radio-outline' : 'chatbubbles-outline'
-            const sectionColor = isFollowing ? Colors.accent : '#6B7A8D'  // 配信=ブラウン / DM=ブルーグレー
+            const sectionColor = isFollowing ? Colors.accent : '#A0897A'  // 配信=ダークブラウン / DM=ウォームブラウン
             return (
               <TouchableOpacity
                 style={[styles.sectionHeader, { borderLeftWidth: 3, borderLeftColor: sectionColor }]}
