@@ -293,7 +293,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
     const content = text.trim()
     await supabase.from('messages').insert({ sender_id: myId, receiver_id: senderId, content })
     const { data: myProfile } = await supabase.from('profiles').select('display_name').eq('id', myId).single()
-    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', content.slice(0, 80))
+    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', content.slice(0, 80), { type: 'talk_dm' }, 'messages')
     setTimeout(async () => {
       await supabase.rpc('check_and_send_auto_response', {
         p_creator_id: senderId, p_receiver_id: myId, p_message: content,

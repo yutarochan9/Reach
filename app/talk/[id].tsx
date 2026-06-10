@@ -730,7 +730,7 @@ export default function TalkDetailScreen() {
     })
     const { data: myProfile } = await supabase
       .from('profiles').select('display_name').eq('id', myId).single()
-    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.slice(0, 80))
+    sendPushToUsers([senderId], myProfile?.display_name ?? 'メッセージ', text.slice(0, 80), { type: 'talk_dm' }, 'messages')
 
     // 自動応答
     const capturedMyId = myId

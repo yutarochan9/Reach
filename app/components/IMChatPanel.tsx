@@ -262,6 +262,8 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         [partnerId],
         `${myName} から担当者対応の依頼`,
         '直接の返信・対応が求められています',
+        { type: 'im', partnerId: senderId },
+        'messages',
       )
       setEscalationCooldown(true)
       escalationCooldownRef.current = true
@@ -295,7 +297,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
 
     const { data: myProfile } = await supabase
       .from('profiles').select('display_name').eq('id', senderId).single()
-    sendPushToUsers([partnerId], myProfile?.display_name ?? 'IM', content.slice(0, 80))
+    sendPushToUsers([partnerId], myProfile?.display_name ?? 'IM', content.slice(0, 80), { type: 'im', partnerId: senderId }, 'messages')
 
     setTimeout(async () => {
       await supabase.rpc('check_and_send_auto_response', {

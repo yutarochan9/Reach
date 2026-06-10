@@ -65,7 +65,7 @@ export default function DraftsScreen() {
           if (followerIds.length > 0) {
             const { data: prof } = await supabase
               .from('profiles').select('display_name').eq('id', userId).single()
-            sendPushToUsers(followerIds, prof?.display_name ?? '新着', draft.content.slice(0, 80))
+            sendPushToUsers(followerIds, prof?.display_name ?? '新着', draft.content.slice(0, 80), { type: 'broadcast', senderId: userId }, 'new_broadcast')
           }
 
           load()

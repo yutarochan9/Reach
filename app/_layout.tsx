@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { registerPushToken } from '../lib/notifications'
 import { authFlags } from '../lib/authState'
 import { sendPushToUsers } from '../lib/notifications'
+import * as Notifications from 'expo-notifications'
 import { upsertDeviceSession } from '../lib/deviceSession'
 import CookieBanner from './components/CookieBanner'
 import { isAnalyticsEnabled } from '../lib/cookieConsent'
@@ -247,6 +248,42 @@ export default function RootLayout() {
     })
 
     return () => subscription.unsubscribe()
+  }, [])
+
+  // ── プッシュ通知タップ → 画面遷移 ─────────────────────────────────
+  useEffect(() => {
+    if (Platform.OS === 'web') return
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data as any
+      if (!data?.type) return
+      switch (data.type) {
+        case 'broadcast':
+          // 配信新着 → そのクリエイターの配信ページへ
+          if (data.senderId) router.push(`/talk/${data.senderId}` as any)
+          break
+        case 'im':
+          // IMチャット → 該当のDM画面へ
+          if (data.partnerId) router.push({ pathname: '/im/[userId]' as any, params: { userId: data.partnerId } })
+          break
+        case 'talk_dm':
+          // 配信ページDM → メッセージ一覧へ
+          router.push('/(tabs)/talk' as any)
+          break
+        case 'follow':
+          // フォロー通知 → 相手のプロフィールへ
+          if (data.actorId) router.push(`/creator/${data.actorId}` as any)
+          break
+        case 'reaction':
+        case 'comment':
+          // いいね・コメント → 該当配信スレッドへ
+          if (data.broadcastId) router.push(`/broadcast-thread/${data.broadcastId}` as any)
+          break
+        default:
+          // その他 → 通知一覧へ
+          router.push('/notifications' as any)
+      }
+    })
+    return () => sub.remove()
   }, [])
 
   // ── Web: BFCache対策（ブラウザの戻るジェスチャーでログアウト後の画面が復元されるのを防ぐ）─

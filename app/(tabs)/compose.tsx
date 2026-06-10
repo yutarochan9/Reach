@@ -176,7 +176,7 @@ export default function ComposeScreen() {
     const { data: follows } = await q
     const followerIds = (follows ?? []).map((f: any) => f.follower_id)
     if (followerIds.length > 0) {
-      sendPushToUsers(followerIds, senderName, item.content.slice(0, 80))
+      sendPushToUsers(followerIds, senderName, item.content.slice(0, 80), { type: 'broadcast', senderId: userId }, 'new_broadcast')
     }
 
     setPublishingId(null)
@@ -344,7 +344,7 @@ export default function ComposeScreen() {
       } else {
         notifyIds = await getTargetFollowers()
       }
-      sendPushToUsers(notifyIds, senderName, readyBlocks[0]?.text.trim().slice(0, 80) || '画像が届きました')
+      sendPushToUsers(notifyIds, senderName, readyBlocks[0]?.text.trim().slice(0, 80) || '画像が届きました', { type: 'broadcast', senderId: userId }, 'new_broadcast')
     }
     if (status === 'draft') {
       Alert.alert('下書き保存', '下書きを保存しました。「下書き・予約」タブから配信できます。')

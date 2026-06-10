@@ -8,8 +8,12 @@ import { Colors } from '../constants/colors'
 
 type Settings = {
   messages: boolean
+  new_broadcast: boolean
   reactions: boolean
+  comments: boolean
   follows: boolean
+  follow_request: boolean
+  membership: boolean
   show_preview: boolean
   quiet_hours_enabled: boolean
   quiet_hours_start: string
@@ -18,8 +22,12 @@ type Settings = {
 
 const DEFAULT_SETTINGS: Settings = {
   messages: true,
+  new_broadcast: true,
   reactions: true,
+  comments: true,
   follows: true,
+  follow_request: true,
+  membership: true,
   show_preview: true,
   quiet_hours_enabled: false,
   quiet_hours_start: '22:00',
@@ -84,6 +92,14 @@ export default function NotificationSettingsScreen() {
         <Text style={styles.sectionLabel}>通知の種類</Text>
         <View style={styles.section}>
           <ToggleRow
+            icon="radio-outline"
+            label="配信新着"
+            desc="フォロー中のクリエイターが配信したとき"
+            value={settings.new_broadcast}
+            onChange={(v) => updateSetting('new_broadcast', v)}
+          />
+          <View style={styles.divider} />
+          <ToggleRow
             icon="chatbubble-outline"
             label="メッセージ"
             desc="新しいDMを受け取ったとき"
@@ -100,11 +116,35 @@ export default function NotificationSettingsScreen() {
           />
           <View style={styles.divider} />
           <ToggleRow
+            icon="chatbox-outline"
+            label="コメント"
+            desc="投稿にコメントがついたとき"
+            value={settings.comments}
+            onChange={(v) => updateSetting('comments', v)}
+          />
+          <View style={styles.divider} />
+          <ToggleRow
             icon="person-add-outline"
             label="フォロー"
             desc="新しいフォロワーが増えたとき"
             value={settings.follows}
             onChange={(v) => updateSetting('follows', v)}
+          />
+          <View style={styles.divider} />
+          <ToggleRow
+            icon="lock-closed-outline"
+            label="フォローリクエスト"
+            desc="フォローリクエストが届いたとき"
+            value={settings.follow_request}
+            onChange={(v) => updateSetting('follow_request', v)}
+          />
+          <View style={styles.divider} />
+          <ToggleRow
+            icon="star-outline"
+            label="メンバーシップ"
+            desc="加入・退会があったとき"
+            value={settings.membership}
+            onChange={(v) => updateSetting('membership', v)}
           />
         </View>
 
