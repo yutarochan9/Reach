@@ -574,7 +574,7 @@ export default function IMChatPanel({ partnerId, onClose, isPanel }: Props) {
         <View style={styles.inputRow}>
           <TextInput
             style={[styles.input, { height: inputH }]}
-            placeholder="メッセージを入力..."
+            placeholder="メッセージを入力。"
             placeholderTextColor={Colors.textLight}
             value={text}
             onChangeText={setText}
