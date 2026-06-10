@@ -661,7 +661,7 @@ export default function TalkDetailPanel({ creatorId, onClose }: { creatorId: str
         <View style={styles.inputRow}>
           <TextInput
             style={[styles.input, { height: imInputH }]}
-            placeholder="DMを送る..."
+            placeholder="DMを送る。"
             placeholderTextColor={Colors.textLight}
             value={imText}
             onChangeText={setImText}
