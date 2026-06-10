@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '../../lib/supabase'
 import { Colors } from '../../constants/colors'
 import { useTalkContext } from '../contexts/TalkContext'
+import DefaultAvatar from '../components/DefaultAvatar'
 
 // ── モジュールレベルキャッシュ（タブ切り替え時の即時表示用）────────────────
 let _cachedMyId: string | null = null
@@ -148,7 +149,7 @@ function SwipeableDmRow({
           <View style={styles.avatar}>
             {data.avatar
               ? <Image source={{ uri: data.avatar }} style={styles.avatarImage} />
-              : <Text style={styles.avatarText}>{data.name[0]}</Text>
+              : <DefaultAvatar size={52} />
             }
             {isMuted && (
               <View style={swipeStyles.mutedDot}>
@@ -250,7 +251,7 @@ function SwipeableFollowingRow({
             <View style={styles.avatar}>
               {data.avatar
                 ? <Image source={{ uri: data.avatar }} style={styles.avatarImage} />
-                : <Text style={styles.avatarText}>{data.name[0]}</Text>
+                : <DefaultAvatar size={52} />
               }
               {isMuted && (
                 <View style={followSwipe.mutedDot}>
@@ -944,7 +945,7 @@ export default function TalkScreen() {
                 <View style={[styles.avatar, styles.selfAvatar]}>
                   {item.avatar
                     ? <Image source={{ uri: item.avatar }} style={styles.avatarImage} />
-                    : <Text style={styles.avatarText}>{item.name[0]}</Text>
+                    : <DefaultAvatar size={52} />
                   }
                 </View>
                 <View style={styles.talkInfo}>
@@ -992,7 +993,7 @@ export default function TalkScreen() {
                 <View style={[styles.avatar, escStyles.itemAvatar]}>
                   {e.requesterAvatar
                     ? <Image source={{ uri: e.requesterAvatar }} style={styles.avatarImage} />
-                    : <Text style={styles.avatarText}>{e.requesterName[0]}</Text>
+                    : <DefaultAvatar size={52} />
                   }
                 </View>
                 <View style={{ flex: 1, gap: 3 }}>
@@ -1042,9 +1043,18 @@ export default function TalkScreen() {
             const toggle = item.sectionId === 'following'
               ? () => setFollowingOpen(v => !v)
               : () => setDmOpen(v => !v)
+            // セクションごとに異なるアイコン・アクセントカラーを設定
+            const isFollowing = item.sectionId === 'following'
+            const sectionIcon = isFollowing ? 'radio-outline' : 'chatbubbles-outline'
+            const sectionColor = isFollowing ? Colors.accent : '#5B8DD9'  // 配信=ブラウン / DM=ブルー
             return (
-              <TouchableOpacity style={styles.sectionHeader} onPress={toggle} activeOpacity={0.7}>
-                <Text style={styles.sectionHeaderText}>{item.label}</Text>
+              <TouchableOpacity
+                style={[styles.sectionHeader, { borderLeftWidth: 3, borderLeftColor: sectionColor }]}
+                onPress={toggle}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={sectionIcon} size={15} color={sectionColor} />
+                <Text style={[styles.sectionHeaderText, { color: sectionColor }]}>{item.label}</Text>
                 <Ionicons
                   name={item.open ? 'chevron-up' : 'chevron-down'}
                   size={16}
@@ -1184,7 +1194,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: Colors.background,
@@ -1192,6 +1202,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.border,
   },
   sectionHeaderText: {
+    flex: 1,
     fontSize: 13, fontWeight: '700', color: Colors.textLight,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },

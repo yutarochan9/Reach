@@ -14,6 +14,8 @@ type FollowedCreator = {
   bio: string | null
   is_official: boolean
   avatar_url: string | null
+  latest_bc_content: string | null  // 最新配信のプレビューテキスト
+  latest_bc_at: string | null       // 最新配信の投稿時刻
 }
 
 type FollowerProfile = {
@@ -79,16 +81,42 @@ export default function HomeScreen() {
     const followingIds = (follows ?? []).map((f: any) => f.following_id)
     const followerIds = (followersData ?? []).map((f: any) => f.follower_id)
 
-    const [followingProfiles, followerProfiles] = await Promise.all([
+    const [followingProfiles, followerProfiles, latestBroadcasts] = await Promise.all([
       followingIds.length > 0
         ? supabase.from('profiles').select('id, display_name, bio, is_official, avatar_url').in('id', followingIds).order('display_name')
         : Promise.resolve({ data: [] }),
       followerIds.length > 0
         ? supabase.from('profiles').select('id, display_name, avatar_url, is_official').in('id', followerIds)
         : Promise.resolve({ data: [] }),
+      // フォロー中の各クリエーターの最新配信を一括取得
+      followingIds.length > 0
+        ? supabase.from('broadcasts')
+            .select('sender_id, content, image_url, video_url, created_at')
+            .in('sender_id', followingIds)
+            .eq('status', 'published')
+            .order('created_at', { ascending: false })
+            .limit(followingIds.length * 3)  // 多めに取って各人の最新を拾う
+        : Promise.resolve({ data: [] }),
     ])
 
-    _cachedCreators = (followingProfiles.data ?? []) as FollowedCreator[]
+    // sender_id ごとに最新1件をマップ化
+    const latestBcMap: Record<string, { content: string | null; created_at: string }> = {}
+    for (const bc of (latestBroadcasts.data ?? [])) {
+      if (!latestBcMap[bc.sender_id]) {
+        const rawContent = bc.content?.trim()
+        const displayContent = rawContent ? rawContent
+          : bc.video_url ? '動画を投稿しました'
+          : bc.image_url ? '画像を投稿しました'
+          : null
+        latestBcMap[bc.sender_id] = { content: displayContent, created_at: bc.created_at }
+      }
+    }
+
+    _cachedCreators = ((followingProfiles.data ?? []) as any[]).map(p => ({
+      ...p,
+      latest_bc_content: latestBcMap[p.id]?.content ?? null,
+      latest_bc_at: latestBcMap[p.id]?.created_at ?? null,
+    })) as FollowedCreator[]
     _cachedFollowers = (followerProfiles.data ?? []) as FollowerProfile[]
     _homeLoaded = true
     setCreators(_cachedCreators)
@@ -110,6 +138,16 @@ export default function HomeScreen() {
         <ActivityIndicator color={Colors.accent} />
       </View>
     )
+  }
+
+  // 時刻を「HH:MM / 昨日 / M/D」形式でフォーマット
+  const formatTime = (iso: string) => {
+    const d = new Date(iso)
+    const now = new Date()
+    const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
+    if (diffDays === 0) return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+    if (diffDays === 1) return '昨日'
+    return `${d.getMonth() + 1}/${d.getDate()}`
   }
 
   const q = searchQuery.toLowerCase()
@@ -237,12 +275,25 @@ export default function HomeScreen() {
                   ? <Image source={{ uri: d.avatar_url }} style={styles.avatarImage} />
                   : <DefaultAvatar size={48} />
                 }
+                {/* 名前＋配信プレビュー（flex:1 で横幅を使い切る） */}
                 <View style={styles.creatorInfo}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={styles.creatorName}>{d.display_name}</Text>
-                    {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                  <View style={styles.creatorRowTop}>
+                    <View style={styles.creatorNameRow}>
+                      <Text style={styles.creatorName}>{d.display_name}</Text>
+                      {d.is_official && <Ionicons name="checkmark-circle" size={14} color="#1D9BF0" />}
+                    </View>
+                    {/* 最新配信時刻（右端） */}
+                    {d.latest_bc_at && (
+                      <Text style={styles.bcTime}>{formatTime(d.latest_bc_at)}</Text>
+                    )}
                   </View>
-                  {d.bio && <Text style={styles.creatorBio} numberOfLines={1}>{d.bio}</Text>}
+                  {/* 最新配信プレビュー（なければbio） */}
+                  {d.latest_bc_content
+                    ? <Text style={styles.bcPreview} numberOfLines={1}>{d.latest_bc_content}</Text>
+                    : d.bio
+                      ? <Text style={styles.creatorBio} numberOfLines={1}>{d.bio}</Text>
+                      : <Text style={styles.bcPreviewEmpty}>まだ配信がありません</Text>
+                  }
                 </View>
               </TouchableOpacity>
             )
@@ -402,8 +453,15 @@ const styles = StyleSheet.create({
   avatarImage: { width: 48, height: 48, borderRadius: 24 },
   creatorLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   creatorInfo: { flex: 1 },
+  creatorRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 },
+  creatorNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 },
   creatorName: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  creatorBio: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+  creatorBio: { fontSize: 12, color: Colors.textLight },
+  // 最新配信プレビュー：メッセージ欄の lastMessage に相当
+  bcPreview: { fontSize: 13, color: Colors.textLight },
+  bcPreviewEmpty: { fontSize: 12, color: Colors.border, fontStyle: 'italic' },
+  // 右端の配信時刻
+  bcTime: { fontSize: 12, color: Colors.textLight, marginLeft: 8, flexShrink: 0 },
   talkIconBtn: { padding: 8 },
   separator: { height: 1, backgroundColor: Colors.border, marginLeft: 76 },
 })
