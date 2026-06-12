@@ -239,7 +239,6 @@ export default function DiscoverScreen() {
     if (selectedCategory === 'all') return allScored
     if (selectedCategory === 'recommended') return allScored.filter(c => c.tag_match_count > 0)
     if (selectedCategory === 'rising') return risingList
-    if (selectedCategory === 'tryit') return allScored.filter(c => c.tags.some(t => t === 'やってみた'))
     return allScored.filter(c => c.tags.some(t => t.toLowerCase() === selectedCategory.toLowerCase()))
   })()
 
@@ -273,11 +272,11 @@ export default function DiscoverScreen() {
     <ScrollView style={sidebar.wrap} contentContainerStyle={sidebar.content} showsVerticalScrollIndicator={false}>
       {/* 固定メニュー */}
       <SideItem label="すべて"   active={selectedCategory === 'all'}         onPress={() => select('all')} />
-      <SideItem label="おすすめ" active={selectedCategory === 'recommended'} onPress={() => select('recommended')} />
-      <SideItem label="急上昇"   active={selectedCategory === 'rising'}      onPress={() => select('rising')} />
-      <SideItem label="やってみた" active={selectedCategory === 'tryit'}     onPress={() => select('tryit')} />
+      <SideItem label="おすすめ" active={selectedCategory === 'recommended'} onPress={() => select('recommended')} bold />
+      <SideItem label="急上昇"   active={selectedCategory === 'rising'}      onPress={() => select('rising')} bold />
 
       <View style={sidebar.divider} />
+      <Text style={sidebar.genreHeader}>ジャンル</Text>
 
       {/* アコーディオングループ */}
       {CATEGORY_GROUPS.map(group => (
@@ -338,7 +337,6 @@ export default function DiscoverScreen() {
               {selectedCategory === 'all' ? 'すべて'
                 : selectedCategory === 'recommended' ? 'おすすめ'
                 : selectedCategory === 'rising' ? '急上昇'
-                : selectedCategory === 'tryit' ? 'やってみた'
                 : `#${selectedCategory}`}
             </Text>
             <Text style={styles.sectionCount}>{displayList.length}人</Text>
@@ -382,8 +380,8 @@ export default function DiscoverScreen() {
 }
 
 // ── サイドバーアイテム ─────────────────────────────────────────────────
-function SideItem({ label, active, onPress, indent }: {
-  label: string; active: boolean; onPress: () => void; indent?: boolean
+function SideItem({ label, active, onPress, indent, bold }: {
+  label: string; active: boolean; onPress: () => void; indent?: boolean; bold?: boolean
 }) {
   return (
     <TouchableOpacity
@@ -391,7 +389,11 @@ function SideItem({ label, active, onPress, indent }: {
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <Text style={[sidebar.itemText, active && sidebar.itemTextActive]} numberOfLines={1}>{label}</Text>
+      <Text style={[
+        sidebar.itemText,
+        bold && sidebar.itemBold,
+        active && sidebar.itemTextActive,
+      ]} numberOfLines={1}>{label}</Text>
     </TouchableOpacity>
   )
 }
@@ -452,7 +454,11 @@ const sidebar = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 10, paddingVertical: 8,
   },
-  groupLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  groupLabel: { fontSize: 14, fontWeight: '700', color: Colors.accent },
+  genreHeader: {
+    fontSize: 14, fontWeight: '700', color: Colors.accent,
+    paddingHorizontal: 10, paddingVertical: 8,
+  },
   item: {
     paddingVertical: 7, paddingHorizontal: 10,
     borderRadius: 7, marginBottom: 1,
@@ -460,6 +466,7 @@ const sidebar = StyleSheet.create({
   itemIndent: { paddingLeft: 16 },
   itemActive: { backgroundColor: Colors.background },
   itemText: { fontSize: 13, color: Colors.text },
+  itemBold: { fontWeight: '700', color: Colors.accent },
   itemTextActive: { fontWeight: '700', color: Colors.accent },
 })
 
