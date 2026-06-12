@@ -327,12 +327,9 @@ export default function DiscoverScreen() {
       </View>
 
       <FlatList
-        key={isDesktop ? 'two-col' : 'one-col'}
         data={pagedList}
         keyExtractor={item => item.id}
-        numColumns={isDesktop ? 2 : 1}
         contentContainerStyle={styles.list}
-        columnWrapperStyle={isDesktop ? styles.columnWrapper : undefined}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         ListHeaderComponent={() => !isSearching ? (
           <View style={styles.sectionRow}>
@@ -352,11 +349,7 @@ export default function DiscoverScreen() {
             {isSearching ? '見つかりませんでした' : 'クリエイターがまだいません'}
           </Text>
         )}
-        renderItem={({ item }) => (
-          <View style={isDesktop ? styles.cardWrapper : undefined}>
-            <CreatorRow item={item} onFollow={handleFollow} />
-          </View>
-        )}
+        renderItem={({ item }) => <CreatorRow item={item} onFollow={handleFollow} />}
         ListFooterComponent={() => hasMore ? (
           <TouchableOpacity style={styles.moreBtn} onPress={() => setPage(p => p + 1)}>
             <Text style={styles.moreTxt}>さらに表示</Text>
@@ -375,7 +368,10 @@ export default function DiscoverScreen() {
 
       {isDesktop ? (
         <View style={styles.desktopLayout}>
-          {Sidebar}
+          {/* 左サイドバー：幅固定でflexが広がらないようにView で囲む */}
+          <View style={styles.desktopLeft}>
+            {Sidebar}
+          </View>
           <View style={styles.desktopRight}>{ListPanel}</View>
         </View>
       ) : (
@@ -445,7 +441,7 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
 // ── サイドバースタイル ─────────────────────────────────────────────────
 const sidebar = StyleSheet.create({
   wrap: {
-    width: 160,
+    flex: 1,
     borderRightWidth: 1,
     borderRightColor: Colors.border,
     backgroundColor: Colors.header,
@@ -477,6 +473,9 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
 
   desktopLayout: { flex: 1, flexDirection: 'row' },
+  // 左サイドバー：幅固定・縮まない
+  desktopLeft: { width: 180, flexShrink: 0 },
+  // 右コンテンツ：残り全部
   desktopRight: { flex: 1, overflow: 'hidden' },
 
   searchWrap: {
