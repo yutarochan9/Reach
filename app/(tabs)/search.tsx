@@ -18,6 +18,38 @@ const W_FREQ           = 3
 const W_SOCIAL         = 4
 const W_POPULARITY     = 8
 
+// note風カテゴリーグループ定義
+const CATEGORY_GROUPS = [
+  {
+    label: 'くらし',
+    items: ['ライフスタイル', '住まい・暮らし', 'レビュー', '健康・医療', '子育て', '恋愛・結婚・離婚', '占い・心理'],
+  },
+  {
+    label: '社会・経済',
+    items: ['社会問題・時事', '国内ニュース', '政治・経済', 'ビジネス', '人物・社会', '投資', '地域・行政'],
+  },
+  {
+    label: 'テクノロジー',
+    items: ['科学・テクノロジー', 'コンピュータ・IT', 'AI・機械学習', 'プログラミング', 'ガジェット'],
+  },
+  {
+    label: 'エンタメ',
+    items: ['エンタメ全般', 'マンガ', 'アニメ', '本レビュー', '映画・ドラマ', 'ゲーム', '音楽', 'スポーツ', '野球', 'サッカー', '競馬', '競輪', 'ボートレース'],
+  },
+  {
+    label: '趣味・関心',
+    items: ['ホビー', '旅行・お出かけ', '料理・グルメ', 'アウトドア', 'ファッション', 'ペット', '美容'],
+  },
+  {
+    label: '創作',
+    items: ['創作全般', '小説', 'デザイン', 'DIY', 'ハンドメイド', '写真'],
+  },
+  {
+    label: 'まなび',
+    items: ['キャリア', 'インタビュー・対談', '教育・学び', 'アート・デザイン', '人文・思想', '文学・文芸', '語学'],
+  },
+]
+
 type Creator = {
   id: string
   display_name: string
@@ -50,8 +82,9 @@ export default function DiscoverScreen() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [myId, setMyId] = useState<string | null>(null)
-  // 選択中のカテゴリー（'all' | 'recommended' | タグ文字列）
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  // アコーディオンの開閉状態（グループ名 → open/closed）
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -108,7 +141,6 @@ export default function DiscoverScreen() {
 
     const followerMap: Record<string, number> = {}
     for (const f of (allFollows ?? [])) followerMap[f.following_id] = (followerMap[f.following_id] ?? 0) + 1
-
     const socialMap: Record<string, number> = {}
     for (const f of (socialFollows ?? [])) socialMap[f.following_id] = (socialMap[f.following_id] ?? 0) + 1
 
@@ -196,30 +228,18 @@ export default function DiscoverScreen() {
     setAllProfiles(p => p.map(upd))
   }
 
-  // 固定カテゴリーリスト（note風）
-  const CATEGORIES = [
-    'やってみた','ライフスタイル','住まい・暮らし','レビュー','健康・医療',
-    '子育て','恋愛・結婚・離婚','占い・心理','社会問題・時事','国内ニュース',
-    '政治・経済','ビジネス','人物・社会','投資','地域・行政',
-    '科学・テクノロジー','コンピュータ・IT','AI・機械学習','プログラミング','ガジェット',
-    'エンタメ全般','マンガ','アニメ','本レビュー','映画・ドラマ',
-    'ゲーム','音楽','スポーツ','野球','サッカー',
-    '競馬','競輪','ボートレース','ホビー','旅行・お出かけ',
-    '料理・グルメ','アウトドア','ファッション','ペット','美容',
-    '創作全般','小説','デザイン','DIY','ハンドメイド',
-    '写真','キャリア','インタビュー・対談','教育・学び','アート・デザイン',
-    '人文・思想','文学・文芸','語学',
-  ]
+  const toggleGroup = (label: string) => {
+    setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }))
+  }
 
-  // 急上昇：配信数×(1+リアクション率)で算出
   const risingList = [...allScored]
     .sort((a, b) => (b.broadcast_count * (1 + b.reaction_rate)) - (a.broadcast_count * (1 + a.reaction_rate)))
 
-  // カテゴリーに応じてフィルタリング
   const filteredList = (() => {
     if (selectedCategory === 'all') return allScored
     if (selectedCategory === 'recommended') return allScored.filter(c => c.tag_match_count > 0)
     if (selectedCategory === 'rising') return risingList
+    if (selectedCategory === 'tryit') return allScored.filter(c => c.tags.some(t => t === 'やってみた'))
     return allScored.filter(c => c.tags.some(t => t.toLowerCase() === selectedCategory.toLowerCase()))
   })()
 
@@ -246,26 +266,47 @@ export default function DiscoverScreen() {
     </View>
   )
 
-  // ── 左サイドバー（デスクトップ専用）──────────────────────────────────
+  const select = (cat: string) => { setSelectedCategory(cat); setPage(1) }
+
+  // ── 左サイドバー ────────────────────────────────────────────────────
   const Sidebar = (
     <ScrollView style={sidebar.wrap} contentContainerStyle={sidebar.content} showsVerticalScrollIndicator={false}>
-      <SideItem label="すべて" active={selectedCategory === 'all'} onPress={() => { setSelectedCategory('all'); setPage(1) }} />
-      <SideItem label="おすすめ" active={selectedCategory === 'recommended'} onPress={() => { setSelectedCategory('recommended'); setPage(1) }} />
-      <SideItem label="急上昇" active={selectedCategory === 'rising'} onPress={() => { setSelectedCategory('rising'); setPage(1) }} />
+      {/* 固定メニュー */}
+      <SideItem label="すべて"   active={selectedCategory === 'all'}         onPress={() => select('all')} />
+      <SideItem label="おすすめ" active={selectedCategory === 'recommended'} onPress={() => select('recommended')} />
+      <SideItem label="急上昇"   active={selectedCategory === 'rising'}      onPress={() => select('rising')} />
+      <SideItem label="やってみた" active={selectedCategory === 'tryit'}     onPress={() => select('tryit')} />
+
       <View style={sidebar.divider} />
-      <Text style={sidebar.sectionLabel}>カテゴリ</Text>
-      {CATEGORIES.map(cat => (
-        <SideItem
-          key={cat}
-          label={cat}
-          active={selectedCategory === cat}
-          onPress={() => { setSelectedCategory(cat); setPage(1) }}
-        />
+
+      {/* アコーディオングループ */}
+      {CATEGORY_GROUPS.map(group => (
+        <View key={group.label}>
+          {/* グループヘッダー（タップで開閉） */}
+          <TouchableOpacity style={sidebar.groupHeader} onPress={() => toggleGroup(group.label)} activeOpacity={0.7}>
+            <Text style={sidebar.groupLabel}>{group.label}</Text>
+            <Ionicons
+              name={openGroups[group.label] ? 'chevron-up' : 'chevron-down'}
+              size={14}
+              color={Colors.textLight}
+            />
+          </TouchableOpacity>
+          {/* サブカテゴリー（開いているときのみ） */}
+          {openGroups[group.label] && group.items.map(item => (
+            <SideItem
+              key={item}
+              label={item}
+              active={selectedCategory === item}
+              onPress={() => select(item)}
+              indent
+            />
+          ))}
+        </View>
       ))}
     </ScrollView>
   )
 
-  // ── クリエイター一覧パネル（右側 or モバイル全幅）────────────────────
+  // ── 右コンテンツパネル ───────────────────────────────────────────────
   const ListPanel = (
     <View style={{ flex: 1 }}>
       <View style={styles.searchWrap}>
@@ -286,9 +327,12 @@ export default function DiscoverScreen() {
       </View>
 
       <FlatList
+        key={isDesktop ? 'two-col' : 'one-col'}
         data={pagedList}
         keyExtractor={item => item.id}
+        numColumns={isDesktop ? 2 : 1}
         contentContainerStyle={styles.list}
+        columnWrapperStyle={isDesktop ? styles.columnWrapper : undefined}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
         ListHeaderComponent={() => !isSearching ? (
           <View style={styles.sectionRow}>
@@ -297,6 +341,7 @@ export default function DiscoverScreen() {
               {selectedCategory === 'all' ? 'すべて'
                 : selectedCategory === 'recommended' ? 'おすすめ'
                 : selectedCategory === 'rising' ? '急上昇'
+                : selectedCategory === 'tryit' ? 'やってみた'
                 : `#${selectedCategory}`}
             </Text>
             <Text style={styles.sectionCount}>{displayList.length}人</Text>
@@ -307,7 +352,11 @@ export default function DiscoverScreen() {
             {isSearching ? '見つかりませんでした' : 'クリエイターがまだいません'}
           </Text>
         )}
-        renderItem={({ item }) => <CreatorRow item={item} onFollow={handleFollow} />}
+        renderItem={({ item }) => (
+          <View style={isDesktop ? styles.cardWrapper : undefined}>
+            <CreatorRow item={item} onFollow={handleFollow} />
+          </View>
+        )}
         ListFooterComponent={() => hasMore ? (
           <TouchableOpacity style={styles.moreBtn} onPress={() => setPage(p => p + 1)}>
             <Text style={styles.moreTxt}>さらに表示</Text>
@@ -320,31 +369,32 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ヘッダー */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>発見</Text>
       </View>
 
       {isDesktop ? (
-        // デスクトップ：左サイドバー＋右コンテンツ
         <View style={styles.desktopLayout}>
           {Sidebar}
-          <View style={styles.desktopRight}>
-            {ListPanel}
-          </View>
+          <View style={styles.desktopRight}>{ListPanel}</View>
         </View>
       ) : (
-        // モバイル：従来の縦レイアウト
         ListPanel
       )}
     </View>
   )
 }
 
-// ── 左サイドバーのアイテム ────────────────────────────────────────────
-function SideItem({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+// ── サイドバーアイテム ─────────────────────────────────────────────────
+function SideItem({ label, active, onPress, indent }: {
+  label: string; active: boolean; onPress: () => void; indent?: boolean
+}) {
   return (
-    <TouchableOpacity style={[sidebar.item, active && sidebar.itemActive]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={[sidebar.item, active && sidebar.itemActive, indent && sidebar.itemIndent]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       <Text style={[sidebar.itemText, active && sidebar.itemTextActive]} numberOfLines={1}>{label}</Text>
     </TouchableOpacity>
   )
@@ -395,24 +445,25 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
 // ── サイドバースタイル ─────────────────────────────────────────────────
 const sidebar = StyleSheet.create({
   wrap: {
-    width: 150,
+    width: 160,
     borderRightWidth: 1,
     borderRightColor: Colors.border,
     backgroundColor: Colors.header,
   },
-  content: { paddingVertical: 8, paddingHorizontal: 4 },
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 6, marginHorizontal: 4 },
-  sectionLabel: {
-    fontSize: 10, fontWeight: '700', color: Colors.textLight,
-    textTransform: 'uppercase', letterSpacing: 0.4,
-    paddingHorizontal: 8, paddingTop: 2, paddingBottom: 4,
+  content: { paddingVertical: 10, paddingHorizontal: 6 },
+  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 8, marginHorizontal: 4 },
+  groupHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 10, paddingVertical: 8,
   },
+  groupLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
   item: {
-    paddingVertical: 6, paddingHorizontal: 8,
-    borderRadius: 6, marginBottom: 1,
+    paddingVertical: 7, paddingHorizontal: 10,
+    borderRadius: 7, marginBottom: 1,
   },
+  itemIndent: { paddingLeft: 16 },
   itemActive: { backgroundColor: Colors.background },
-  itemText: { fontSize: 12, color: Colors.text, fontWeight: '500' },
+  itemText: { fontSize: 13, color: Colors.text },
   itemTextActive: { fontWeight: '700', color: Colors.accent },
 })
 
@@ -425,7 +476,6 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
 
-  // デスクトップ2カラム
   desktopLayout: { flex: 1, flexDirection: 'row' },
   desktopRight: { flex: 1, overflow: 'hidden' },
 
@@ -435,17 +485,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, borderWidth: 1, borderColor: Colors.border,
   },
   searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: Colors.text },
-  list: { paddingBottom: 40 },
+  list: { paddingBottom: 40, paddingHorizontal: 8 },
+  columnWrapper: { gap: 0 },
+  // デスクトップ2カラム：各カードを flex:1 で均等幅に
+  cardWrapper: { flex: 1 },
   empty: { textAlign: 'center', color: Colors.textLight, marginTop: 32 },
 
-  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10 },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingVertical: 10 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.text, flex: 1 },
   sectionCount: { fontSize: 11, color: Colors.textLight },
 
   card: {
     backgroundColor: Colors.white, borderRadius: 14, padding: 14,
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    borderWidth: 1, borderColor: Colors.border, marginHorizontal: 12, marginBottom: 8,
+    borderWidth: 1, borderColor: Colors.border, margin: 4,
   },
   avatar: { width: 48, height: 48, borderRadius: 24 },
   info: { flex: 1 },
@@ -462,7 +515,7 @@ const styles = StyleSheet.create({
 
   moreBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 16, marginHorizontal: 12, marginBottom: 32,
+    paddingVertical: 16, marginHorizontal: 4, marginBottom: 32,
     backgroundColor: Colors.white, borderRadius: 12,
     borderWidth: 1, borderColor: Colors.border,
   },
