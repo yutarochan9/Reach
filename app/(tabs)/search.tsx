@@ -196,25 +196,31 @@ export default function DiscoverScreen() {
     setAllProfiles(p => p.map(upd))
   }
 
-  // 全クリエイターから使われているタグを集計（多い順）
-  const allTags = (() => {
-    const countMap: Record<string, number> = {}
-    for (const c of allScored) {
-      for (const t of c.tags) {
-        const key = t.toLowerCase()
-        countMap[key] = (countMap[key] ?? 0) + 1
-      }
-    }
-    return Object.entries(countMap)
-      .sort((a, b) => b[1] - a[1])
-      .map(([tag]) => tag)
-  })()
+  // 固定カテゴリーリスト（note風）
+  const CATEGORIES = [
+    'やってみた','ライフスタイル','住まい・暮らし','レビュー','健康・医療',
+    '子育て','恋愛・結婚・離婚','占い・心理','社会問題・時事','国内ニュース',
+    '政治・経済','ビジネス','人物・社会','投資','地域・行政',
+    '科学・テクノロジー','コンピュータ・IT','AI・機械学習','プログラミング','ガジェット',
+    'エンタメ全般','マンガ','アニメ','本レビュー','映画・ドラマ',
+    'ゲーム','音楽','スポーツ','野球','サッカー',
+    '競馬','競輪','ボートレース','ホビー','旅行・お出かけ',
+    '料理・グルメ','アウトドア','ファッション','ペット','美容',
+    '創作全般','小説','デザイン','DIY','ハンドメイド',
+    '写真','キャリア','インタビュー・対談','教育・学び','アート・デザイン',
+    '人文・思想','文学・文芸','語学',
+  ]
+
+  // 急上昇：配信数×(1+リアクション率)で算出
+  const risingList = [...allScored]
+    .sort((a, b) => (b.broadcast_count * (1 + b.reaction_rate)) - (a.broadcast_count * (1 + a.reaction_rate)))
 
   // カテゴリーに応じてフィルタリング
   const filteredList = (() => {
     if (selectedCategory === 'all') return allScored
     if (selectedCategory === 'recommended') return allScored.filter(c => c.tag_match_count > 0)
-    return allScored.filter(c => c.tags.some(t => t.toLowerCase() === selectedCategory))
+    if (selectedCategory === 'rising') return risingList
+    return allScored.filter(c => c.tags.some(t => t.toLowerCase() === selectedCategory.toLowerCase()))
   })()
 
   const isSearching = search.length > 0
@@ -243,25 +249,19 @@ export default function DiscoverScreen() {
   // ── 左サイドバー（デスクトップ専用）──────────────────────────────────
   const Sidebar = (
     <ScrollView style={sidebar.wrap} contentContainerStyle={sidebar.content} showsVerticalScrollIndicator={false}>
-      {/* 固定メニュー */}
       <SideItem label="すべて" active={selectedCategory === 'all'} onPress={() => { setSelectedCategory('all'); setPage(1) }} />
       <SideItem label="おすすめ" active={selectedCategory === 'recommended'} onPress={() => { setSelectedCategory('recommended'); setPage(1) }} />
-
-      {/* タグ一覧 */}
-      {allTags.length > 0 && (
-        <>
-          <View style={sidebar.divider} />
-          <Text style={sidebar.sectionLabel}>ジャンル</Text>
-          {allTags.map(tag => (
-            <SideItem
-              key={tag}
-              label={tag}
-              active={selectedCategory === tag}
-              onPress={() => { setSelectedCategory(tag); setPage(1) }}
-            />
-          ))}
-        </>
-      )}
+      <SideItem label="急上昇" active={selectedCategory === 'rising'} onPress={() => { setSelectedCategory('rising'); setPage(1) }} />
+      <View style={sidebar.divider} />
+      <Text style={sidebar.sectionLabel}>カテゴリ</Text>
+      {CATEGORIES.map(cat => (
+        <SideItem
+          key={cat}
+          label={cat}
+          active={selectedCategory === cat}
+          onPress={() => { setSelectedCategory(cat); setPage(1) }}
+        />
+      ))}
     </ScrollView>
   )
 
@@ -296,6 +296,7 @@ export default function DiscoverScreen() {
             <Text style={styles.sectionTitle}>
               {selectedCategory === 'all' ? 'すべて'
                 : selectedCategory === 'recommended' ? 'おすすめ'
+                : selectedCategory === 'rising' ? '急上昇'
                 : `#${selectedCategory}`}
             </Text>
             <Text style={styles.sectionCount}>{displayList.length}人</Text>
@@ -394,24 +395,24 @@ function CreatorRow({ item, onFollow }: { item: Creator; onFollow: (id: string, 
 // ── サイドバースタイル ─────────────────────────────────────────────────
 const sidebar = StyleSheet.create({
   wrap: {
-    width: 200,
+    width: 150,
     borderRightWidth: 1,
     borderRightColor: Colors.border,
     backgroundColor: Colors.header,
   },
-  content: { paddingVertical: 12, paddingHorizontal: 8 },
-  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 10, marginHorizontal: 4 },
+  content: { paddingVertical: 8, paddingHorizontal: 4 },
+  divider: { height: 1, backgroundColor: Colors.border, marginVertical: 6, marginHorizontal: 4 },
   sectionLabel: {
-    fontSize: 11, fontWeight: '700', color: Colors.textLight,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-    paddingHorizontal: 10, paddingTop: 4, paddingBottom: 6,
+    fontSize: 10, fontWeight: '700', color: Colors.textLight,
+    textTransform: 'uppercase', letterSpacing: 0.4,
+    paddingHorizontal: 8, paddingTop: 2, paddingBottom: 4,
   },
   item: {
-    paddingVertical: 9, paddingHorizontal: 12,
-    borderRadius: 8, marginBottom: 2,
+    paddingVertical: 6, paddingHorizontal: 8,
+    borderRadius: 6, marginBottom: 1,
   },
   itemActive: { backgroundColor: Colors.background },
-  itemText: { fontSize: 14, color: Colors.text, fontWeight: '500' },
+  itemText: { fontSize: 12, color: Colors.text, fontWeight: '500' },
   itemTextActive: { fontWeight: '700', color: Colors.accent },
 })
 
