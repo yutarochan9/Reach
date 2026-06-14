@@ -18,8 +18,8 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const iconMap: Record<string, { active: React.ComponentProps<typeof Ionicons>['name']; inactive: React.ComponentProps<typeof Ionicons>['name']; label: string }> = {
     index:  { active: 'home',         inactive: 'home-outline',         label: 'ホーム' },
     talk:   { active: 'chatbubble',   inactive: 'chatbubble-outline',   label: 'メッセージ' },
-    shop:   { active: 'compass',      inactive: 'compass-outline',      label: '発見' },
-    search: { active: 'search',       inactive: 'search-outline',       label: '検索' },
+    shop:   { active: 'newspaper',    inactive: 'newspaper-outline',    label: '投稿' },
+    search: { active: 'radio',        inactive: 'radio-outline',        label: 'スポット' },
   }
 
   const tabs = state.routes.map((route, index) => {

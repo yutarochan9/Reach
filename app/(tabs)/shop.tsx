@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  RefreshControl, ActivityIndicator, Image,
+  RefreshControl, ActivityIndicator, Image, TextInput,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -44,6 +44,15 @@ function timeAgo(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
+type CreatorResult = {
+  id: string
+  display_name: string
+  bio: string | null
+  avatar_url: string | null
+  username: string | null
+  tags: string[]
+}
+
 // ── モジュールキャッシュ ──────────────────────────────────────
 let _cache: FeedItem[] = []
 let _loaded = false
@@ -54,6 +63,9 @@ export default function DiscoverFeedScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [myId, setMyId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [creatorResults, setCreatorResults] = useState<CreatorResult[]>([])
+  const [creatorSearching, setCreatorSearching] = useState(false)
   const PAGE_SIZE = 20
 
   const load = useCallback(async () => {
@@ -159,6 +171,21 @@ export default function DiscoverFeedScreen() {
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false) }
 
+  const handleSearch = useCallback(async (q: string) => {
+    setSearch(q)
+    if (!q.trim()) { setCreatorResults([]); return }
+    setCreatorSearching(true)
+    const lower = q.toLowerCase().replace(/^@/, '')
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, display_name, bio, avatar_url, username, tags')
+      .or(`display_name.ilike.%${lower}%,username.ilike.%${lower}%`)
+      .neq('is_test', true)
+      .limit(30)
+    setCreatorResults(data ?? [])
+    setCreatorSearching(false)
+  }, [])
+
   // いいねのトグル
   const handleLike = async (item: FeedItem) => {
     if (!myId) return
@@ -185,13 +212,70 @@ export default function DiscoverFeedScreen() {
     )
   }
 
+  const isSearching = search.trim().length > 0
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>発見</Text>
-        <Text style={styles.headerSub}>クリエイターの投稿をチェック</Text>
+        <Text style={styles.headerTitle}>投稿</Text>
       </View>
 
+      {/* 検索バー */}
+      <View style={styles.searchWrap}>
+        <Ionicons name="search-outline" size={16} color={Colors.textLight} style={{ marginRight: 6 }} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="クリエイターを検索"
+          placeholderTextColor={Colors.textLight}
+          value={search}
+          onChangeText={handleSearch}
+          autoCorrect={false}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => { setSearch(''); setCreatorResults([]) }}>
+            <Ionicons name="close-circle" size={16} color={Colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* クリエイター検索結果 */}
+      {isSearching ? (
+        creatorSearching ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator color={Colors.accent} />
+          </View>
+        ) : (
+          <FlatList
+            data={creatorResults}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyWrap}>
+                <Ionicons name="person-outline" size={40} color={Colors.border} />
+                <Text style={styles.emptyTitle}>見つかりませんでした</Text>
+              </View>
+            )}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.creatorCard}
+                onPress={() => router.push(`/creator/${item.id}` as any)}
+                activeOpacity={0.85}
+              >
+                {item.avatar_url
+                  ? <Image source={{ uri: item.avatar_url }} style={styles.creatorAvatar} />
+                  : <DefaultAvatar size={44} />
+                }
+                <View style={styles.creatorInfo}>
+                  <Text style={styles.creatorName}>{item.display_name}</Text>
+                  {item.username && <Text style={styles.creatorAt}>@{item.username}</Text>}
+                  {item.bio && <Text style={styles.creatorBio} numberOfLines={1}>{item.bio}</Text>}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={Colors.border} />
+              </TouchableOpacity>
+            )}
+          />
+        )
+      ) : (
       <FlatList
         data={pagedItems}
         keyExtractor={item => item.id}
@@ -214,6 +298,7 @@ export default function DiscoverFeedScreen() {
           </TouchableOpacity>
         ) : null}
       />
+      )}
     </View>
   )
 }
@@ -299,7 +384,26 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: Colors.border,
   },
   headerTitle: { fontSize: 24, fontWeight: '800', color: Colors.accent },
-  headerSub: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
+
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    margin: 12, backgroundColor: Colors.white,
+    borderRadius: 12, paddingHorizontal: 12,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  searchInput: { flex: 1, paddingVertical: 10, fontSize: 14, color: Colors.text },
+
+  creatorCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.white, marginHorizontal: 12, marginBottom: 8,
+    borderRadius: 14, padding: 14,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  creatorAvatar: { width: 44, height: 44, borderRadius: 22 },
+  creatorInfo: { flex: 1 },
+  creatorName: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  creatorAt: { fontSize: 12, color: Colors.textLight, marginTop: 1 },
+  creatorBio: { fontSize: 12, color: Colors.textLight, marginTop: 2 },
 
   list: { paddingTop: 8, paddingBottom: 40 },
 
