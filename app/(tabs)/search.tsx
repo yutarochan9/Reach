@@ -361,7 +361,7 @@ export default function DiscoverScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>発見</Text>
+        <Text style={styles.headerTitle}>検索</Text>
       </View>
 
       {isDesktop ? (
@@ -391,6 +391,7 @@ function SideItem({ label, active, onPress, indent, bold }: {
     >
       <Text style={[
         sidebar.itemText,
+        indent && sidebar.itemTextIndent,
         bold && sidebar.itemBold,
         active && sidebar.itemTextActive,
       ]} numberOfLines={1}>{label}</Text>
@@ -468,6 +469,7 @@ const sidebar = StyleSheet.create({
   itemText: { fontSize: 13, color: Colors.text },
   itemBold: { fontWeight: '700', color: Colors.accent },
   itemTextActive: { fontWeight: '700', color: Colors.accent },
+  itemTextIndent: { color: Colors.textLight },
 })
 
 const styles = StyleSheet.create({
