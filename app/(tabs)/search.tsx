@@ -21,7 +21,7 @@ const W_POPULARITY     = 8
 // note風カテゴリーグループ定義
 const CATEGORY_GROUPS = [
   {
-    label: 'SNS・プラットフォーム',
+    label: 'SNS',
     items: ['YouTube', 'TikTok', 'Instagram', 'X（Twitter）', 'note'],
   },
   {
@@ -239,10 +239,22 @@ export default function DiscoverScreen() {
   const risingList = [...allScored]
     .sort((a, b) => (b.broadcast_count * (1 + b.reaction_rate)) - (a.broadcast_count * (1 + a.reaction_rate)))
 
+  // グループ名 → そのグループの全サブアイテムのセット
+  const groupItemsMap: Record<string, Set<string>> = {}
+  for (const g of CATEGORY_GROUPS) {
+    groupItemsMap[g.label] = new Set(g.items.map(i => i.toLowerCase()))
+  }
+
   const filteredList = (() => {
     if (selectedCategory === 'all') return allScored
     if (selectedCategory === 'recommended') return allScored.filter(c => c.tag_match_count > 0)
     if (selectedCategory === 'rising') return risingList
+    // グループ名が選ばれた場合 → そのグループ内のいずれかのタグを持つ人
+    if (groupItemsMap[selectedCategory]) {
+      const set = groupItemsMap[selectedCategory]
+      return allScored.filter(c => c.tags.some(t => set.has(t.toLowerCase())))
+    }
+    // 個別タグが選ばれた場合
     return allScored.filter(c => c.tags.some(t => t.toLowerCase() === selectedCategory.toLowerCase()))
   })()
 
@@ -309,11 +321,20 @@ export default function DiscoverScreen() {
     </ScrollView>
   )
 
+  // モバイル用チップ一覧（すべて・おすすめ・急上昇 + グループ名）
+  const mobileChips = [
+    { key: 'all', label: 'すべて' },
+    { key: 'recommended', label: 'おすすめ' },
+    { key: 'rising', label: '急上昇' },
+    ...CATEGORY_GROUPS.map(g => ({ key: g.label, label: g.label })),
+  ]
+
   // ── 右コンテンツパネル ───────────────────────────────────────────────
   const ListPanel = (
     <View style={{ flex: 1 }}>
       <View style={styles.searchWrap}>
         <Ionicons name="search-outline" size={16} color={Colors.textLight} style={{ marginRight: 6 }} />
+
         <TextInput
           style={styles.searchInput}
           placeholder="名前・キーワードで検索"
@@ -328,6 +349,28 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* モバイル専用：横スクロールカテゴリーチップ */}
+      {!isDesktop && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+        >
+          {mobileChips.map(chip => (
+            <TouchableOpacity
+              key={chip.key}
+              style={[styles.chip, selectedCategory === chip.key && styles.chipActive]}
+              onPress={() => select(chip.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chipText, selectedCategory === chip.key && styles.chipTextActive]}>
+                {chip.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       <FlatList
         data={pagedList}
@@ -351,7 +394,14 @@ export default function DiscoverScreen() {
             {isSearching ? '見つかりませんでした' : 'クリエイターがまだいません'}
           </Text>
         )}
-        renderItem={({ item }) => <CreatorRow item={item} onFollow={handleFollow} />}
+        numColumns={isDesktop ? 2 : 1}
+        key={isDesktop ? 'two-col' : 'one-col'}
+        columnWrapperStyle={isDesktop ? styles.columnWrapper : undefined}
+        renderItem={({ item }) => (
+          <View style={isDesktop ? styles.cardWrapper : undefined}>
+            <CreatorRow item={item} onFollow={handleFollow} />
+          </View>
+        )}
         ListFooterComponent={() => hasMore ? (
           <TouchableOpacity style={styles.moreBtn} onPress={() => setPage(p => p + 1)}>
             <Text style={styles.moreTxt}>さらに表示</Text>
@@ -524,6 +574,17 @@ const styles = StyleSheet.create({
   followingBtn: { backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.button },
   followTxt: { color: Colors.white, fontWeight: '700', fontSize: 13 },
   followingTxt: { color: Colors.button },
+
+  // モバイル横スクロールチップ
+  chipRow: { paddingHorizontal: 12, paddingVertical: 8, gap: 8, flexDirection: 'row' },
+  chip: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  chipActive: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  chipText: { fontSize: 13, color: Colors.text, fontWeight: '500' },
+  chipTextActive: { color: Colors.white, fontWeight: '700' },
 
   moreBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
