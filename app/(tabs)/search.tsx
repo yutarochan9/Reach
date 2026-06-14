@@ -21,20 +21,24 @@ const W_POPULARITY     = 8
 // note風カテゴリーグループ定義
 const CATEGORY_GROUPS = [
   {
-    label: '日常',
-    items: ['ライフスタイル', '料理・グルメ', '住まい', '健康・ウェルネス', '子育て', 'ペット', 'レビュー'],
-  },
-  {
-    label: '気持ち・こころ',
-    items: ['恋愛・パートナーシップ', '家族・人間関係', 'メンタルヘルス', '占い・スピリチュアル'],
+    label: 'SNS・プラットフォーム',
+    items: ['YouTube', 'TikTok', 'Instagram', 'X（Twitter）', 'note'],
   },
   {
     label: '推し・エンタメ',
     items: ['音楽', 'アニメ・マンガ', 'ゲーム', '映画・ドラマ', 'Vtuber・配信者', 'スポーツ観戦', 'アイドル'],
   },
   {
+    label: '日常',
+    items: ['ライフスタイル', '料理・グルメ', '住まい', '健康・ウェルネス', '子育て', 'ペット', 'レビュー'],
+  },
+  {
     label: '趣味',
     items: ['旅行・お出かけ', 'ファッション・美容', 'アウトドア', '写真', 'DIY・ハンドメイド', '料理レシピ'],
+  },
+  {
+    label: '気持ち・こころ',
+    items: ['恋愛・パートナーシップ', '家族・人間関係', 'メンタルヘルス', '占い・スピリチュアル'],
   },
   {
     label: 'つくること',
@@ -47,10 +51,6 @@ const CATEGORY_GROUPS = [
   {
     label: '社会・ニュース',
     items: ['時事・ニュース', 'テクノロジー・AI', 'ビジネス', '環境・サステナビリティ', '政治・経済', '地域'],
-  },
-  {
-    label: 'SNS・プラットフォーム',
-    items: ['YouTube', 'TikTok', 'Instagram', 'X（Twitter）', 'note'],
   },
 ]
 
@@ -473,7 +473,7 @@ const sidebar = StyleSheet.create({
   itemText: { fontSize: 13, color: Colors.text },
   itemBold: { fontWeight: '700', color: Colors.accent },
   itemTextActive: { fontWeight: '700', color: Colors.accent },
-  itemTextIndent: { color: Colors.textLight },
+  itemTextIndent: { color: Colors.textLight, fontWeight: '500' },
 })
 
 const styles = StyleSheet.create({
